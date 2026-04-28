@@ -207,7 +207,6 @@ export function OverlayRenderer() {
       const stack = keyToStack(t.stateKey);
       const summary: ThreadSummary = {
         id: t.id,
-        index: i + 1,
         authorName: member?.displayName ?? member?.email ?? 'Unknown',
         authorAvatarUrl: member?.avatarUrl ?? undefined,
         snippet: t.comments[0]?.body.slice(0, 80) ?? '',
@@ -342,15 +341,18 @@ export function OverlayRenderer() {
             const pos = pinPositions.get(thread.id);
             if (!pos) return null;
             if (!(stateMatch.get(thread.id) ?? true)) return null;
+            const author = members?.byId.get(thread.createdBy);
             return (
               <PinMarker
                 key={thread.id}
                 threadId={thread.id}
-                index={i + 1}
                 x={pos.x}
                 y={pos.y}
                 state={openThreadId === thread.id ? 'active' : 'idle'}
-                snippet={thread.comments[0]?.body.slice(0, 60)}
+                authorName={author?.displayName ?? author?.email?.split('@')[0]}
+                authorAvatarUrl={author?.avatarUrl ?? undefined}
+                snippet={thread.comments[0]?.body.slice(0, 120)}
+                tooltipContainer={portalRootRef.current}
                 onOpen={handlePinOpen}
                 onHoverChange={handlePinHover}
               />
@@ -373,7 +375,6 @@ export function OverlayRenderer() {
       {openThread && openPos && (
         <ThreadPopover
           threadId={openThread.id}
-          index={snapshot!.threads.indexOf(openThread) + 1}
           anchorX={openPos.x}
           anchorY={openPos.y}
           comments={openThread.comments}
@@ -390,7 +391,6 @@ export function OverlayRenderer() {
       {pendingPin && (
         <ThreadPopover
           threadId="new"
-          index={0}
           anchorX={pendingPin.x}
           anchorY={pendingPin.y}
           comments={[]}
@@ -417,7 +417,6 @@ export function OverlayRenderer() {
             const member = members?.byId.get(t.createdBy);
             return {
               id: t.id,
-              index: i + 1,
               authorName: member?.displayName ?? member?.email ?? 'Unknown',
               authorAvatarUrl: member?.avatarUrl ?? undefined,
               snippet: t.comments[0]?.body.slice(0, 80) ?? '',

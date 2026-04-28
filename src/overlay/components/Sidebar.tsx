@@ -9,7 +9,6 @@ import type { MemberProfile } from '../../store/types';
 
 export type ThreadSummary = {
   id: string;
-  index: number;
   authorName: string;
   authorAvatarUrl?: string;
   snippet: string;
@@ -84,13 +83,14 @@ export function Sidebar({
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={o => { if (!o) onClose(); }}>
+    <Dialog.Root open={open} onOpenChange={o => { if (!o) onClose(); }} modal={false}>
       <Dialog.Portal container={container}>
-        <Dialog.Overlay className="align-sidebar-overlay" />
         <Dialog.Content
           className="align-sidebar"
           aria-describedby={undefined}
           onOpenAutoFocus={e => e.preventDefault()}
+          onInteractOutside={e => e.preventDefault()}
+          onPointerDownOutside={e => e.preventDefault()}
         >
           <div className="align-sidebar-header">
             <Dialog.Title className="align-sidebar-title">Comments</Dialog.Title>
@@ -278,7 +278,6 @@ function SidebarItem({
       onKeyDown={e => e.key === 'Enter' && onItemOpen(item.id)}
     >
       <div className="align-sidebar-item-header">
-        <span className="align-sidebar-item-index">#{item.index}</span>
         <UserAvatar
           name={item.authorName}
           avatarUrl={item.authorAvatarUrl}

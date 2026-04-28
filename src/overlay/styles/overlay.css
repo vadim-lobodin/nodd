@@ -205,30 +205,46 @@
 }
 
 /* ==========================================================================
-   Pin tooltip
+   Pin tooltip (comment bubble — mirrors .align-popover style)
    ========================================================================== */
-.align-pin-tooltip {
-  background: hsl(var(--align-foreground));
-  color: hsl(var(--align-background));
-  font-size: 12px;
-  line-height: 1.4;
-  padding: 6px 10px;
-  border-radius: var(--align-radius-sm);
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+[data-align-root] .align-pin-tooltip {
+  background: hsl(var(--align-popover));
+  color: hsl(var(--align-popover-foreground));
+  font-family: var(--align-font, inherit);
+  border-radius: var(--align-radius-md, 8px);
+  box-shadow: 0 4px 24px hsl(0 0% 0% / 0.14), 0 1px 4px hsl(0 0% 0% / 0.1);
+  border: 1px solid hsl(var(--align-border));
+  max-width: 280px;
   z-index: 2147483647;
   animation: align-fade-in 120ms ease-out;
+  pointer-events: none;
 }
-.align-pin-tooltip-snippet {
-  display: block;
+[data-align-root] .align-pin-tooltip-bubble {
+  padding: 10px 12px;
+}
+[data-align-root] .align-pin-tooltip-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+[data-align-root] .align-pin-tooltip-author {
+  font-weight: 600;
+  font-size: 13px;
+  color: hsl(var(--align-popover-foreground));
+}
+[data-align-root] .align-pin-tooltip-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: hsl(var(--align-popover-foreground) / 0.75);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.align-pin-tooltip-arrow {
-  fill: hsl(var(--align-foreground));
+[data-align-root] .align-pin-tooltip-arrow {
+  fill: hsl(var(--align-popover));
 }
 
 /* ==========================================================================
@@ -523,24 +539,11 @@
   overflow: hidden;
 }
 
-[data-align-root] .align-popover-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid hsl(var(--align-border));
-}
-
-[data-align-root] .align-popover-title {
-  font-weight: 600;
-  font-size: 14px;
-  color: hsl(var(--align-muted-foreground));
-}
-
 [data-align-root] .align-popover-actions {
   display: flex;
   gap: 4px;
   align-items: center;
+  margin-left: auto;
 }
 
 [data-align-root] .align-popover-comments {
@@ -574,7 +577,6 @@
 [data-align-root] .align-comment-time {
   font-size: 11px;
   color: hsl(var(--align-muted-foreground));
-  margin-left: auto;
 }
 
 [data-align-root] .align-comment-body {
@@ -859,12 +861,6 @@
   align-items: center;
   gap: 6px;
   margin-bottom: 4px;
-}
-
-[data-align-root] .align-sidebar-item-index {
-  font-size: 12px;
-  font-weight: 600;
-  color: hsl(var(--align-primary));
 }
 
 [data-align-root] .align-sidebar-item-author {

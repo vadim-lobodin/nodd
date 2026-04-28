@@ -1,25 +1,29 @@
 import React, { useState, useCallback } from 'react';
 import * as Tooltip from '@radix-ui/react-tooltip';
+import { UserAvatar } from './UserAvatar';
 
 export type PinMarkerProps = {
   threadId: string;
-  index: number;
   x: number;
   y: number;
   state: 'idle' | 'unread' | 'active';
+  authorName?: string;
   authorAvatarUrl?: string;
   snippet?: string;
+  tooltipContainer?: HTMLElement | null;
   onOpen: (threadId: string) => void;
   onHoverChange: (threadId: string | null) => void;
 };
 
 export function PinMarker({
   threadId,
-  index,
   x,
   y,
   state: pinState,
+  authorName,
+  authorAvatarUrl,
   snippet,
+  tooltipContainer,
   onOpen,
   onHoverChange,
 }: PinMarkerProps) {
@@ -50,14 +54,20 @@ export function PinMarker({
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
           tabIndex={0}
-          aria-label={`Comment ${index}`}
-        >
-          {index}
-        </button>
+          aria-label="Comment"
+        />
       </Tooltip.Trigger>
-      <Tooltip.Portal>
+      <Tooltip.Portal container={tooltipContainer ?? undefined}>
         <Tooltip.Content className="align-pin-tooltip" sideOffset={6}>
-          {snippet && <span className="align-pin-tooltip-snippet">{snippet}</span>}
+          <div className="align-pin-tooltip-bubble">
+            {authorName && (
+              <div className="align-pin-tooltip-header">
+                <UserAvatar name={authorName} avatarUrl={authorAvatarUrl} size={18} />
+                <span className="align-pin-tooltip-author">{authorName}</span>
+              </div>
+            )}
+            {snippet && <p className="align-pin-tooltip-body">{snippet}</p>}
+          </div>
           <Tooltip.Arrow className="align-pin-tooltip-arrow" />
         </Tooltip.Content>
       </Tooltip.Portal>

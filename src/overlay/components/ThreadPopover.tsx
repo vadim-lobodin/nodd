@@ -18,7 +18,6 @@ export type ThreadComment = {
 
 export type ThreadPopoverProps = {
   threadId: string;
-  index: number;
   anchorX: number;
   anchorY: number;
   comments: ThreadComment[];
@@ -75,7 +74,6 @@ function renderBodyWithMentions(body: string, memberMap: Map<string, MemberProfi
 
 export function ThreadPopover({
   threadId,
-  index,
   anchorX,
   anchorY,
   comments,
@@ -202,26 +200,9 @@ export function ThreadPopover({
         width: POPOVER_WIDTH,
       }}
     >
-      <div className="align-popover-header">
-        <span id={`align-thread-${threadId}`} className="align-popover-title">#{index}</span>
-        <div className="align-popover-actions">
-          <button
-            className="align-btn align-btn--resolve"
-            onClick={onToggleResolved}
-          >
-            {resolved ? 'Reopen' : 'Resolve'}
-          </button>
-          <button className="align-btn align-btn--close" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
-        </div>
-      </div>
-
-      <Separator.Root className="align-separator" />
-
       <ScrollArea.Root className="align-popover-comments-scroll">
         <ScrollArea.Viewport className="align-popover-comments">
-          {comments.map(comment => {
+          {comments.map((comment, ci) => {
             const member = memberMap.get(comment.authorId);
             return (
               <div key={comment.id} className={`align-comment${comment.pending ? ' align-comment--pending' : ''}`}>
@@ -233,6 +214,19 @@ export function ThreadPopover({
                   />
                   <span className="align-comment-author">{member?.displayName ?? member?.email ?? 'Unknown'}</span>
                   <span className="align-comment-time">{formatTime(comment.createdAt)}</span>
+                  {ci === 0 && (
+                    <div className="align-popover-actions">
+                      <button
+                        className="align-btn align-btn--resolve"
+                        onClick={onToggleResolved}
+                      >
+                        {resolved ? 'Reopen' : 'Resolve'}
+                      </button>
+                      <button className="align-btn align-btn--close" onClick={onClose} aria-label="Close">
+                        ✕
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="align-comment-body">
                   {renderBodyWithMentions(comment.body, memberMap)}
