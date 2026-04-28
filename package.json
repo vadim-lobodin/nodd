@@ -1,0 +1,53 @@
+{
+  "name": "@align/react",
+  "version": "0.1.0",
+  "description": "Figma-like comments on top of live React prototypes",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "dependencies": {
+    "@radix-ui/react-avatar": "1.1.11",
+    "@radix-ui/react-dialog": "1.1.15",
+    "@radix-ui/react-popover": "1.1.15",
+    "@radix-ui/react-scroll-area": "1.2.10",
+    "@radix-ui/react-separator": "1.1.8",
+    "@radix-ui/react-tabs": "1.1.13",
+    "@radix-ui/react-toggle": "1.1.10",
+    "@radix-ui/react-tooltip": "1.2.8",
+    "@radix-ui/react-visually-hidden": "1.2.4",
+    "@supabase/supabase-js": "^2",
+    "idb-keyval": "^6"
+  },
+  "devDependencies": {
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "react": "^18",
+    "react-dom": "^18",
+    "tsup": "^8",
+    "typescript": "^5"
+  },
+  "license": "MIT"
+}

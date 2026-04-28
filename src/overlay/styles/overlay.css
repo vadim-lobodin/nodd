@@ -1,0 +1,961 @@
+/* ==========================================================================
+   Align — shadcn-inspired design system
+   HSL-based tokens · light/dark theming · prefers-color-scheme auto
+   ========================================================================== */
+
+/* ---------- Design tokens: Light (default) ---------- */
+[data-align-root] {
+  --align-background: 0 0% 100%;
+  --align-foreground: 224 71% 4%;
+  --align-card: 0 0% 100%;
+  --align-card-foreground: 224 71% 4%;
+  --align-popover: 0 0% 100%;
+  --align-popover-foreground: 224 71% 4%;
+  --align-primary: 243 75% 59%;
+  --align-primary-foreground: 0 0% 100%;
+  --align-secondary: 220 14% 96%;
+  --align-secondary-foreground: 224 71% 4%;
+  --align-muted: 220 14% 96%;
+  --align-muted-foreground: 220 9% 46%;
+  --align-accent: 220 14% 96%;
+  --align-accent-foreground: 224 71% 4%;
+  --align-destructive: 0 84% 60%;
+  --align-destructive-foreground: 0 0% 100%;
+  --align-border: 220 13% 91%;
+  --align-input: 220 13% 91%;
+  --align-ring: 243 75% 59%;
+
+  --align-radius-sm: 0.25rem;
+  --align-radius-md: 0.375rem;
+  --align-radius-lg: 0.5rem;
+
+  --align-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --align-shadow-md: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --align-shadow-lg: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --align-shadow-xl: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+  --align-pin-size: 28px;
+}
+
+/* ---------- Design tokens: Dark (explicit) ---------- */
+[data-align-theme="dark"][data-align-root],
+[data-align-root][data-align-theme="dark"] {
+  --align-background: 224 71% 4%;
+  --align-foreground: 210 20% 98%;
+  --align-card: 224 71% 4%;
+  --align-card-foreground: 210 20% 98%;
+  --align-popover: 224 71% 4%;
+  --align-popover-foreground: 210 20% 98%;
+  --align-primary: 243 75% 59%;
+  --align-primary-foreground: 0 0% 100%;
+  --align-secondary: 215 28% 17%;
+  --align-secondary-foreground: 210 20% 98%;
+  --align-muted: 215 28% 17%;
+  --align-muted-foreground: 218 11% 65%;
+  --align-accent: 215 28% 17%;
+  --align-accent-foreground: 210 20% 98%;
+  --align-destructive: 0 63% 31%;
+  --align-destructive-foreground: 210 20% 98%;
+  --align-border: 215 28% 17%;
+  --align-input: 215 28% 17%;
+  --align-ring: 243 75% 59%;
+
+  --align-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.2);
+  --align-shadow-md: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+  --align-shadow-lg: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --align-shadow-xl: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);
+}
+
+/* ---------- Auto dark via prefers-color-scheme ---------- */
+@media (prefers-color-scheme: dark) {
+  [data-align-root]:not([data-align-theme]) {
+    --align-background: 224 71% 4%;
+    --align-foreground: 210 20% 98%;
+    --align-card: 224 71% 4%;
+    --align-card-foreground: 210 20% 98%;
+    --align-popover: 224 71% 4%;
+    --align-popover-foreground: 210 20% 98%;
+    --align-primary: 243 75% 59%;
+    --align-primary-foreground: 0 0% 100%;
+    --align-secondary: 215 28% 17%;
+    --align-secondary-foreground: 210 20% 98%;
+    --align-muted: 215 28% 17%;
+    --align-muted-foreground: 218 11% 65%;
+    --align-accent: 215 28% 17%;
+    --align-accent-foreground: 210 20% 98%;
+    --align-destructive: 0 63% 31%;
+    --align-destructive-foreground: 210 20% 98%;
+    --align-border: 215 28% 17%;
+    --align-input: 215 28% 17%;
+    --align-ring: 243 75% 59%;
+
+    --align-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.2);
+    --align-shadow-md: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+    --align-shadow-lg: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+    --align-shadow-xl: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);
+  }
+}
+
+/* ---------- Root ---------- */
+[data-align-root] {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: hsl(var(--align-foreground));
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  [data-align-root] *,
+  [data-align-root] *::before,
+  [data-align-root] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ==========================================================================
+   Pin container — position:fixed, pins use viewport-relative coords
+   and update positions via ResizeObserver. Separate from the overlay
+   so tooltip portals etc. work correctly.
+   ========================================================================== */
+[data-align-pin-container] {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  z-index: 2147482999;
+  pointer-events: none;
+  overflow: visible;
+
+  /* Inherit design tokens from theme */
+  --align-primary: 243 75% 59%;
+  --align-primary-foreground: 0 0% 100%;
+  --align-background: 0 0% 100%;
+  --align-ring: 243 75% 59%;
+  --align-pin-size: 28px;
+  --align-shadow-md: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+}
+[data-align-pin-container][data-align-theme="dark"] {
+  --align-primary: 243 75% 66%;
+  --align-primary-foreground: 0 0% 100%;
+  --align-background: 224 71% 4%;
+  --align-ring: 243 75% 66%;
+}
+
+/* ==========================================================================
+   Pin markers
+   ========================================================================== */
+[data-align-pin-container] .align-pin {
+  pointer-events: auto;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--align-pin-size);
+  height: var(--align-pin-size);
+  border-radius: 50%;
+  background: hsl(var(--align-primary));
+  color: hsl(var(--align-primary-foreground));
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid hsl(var(--align-background));
+  box-shadow: var(--align-shadow-md);
+  cursor: pointer;
+  transition: transform 200ms cubic-bezier(0.2, 0, 0, 1),
+              box-shadow 150ms ease;
+  padding: 0;
+  outline: none;
+  user-select: none;
+}
+
+[data-align-pin-container] .align-pin:hover,
+[data-align-pin-container] .align-pin--hovered {
+  transform: scale(1.15);
+  z-index: 1;
+  box-shadow: var(--align-shadow-lg);
+}
+
+[data-align-pin-container] .align-pin--active {
+  box-shadow: 0 0 0 3px hsl(var(--align-ring) / 0.35), var(--align-shadow-md);
+  z-index: 2;
+}
+
+[data-align-pin-container] .align-pin--unread::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: hsl(var(--align-destructive));
+  border: 1.5px solid hsl(var(--align-background));
+}
+
+/* ==========================================================================
+   Hover highlight
+   ========================================================================== */
+[data-align-root] .align-hover-highlight {
+  position: absolute;
+  pointer-events: none;
+  outline: 2px solid hsl(var(--align-primary));
+  border-radius: var(--align-radius-sm);
+  box-shadow: 0 0 0 6px hsl(var(--align-primary) / 0.12);
+  display: none;
+  transition: transform 80ms linear, width 80ms linear, height 80ms linear;
+  top: 0;
+  left: 0;
+}
+
+/* ==========================================================================
+   Toolbar
+   ========================================================================== */
+[data-align-root] .align-toolbar {
+  pointer-events: auto;
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  z-index: 10;
+  padding: 6px;
+  border-radius: 9999px;
+  background: hsl(var(--align-background) / 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid hsl(var(--align-border));
+  box-shadow: var(--align-shadow-lg);
+}
+
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+[data-align-root] .align-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--align-radius-md);
+  border: 1px solid hsl(var(--align-border));
+  background: hsl(var(--align-background));
+  color: hsl(var(--align-foreground));
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease,
+              box-shadow 150ms ease;
+  outline: none;
+  user-select: none;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+[data-align-root] .align-btn:hover {
+  background: hsl(var(--align-accent));
+  color: hsl(var(--align-accent-foreground));
+}
+
+[data-align-root] .align-btn:focus-visible {
+  outline: 2px solid hsl(var(--align-ring));
+  outline-offset: 2px;
+}
+
+[data-align-root] .align-btn:disabled {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* --primary */
+[data-align-root] .align-btn--primary {
+  background: hsl(var(--align-primary));
+  color: hsl(var(--align-primary-foreground));
+  border-color: hsl(var(--align-primary));
+}
+[data-align-root] .align-btn--primary:hover {
+  background: hsl(var(--align-primary) / 0.9);
+  color: hsl(var(--align-primary-foreground));
+}
+
+/* --secondary */
+[data-align-root] .align-btn--secondary {
+  background: hsl(var(--align-secondary));
+  color: hsl(var(--align-secondary-foreground));
+  border-color: transparent;
+}
+[data-align-root] .align-btn--secondary:hover {
+  background: hsl(var(--align-secondary) / 0.8);
+}
+
+/* --ghost */
+[data-align-root] .align-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+}
+[data-align-root] .align-btn--ghost:hover {
+  background: hsl(var(--align-accent));
+  color: hsl(var(--align-accent-foreground));
+}
+
+/* --outline */
+[data-align-root] .align-btn--outline {
+  background: transparent;
+  border-color: hsl(var(--align-input));
+}
+[data-align-root] .align-btn--outline:hover {
+  background: hsl(var(--align-accent));
+  color: hsl(var(--align-accent-foreground));
+}
+
+/* --capture */
+[data-align-root] .align-btn--capture {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 20px;
+  padding: 0;
+  background: hsl(var(--align-primary));
+  color: hsl(var(--align-primary-foreground));
+  border: none;
+  box-shadow: 0 2px 12px hsl(var(--align-primary) / 0.3);
+}
+[data-align-root] .align-btn--capture:hover {
+  background: hsl(var(--align-primary) / 0.9);
+  color: hsl(var(--align-primary-foreground));
+}
+[data-align-root] .align-btn--active {
+  background: hsl(var(--align-destructive)) !important;
+  color: hsl(var(--align-destructive-foreground)) !important;
+}
+
+/* --sidebar */
+[data-align-root] .align-btn--sidebar {
+  height: 40px;
+  border-radius: 9999px;
+  background: hsl(var(--align-background));
+  box-shadow: var(--align-shadow-md);
+  border: 1px solid hsl(var(--align-border));
+  padding: 0 16px;
+  font-size: 14px;
+}
+[data-align-root] .align-btn--sidebar:hover {
+  background: hsl(var(--align-accent));
+}
+
+/* --close */
+[data-align-root] .align-btn--close {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  color: hsl(var(--align-muted-foreground));
+  padding: 4px 8px;
+  border-radius: var(--align-radius-sm);
+}
+[data-align-root] .align-btn--close:hover {
+  background: hsl(var(--align-accent));
+  color: hsl(var(--align-accent-foreground));
+}
+
+/* --send */
+[data-align-root] .align-btn--send {
+  background: hsl(var(--align-primary));
+  color: hsl(var(--align-primary-foreground));
+  border-color: hsl(var(--align-primary));
+  border-radius: var(--align-radius-md);
+  padding: 4px 12px;
+  font-size: 13px;
+}
+[data-align-root] .align-btn--send:hover {
+  background: hsl(var(--align-primary) / 0.9);
+  color: hsl(var(--align-primary-foreground));
+}
+[data-align-root] .align-btn--send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --resolve */
+[data-align-root] .align-btn--resolve {
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: var(--align-radius-sm);
+  background: transparent;
+  border-color: hsl(var(--align-input));
+  color: hsl(var(--align-muted-foreground));
+}
+[data-align-root] .align-btn--resolve:hover {
+  background: hsl(var(--align-accent));
+  color: hsl(var(--align-accent-foreground));
+}
+
+/* ==========================================================================
+   Capture layer
+   ========================================================================== */
+[data-align-root] .align-capture-layer {
+  pointer-events: auto;
+  position: fixed;
+  inset: 0;
+  cursor: crosshair;
+  background: hsl(var(--align-foreground) / 0.04);
+}
+
+[data-align-root] .align-capture-toast {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: hsl(var(--align-foreground));
+  color: hsl(var(--align-background));
+  padding: 8px 20px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 500;
+  pointer-events: none;
+  box-shadow: var(--align-shadow-lg);
+  animation: align-slide-in 120ms ease;
+}
+
+@keyframes align-slide-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ==========================================================================
+   Popover
+   ========================================================================== */
+[data-align-root] .align-popover {
+  pointer-events: auto;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 320px;
+  background: hsl(var(--align-popover));
+  color: hsl(var(--align-popover-foreground));
+  border-radius: var(--align-radius-lg);
+  border: 1px solid hsl(var(--align-border));
+  box-shadow: var(--align-shadow-xl);
+  max-height: min(60vh, 480px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+[data-align-root] .align-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid hsl(var(--align-border));
+}
+
+[data-align-root] .align-popover-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: hsl(var(--align-muted-foreground));
+}
+
+[data-align-root] .align-popover-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+[data-align-root] .align-popover-comments {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+/* ---------- Comment ---------- */
+[data-align-root] .align-comment {
+  padding: 8px 16px;
+}
+
+[data-align-root] .align-comment--pending {
+  opacity: 0.6;
+}
+
+[data-align-root] .align-comment-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+[data-align-root] .align-comment-author {
+  font-weight: 500;
+  font-size: 13px;
+  color: hsl(var(--align-foreground));
+}
+
+[data-align-root] .align-comment-time {
+  font-size: 11px;
+  color: hsl(var(--align-muted-foreground));
+  margin-left: auto;
+}
+
+[data-align-root] .align-comment-body {
+  font-size: 13px;
+  color: hsl(var(--align-foreground) / 0.85);
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+/* ---------- Avatar ---------- */
+[data-align-root] .align-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+[data-align-root] .align-avatar--sm {
+  width: 20px;
+  height: 20px;
+}
+
+[data-align-root] .align-avatar--fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: hsl(var(--align-primary));
+  color: hsl(var(--align-primary-foreground));
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Radix Avatar fallback */
+[data-align-root] [data-radix-avatar-fallback] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: hsl(var(--align-muted));
+  color: hsl(var(--align-muted-foreground));
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 50%;
+}
+
+/* ---------- Mention chip ---------- */
+[data-align-root] .align-mention-chip {
+  color: hsl(var(--align-primary));
+  font-weight: 500;
+  background: hsl(var(--align-primary) / 0.08);
+  padding: 1px 4px;
+  border-radius: var(--align-radius-sm);
+}
+
+/* ---------- Reply area ---------- */
+[data-align-root] .align-popover-reply {
+  border-top: 1px solid hsl(var(--align-border));
+  padding: 12px 16px;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+[data-align-root] .align-reply-input {
+  flex: 1;
+  resize: none;
+  border: 1px solid hsl(var(--align-input));
+  border-radius: var(--align-radius-md);
+  padding: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  min-height: 36px;
+  background: hsl(var(--align-background));
+  color: hsl(var(--align-foreground));
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+[data-align-root] .align-reply-input::placeholder {
+  color: hsl(var(--align-muted-foreground));
+}
+
+[data-align-root] .align-reply-input:focus {
+  border-color: hsl(var(--align-ring));
+  box-shadow: 0 0 0 2px hsl(var(--align-ring) / 0.15);
+}
+
+/* ==========================================================================
+   Mention picker
+   ========================================================================== */
+[data-align-root] .align-mention-picker {
+  pointer-events: auto;
+  background: hsl(var(--align-popover));
+  color: hsl(var(--align-popover-foreground));
+  border: 1px solid hsl(var(--align-border));
+  border-radius: var(--align-radius-lg);
+  box-shadow: var(--align-shadow-lg);
+  max-height: 280px;
+  overflow-y: auto;
+  min-width: 220px;
+  padding: 4px;
+}
+
+[data-align-root] .align-mention-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  cursor: pointer;
+  border-radius: var(--align-radius-sm);
+  transition: background 150ms ease;
+}
+
+[data-align-root] .align-mention-item:hover {
+  background: hsl(var(--align-accent));
+}
+
+[data-align-root] .align-mention-item--active {
+  background: hsl(var(--align-accent));
+  color: hsl(var(--align-accent-foreground));
+}
+
+[data-align-root] .align-mention-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+[data-align-root] .align-mention-avatar--fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: hsl(var(--align-primary));
+  color: hsl(var(--align-primary-foreground));
+  font-size: 11px;
+  font-weight: 600;
+}
+
+[data-align-root] .align-mention-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: hsl(var(--align-foreground));
+}
+
+[data-align-root] .align-mention-email {
+  font-size: 12px;
+  color: hsl(var(--align-muted-foreground));
+}
+
+/* ==========================================================================
+   Sidebar (Radix Dialog / Sheet)
+   ========================================================================== */
+[data-align-root] .align-sidebar-overlay {
+  pointer-events: auto;
+  position: fixed;
+  inset: 0;
+  background: hsl(var(--align-foreground) / 0.5);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: align-fade-in 200ms ease;
+  z-index: 4;
+}
+
+@keyframes align-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+[data-align-root] .align-sidebar {
+  pointer-events: auto;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(360px, 90vw);
+  background: hsl(var(--align-card));
+  color: hsl(var(--align-card-foreground));
+  border-left: 1px solid hsl(var(--align-border));
+  box-shadow: var(--align-shadow-xl);
+  display: flex;
+  flex-direction: column;
+  animation: align-sidebar-in 200ms cubic-bezier(0.2, 0, 0, 1);
+  z-index: 5;
+}
+
+@keyframes align-sidebar-in {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+[data-align-root] .align-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid hsl(var(--align-border));
+}
+
+[data-align-root] .align-sidebar-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  color: hsl(var(--align-foreground));
+}
+
+[data-align-root] .align-sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid hsl(var(--align-border));
+}
+
+[data-align-root] .align-sidebar-tab {
+  flex: 1;
+  padding: 10px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  color: hsl(var(--align-muted-foreground));
+  transition: color 150ms ease, border-color 150ms ease;
+}
+
+[data-align-root] .align-sidebar-tab:hover {
+  color: hsl(var(--align-foreground));
+}
+
+[data-align-root] .align-sidebar-tab--active {
+  color: hsl(var(--align-primary));
+  border-bottom-color: hsl(var(--align-primary));
+  font-weight: 500;
+}
+
+[data-align-root] .align-sidebar-search {
+  margin: 8px 16px;
+  padding: 8px 12px;
+  border: 1px solid hsl(var(--align-input));
+  border-radius: var(--align-radius-md);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  background: hsl(var(--align-background));
+  color: hsl(var(--align-foreground));
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+[data-align-root] .align-sidebar-search::placeholder {
+  color: hsl(var(--align-muted-foreground));
+}
+
+[data-align-root] .align-sidebar-search:focus {
+  border-color: hsl(var(--align-ring));
+  box-shadow: 0 0 0 2px hsl(var(--align-ring) / 0.15);
+}
+
+[data-align-root] .align-sidebar-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+[data-align-root] .align-sidebar-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid hsl(var(--align-border));
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+[data-align-root] .align-sidebar-item:hover {
+  background: hsl(var(--align-accent));
+}
+
+[data-align-root] .align-sidebar-item--unread {
+  background: hsl(var(--align-primary) / 0.04);
+}
+
+[data-align-root] .align-sidebar-item-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+[data-align-root] .align-sidebar-item-index {
+  font-size: 12px;
+  font-weight: 600;
+  color: hsl(var(--align-primary));
+}
+
+[data-align-root] .align-sidebar-item-author {
+  font-size: 13px;
+  font-weight: 500;
+  color: hsl(var(--align-foreground));
+}
+
+[data-align-root] .align-sidebar-item-time {
+  font-size: 11px;
+  color: hsl(var(--align-muted-foreground));
+  margin-left: auto;
+}
+
+[data-align-root] .align-sidebar-item-snippet {
+  font-size: 13px;
+  color: hsl(var(--align-muted-foreground));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-align-root] .align-sidebar-item-replies {
+  font-size: 12px;
+  color: hsl(var(--align-muted-foreground));
+  margin-top: 4px;
+  display: block;
+}
+
+[data-align-root] .align-sidebar-empty,
+[data-align-root] .align-sidebar-loading {
+  padding: 32px 16px;
+  text-align: center;
+  color: hsl(var(--align-muted-foreground));
+  font-size: 13px;
+}
+
+/* ==========================================================================
+   Auth gate
+   ========================================================================== */
+[data-align-root] .align-auth-gate {
+  pointer-events: auto;
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: hsl(var(--align-card));
+  color: hsl(var(--align-card-foreground));
+  border-radius: var(--align-radius-lg);
+  border: 1px solid hsl(var(--align-border));
+  box-shadow: var(--align-shadow-xl);
+  padding: 20px;
+  width: 280px;
+}
+
+[data-align-root] .align-auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+[data-align-root] .align-auth-form p {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+[data-align-root] .align-auth-input {
+  padding: 8px 12px;
+  border: 1px solid hsl(var(--align-input));
+  border-radius: var(--align-radius-md);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  background: hsl(var(--align-background));
+  color: hsl(var(--align-foreground));
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+[data-align-root] .align-auth-input::placeholder {
+  color: hsl(var(--align-muted-foreground));
+}
+
+[data-align-root] .align-auth-input:focus {
+  border-color: hsl(var(--align-ring));
+  box-shadow: 0 0 0 2px hsl(var(--align-ring) / 0.15);
+}
+
+[data-align-root] .align-auth-sent {
+  text-align: center;
+}
+
+[data-align-root] .align-auth-sent p {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+/* ==========================================================================
+   Radix overrides
+   ========================================================================== */
+[data-align-root] [data-radix-popper-content-wrapper] {
+  z-index: 2147483001 !important;
+}
+
+[data-align-root] [data-radix-popper-content-wrapper] > * {
+  pointer-events: auto;
+}
+
+/* ==========================================================================
+   Scroll area
+   ========================================================================== */
+[data-align-root] .align-scrollarea-viewport {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--align-border)) transparent;
+}
+
+[data-align-root] .align-scrollbar {
+  display: flex;
+  touch-action: none;
+  user-select: none;
+  padding: 2px;
+  transition: background 150ms ease;
+}
+
+[data-align-root] .align-scrollbar[data-orientation="vertical"] {
+  width: 8px;
+}
+
+[data-align-root] .align-scrollbar[data-orientation="horizontal"] {
+  flex-direction: column;
+  height: 8px;
+}
+
+[data-align-root] .align-scrollbar:hover {
+  background: hsl(var(--align-muted) / 0.5);
+}
+
+[data-align-root] .align-scrollbar-thumb {
+  flex: 1;
+  border-radius: 9999px;
+  background: hsl(var(--align-border));
+  position: relative;
+  transition: background 150ms ease;
+}
+
+[data-align-root] .align-scrollbar-thumb:hover {
+  background: hsl(var(--align-muted-foreground) / 0.4);
+}
+
+/* ==========================================================================
+   Separator
+   ========================================================================== */
+[data-align-root] .align-separator {
+  border: none;
+  height: 1px;
+  background: hsl(var(--align-border));
+  margin: 0;
+  flex-shrink: 0;
+}
