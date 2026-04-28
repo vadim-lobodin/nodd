@@ -173,8 +173,7 @@
   border: 2px solid hsl(var(--align-background));
   box-shadow: var(--align-shadow-md);
   cursor: pointer;
-  transition: transform 200ms cubic-bezier(0.2, 0, 0, 1),
-              box-shadow 150ms ease;
+  transition: box-shadow 150ms ease;
   padding: 0;
   outline: none;
   user-select: none;
@@ -281,6 +280,11 @@
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid hsl(var(--align-border));
   box-shadow: var(--align-shadow-lg);
+  transition: right 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+[data-align-root] .align-toolbar--shifted {
+  right: calc(min(360px, 90vw) + 24px);
 }
 
 /* ==========================================================================
@@ -733,22 +737,6 @@
 /* ==========================================================================
    Sidebar (Radix Dialog / Sheet)
    ========================================================================== */
-[data-align-root] .align-sidebar-overlay {
-  pointer-events: auto;
-  position: fixed;
-  inset: 0;
-  background: hsl(var(--align-foreground) / 0.5);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-  animation: align-fade-in 200ms ease;
-  z-index: 4;
-}
-
-@keyframes align-fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
 [data-align-root] .align-sidebar {
   pointer-events: auto;
   position: fixed;

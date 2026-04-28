@@ -45,6 +45,18 @@ export function OverlayRenderer() {
     }
   }, [effectiveTheme]);
 
+  // Push host layout when the sidebar is open, instead of overlaying.
+  // Uses inline style to avoid leaking unscoped CSS into the host (see CLAUDE.md).
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const body = document.body;
+    const prevMargin = body.style.marginRight;
+    body.style.marginRight = sidebarOpen ? 'min(360px, 90vw)' : prevMargin || '';
+    return () => {
+      body.style.marginRight = prevMargin;
+    };
+  }, [sidebarOpen]);
+
   // Listen for system theme changes when theme='system'
   useEffect(() => {
     if (theme !== 'system') return;
@@ -306,7 +318,7 @@ export function OverlayRenderer() {
   return (
     <Tooltip.Provider delayDuration={400}>
       {/* Toolbar */}
-      <div className="align-toolbar">
+      <div className={`align-toolbar${sidebarOpen ? ' align-toolbar--shifted' : ''}`}>
         <div className="align-user-pill">
           <span className="align-user-pill-name">{user.displayName ?? user.email.split('@')[0]}</span>
           <button className="align-user-pill-signout" onClick={() => void signOut()} aria-label="Sign out">

@@ -54,7 +54,6 @@ export function Sidebar({
   const handleTabChange = useCallback(async (value: string) => {
     if (value === 'resolved') {
       setActiveTab('resolved');
-      if (resolvedItems !== null) return;
       setResolvedStatus('loading');
       try {
         const items = await fetchResolved();
@@ -66,7 +65,7 @@ export function Sidebar({
     } else {
       setActiveTab('open');
     }
-  }, [fetchResolved, resolvedItems]);
+  }, [fetchResolved]);
 
   const items = activeTab === 'open' ? threadsOpen : (resolvedItems ?? []);
   const matchSearch = (t: ThreadSummary) =>
