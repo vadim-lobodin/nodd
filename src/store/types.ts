@@ -30,6 +30,7 @@ export type Thread = {
   projectId: ProjectId;
   urlPath: string;
   pin: Pin;
+  stateKey: string;
   resolved: boolean;
   resolvedBy: UserId | null;
   resolvedAt: string | null;

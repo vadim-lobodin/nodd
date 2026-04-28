@@ -205,6 +205,33 @@
 }
 
 /* ==========================================================================
+   Pin tooltip
+   ========================================================================== */
+.align-pin-tooltip {
+  background: hsl(var(--align-foreground));
+  color: hsl(var(--align-background));
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 6px 10px;
+  border-radius: var(--align-radius-sm);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  z-index: 2147483647;
+  animation: align-fade-in 120ms ease-out;
+}
+.align-pin-tooltip-snippet {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.align-pin-tooltip-arrow {
+  fill: hsl(var(--align-foreground));
+}
+
+/* ==========================================================================
    Hover highlight
    ========================================================================== */
 [data-align-root] .align-hover-highlight {
@@ -323,6 +350,46 @@
 }
 
 /* --capture */
+[data-align-root] .align-user-pill {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 40px;
+  border-radius: 20px;
+  background: hsl(var(--align-card));
+  border: 1px solid hsl(var(--align-border));
+  box-shadow: var(--align-shadow-md);
+  overflow: hidden;
+}
+[data-align-root] .align-user-pill-name {
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: hsl(var(--align-card-foreground));
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+[data-align-root] .align-user-pill-signout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 100%;
+  border: none;
+  border-left: 1px solid hsl(var(--align-border));
+  background: transparent;
+  color: hsl(var(--align-muted-foreground));
+  cursor: pointer;
+  transition: background 150ms, color 150ms;
+  padding: 0;
+}
+[data-align-root] .align-user-pill-signout:hover {
+  background: hsl(var(--align-destructive) / 0.1);
+  color: hsl(var(--align-destructive));
+}
 [data-align-root] .align-btn--capture {
   width: 40px;
   height: 40px;
@@ -833,6 +900,64 @@
   text-align: center;
   color: hsl(var(--align-muted-foreground));
   font-size: 13px;
+}
+
+[data-align-root] .align-sidebar-other-pill {
+  margin: 8px 16px 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: hsl(var(--align-muted) / 0.6);
+  color: hsl(var(--align-muted-foreground));
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-block;
+  width: fit-content;
+}
+
+[data-align-root] .align-sidebar-section {
+  display: flex;
+  flex-direction: column;
+}
+
+[data-align-root] .align-sidebar-section-heading {
+  padding: 12px 16px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: hsl(var(--align-muted-foreground));
+}
+
+[data-align-root] .align-sidebar-section--muted .align-sidebar-item {
+  opacity: 0.78;
+}
+[data-align-root] .align-sidebar-section--muted .align-sidebar-item:hover {
+  opacity: 1;
+}
+
+[data-align-root] .align-sidebar-item-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  gap: 8px;
+}
+
+[data-align-root] .align-sidebar-item-activate {
+  margin-left: auto;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: hsl(var(--align-primary));
+  background: hsl(var(--align-primary) / 0.12);
+  border: 1px solid hsl(var(--align-primary) / 0.25);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+[data-align-root] .align-sidebar-item-activate:hover {
+  background: hsl(var(--align-primary));
+  color: hsl(var(--align-primary-foreground));
 }
 
 /* ==========================================================================

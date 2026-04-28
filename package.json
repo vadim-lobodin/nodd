@@ -39,6 +39,7 @@
     "@radix-ui/react-tooltip": "1.2.8",
     "@radix-ui/react-visually-hidden": "1.2.4",
     "@supabase/supabase-js": "^2",
+    "boring-avatars": "2.0.4",
     "idb-keyval": "^6"
   },
   "devDependencies": {

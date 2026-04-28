@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import * as ScrollArea from '@radix-ui/react-scroll-area';
-import * as Avatar from '@radix-ui/react-avatar';
 import * as Separator from '@radix-ui/react-separator';
 import { MentionPicker, encodeMention, decodeMentions, type ProjectMember, type MentionReplacement } from './MentionPicker';
+import { UserAvatar } from './UserAvatar';
 import type { MemberProfile } from '../../store/types';
 
 export type ThreadComment = {
@@ -226,16 +226,11 @@ export function ThreadPopover({
             return (
               <div key={comment.id} className={`align-comment${comment.pending ? ' align-comment--pending' : ''}`}>
                 <div className="align-comment-header">
-                  <Avatar.Root className="align-avatar">
-                    <Avatar.Image
-                      className="align-avatar-image"
-                      src={member?.avatarUrl ?? undefined}
-                      alt={member?.displayName ?? member?.email ?? ''}
-                    />
-                    <Avatar.Fallback className="align-avatar-fallback" delayMs={0}>
-                      {(member?.displayName ?? member?.email ?? '?')[0]?.toUpperCase()}
-                    </Avatar.Fallback>
-                  </Avatar.Root>
+                  <UserAvatar
+                    name={member?.displayName ?? member?.email ?? '?'}
+                    avatarUrl={member?.avatarUrl}
+                    size={24}
+                  />
                   <span className="align-comment-author">{member?.displayName ?? member?.email ?? 'Unknown'}</span>
                   <span className="align-comment-time">{formatTime(comment.createdAt)}</span>
                 </div>

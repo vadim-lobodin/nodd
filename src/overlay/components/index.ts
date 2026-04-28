@@ -10,3 +10,5 @@ export { Sidebar } from './Sidebar';
 export type { SidebarProps, ThreadSummary } from './Sidebar';
 export { MentionPicker, encodeMention, decodeMentions, MENTION_RE } from './MentionPicker';
 export type { MentionPickerProps, MentionReplacement, ProjectMember } from './MentionPicker';
+export { UserAvatar } from './UserAvatar';
+export type { UserAvatarProps } from './UserAvatar';

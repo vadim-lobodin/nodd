@@ -2,9 +2,9 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Tabs from '@radix-ui/react-tabs';
 import * as ScrollArea from '@radix-ui/react-scroll-area';
-import * as Avatar from '@radix-ui/react-avatar';
 import * as Separator from '@radix-ui/react-separator';
 import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
+import { UserAvatar } from './UserAvatar';
 import type { MemberProfile } from '../../store/types';
 
 export type ThreadSummary = {
@@ -17,15 +17,22 @@ export type ThreadSummary = {
   replyCount: number;
   resolved: boolean;
   unread: boolean;
+  breadcrumb?: string;
+  /** When set, an activator chain is available — sidebar shows a Show me button. */
+  canActivate?: boolean;
+  /** Stack used to activate; passed back to onItemActivate. */
+  stateStack?: readonly string[];
 };
 
 export type SidebarProps = {
   open: boolean;
   onClose: () => void;
   threadsOpen: ThreadSummary[];
+  threadsOtherState?: ThreadSummary[];
   fetchResolved: () => Promise<ThreadSummary[]>;
   onItemOpen: (threadId: string) => void;
   onItemHover: (threadId: string | null) => void;
+  onItemActivate?: (threadId: string) => void;
   container?: HTMLElement | null;
 };
 
@@ -33,9 +40,11 @@ export function Sidebar({
   open,
   onClose,
   threadsOpen,
+  threadsOtherState = [],
   fetchResolved,
   onItemOpen,
   onItemHover,
+  onItemActivate,
   container,
 }: SidebarProps) {
   const [activeTab, setActiveTab] = useState<'open' | 'resolved'>('open');
@@ -61,13 +70,13 @@ export function Sidebar({
   }, [fetchResolved, resolvedItems]);
 
   const items = activeTab === 'open' ? threadsOpen : (resolvedItems ?? []);
-  const filtered = search
-    ? items.filter(
-        t =>
-          t.snippet.toLowerCase().includes(search.toLowerCase()) ||
-          t.authorName.toLowerCase().includes(search.toLowerCase()),
-      )
-    : items;
+  const matchSearch = (t: ThreadSummary) =>
+    t.snippet.toLowerCase().includes(search.toLowerCase()) ||
+    t.authorName.toLowerCase().includes(search.toLowerCase()) ||
+    (t.breadcrumb?.toLowerCase().includes(search.toLowerCase()) ?? false);
+  const filtered = search ? items.filter(matchSearch) : items;
+  const filteredOther = search ? threadsOtherState.filter(matchSearch) : threadsOtherState;
+  const groupedOther = groupByBreadcrumb(filteredOther);
 
   const formatTime = (iso: string) => {
     const d = new Date(iso);
@@ -114,14 +123,39 @@ export function Sidebar({
 
             <Tabs.Content value="open" className="align-sidebar-tab-content" forceMount>
               {activeTab === 'open' && (
-                <SidebarList
-                  items={filtered}
-                  loading={false}
-                  emptyMessage="No comments on this page yet — add the first one."
-                  formatTime={formatTime}
-                  onItemOpen={onItemOpen}
-                  onItemHover={onItemHover}
-                />
+                <ScrollArea.Root className="align-sidebar-list-scroll">
+                  <ScrollArea.Viewport className="align-sidebar-list">
+                    {threadsOtherState.length > 0 && (
+                      <div className="align-sidebar-other-pill" aria-label={`${threadsOtherState.length} comments in other states`}>
+                        Other states · {threadsOtherState.length}
+                      </div>
+                    )}
+                    <SidebarSection
+                      heading="On this page"
+                      items={filtered}
+                      emptyMessage={threadsOtherState.length === 0 ? 'No comments on this page yet — add the first one.' : 'No comments visible in your current state.'}
+                      formatTime={formatTime}
+                      onItemOpen={onItemOpen}
+                      onItemHover={onItemHover}
+                    />
+                    {groupedOther.map(([breadcrumb, group]) => (
+                      <SidebarSection
+                        key={breadcrumb || '_'}
+                        heading={breadcrumb}
+                        items={group}
+                        emptyMessage=""
+                        formatTime={formatTime}
+                        onItemOpen={onItemOpen}
+                        onItemHover={onItemHover}
+                        onItemActivate={onItemActivate}
+                        muted
+                      />
+                    ))}
+                  </ScrollArea.Viewport>
+                  <ScrollArea.Scrollbar className="align-scrollbar" orientation="vertical">
+                    <ScrollArea.Thumb className="align-scrollbar-thumb" />
+                  </ScrollArea.Scrollbar>
+                </ScrollArea.Root>
               )}
             </Tabs.Content>
             <Tabs.Content value="resolved" className="align-sidebar-tab-content" forceMount>
@@ -168,36 +202,7 @@ function SidebarList({
           <div className="align-sidebar-empty">{emptyMessage}</div>
         )}
         {items.map(item => (
-          <div
-            key={item.id}
-            className={`align-sidebar-item${item.unread ? ' align-sidebar-item--unread' : ''}`}
-            onClick={() => onItemOpen(item.id)}
-            onMouseEnter={() => onItemHover(item.id)}
-            onMouseLeave={() => onItemHover(null)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={e => e.key === 'Enter' && onItemOpen(item.id)}
-          >
-            <div className="align-sidebar-item-header">
-              <span className="align-sidebar-item-index">#{item.index}</span>
-              <Avatar.Root className="align-avatar align-avatar--sm">
-                <Avatar.Image
-                  className="align-avatar-image"
-                  src={item.authorAvatarUrl}
-                  alt={item.authorName}
-                />
-                <Avatar.Fallback className="align-avatar-fallback" delayMs={0}>
-                  {item.authorName[0]?.toUpperCase()}
-                </Avatar.Fallback>
-              </Avatar.Root>
-              <span className="align-sidebar-item-author">{item.authorName}</span>
-              <span className="align-sidebar-item-time">{formatTime(item.createdAt)}</span>
-            </div>
-            <div className="align-sidebar-item-snippet">{item.snippet}</div>
-            {item.replyCount > 0 && (
-              <span className="align-sidebar-item-replies">{item.replyCount} {item.replyCount === 1 ? 'reply' : 'replies'}</span>
-            )}
-          </div>
+          <SidebarItem key={item.id} item={item} formatTime={formatTime} onItemOpen={onItemOpen} onItemHover={onItemHover} />
         ))}
       </ScrollArea.Viewport>
       <ScrollArea.Scrollbar className="align-scrollbar" orientation="vertical">
@@ -205,4 +210,110 @@ function SidebarList({
       </ScrollArea.Scrollbar>
     </ScrollArea.Root>
   );
+}
+
+function SidebarSection({
+  heading,
+  items,
+  emptyMessage,
+  formatTime,
+  onItemOpen,
+  onItemHover,
+  onItemActivate,
+  muted,
+}: {
+  heading: string;
+  items: ThreadSummary[];
+  emptyMessage: string;
+  formatTime: (iso: string) => string;
+  onItemOpen: (threadId: string) => void;
+  onItemHover: (threadId: string | null) => void;
+  onItemActivate?: (threadId: string) => void;
+  muted?: boolean;
+}) {
+  if (items.length === 0 && !emptyMessage) return null;
+  return (
+    <div className={`align-sidebar-section${muted ? ' align-sidebar-section--muted' : ''}`}>
+      {heading && <div className="align-sidebar-section-heading">{heading}</div>}
+      {items.length === 0 ? (
+        <div className="align-sidebar-empty">{emptyMessage}</div>
+      ) : (
+        items.map(item => (
+          <SidebarItem
+            key={item.id}
+            item={item}
+            formatTime={formatTime}
+            onItemOpen={onItemOpen}
+            onItemHover={onItemHover}
+            onItemActivate={onItemActivate}
+          />
+        ))
+      )}
+    </div>
+  );
+}
+
+function SidebarItem({
+  item,
+  formatTime,
+  onItemOpen,
+  onItemHover,
+  onItemActivate,
+}: {
+  item: ThreadSummary;
+  formatTime: (iso: string) => string;
+  onItemOpen: (threadId: string) => void;
+  onItemHover: (threadId: string | null) => void;
+  onItemActivate?: (threadId: string) => void;
+}) {
+  const showActivate = item.canActivate && !!onItemActivate;
+  return (
+    <div
+      className={`align-sidebar-item${item.unread ? ' align-sidebar-item--unread' : ''}`}
+      onClick={() => onItemOpen(item.id)}
+      onMouseEnter={() => onItemHover(item.id)}
+      onMouseLeave={() => onItemHover(null)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={e => e.key === 'Enter' && onItemOpen(item.id)}
+    >
+      <div className="align-sidebar-item-header">
+        <span className="align-sidebar-item-index">#{item.index}</span>
+        <UserAvatar
+          name={item.authorName}
+          avatarUrl={item.authorAvatarUrl}
+          size={20}
+          className="align-avatar--sm"
+        />
+        <span className="align-sidebar-item-author">{item.authorName}</span>
+        <span className="align-sidebar-item-time">{formatTime(item.createdAt)}</span>
+      </div>
+      <div className="align-sidebar-item-snippet">{item.snippet}</div>
+      <div className="align-sidebar-item-footer">
+        {item.replyCount > 0 && (
+          <span className="align-sidebar-item-replies">{item.replyCount} {item.replyCount === 1 ? 'reply' : 'replies'}</span>
+        )}
+        {showActivate && (
+          <button
+            className="align-sidebar-item-activate"
+            onClick={e => { e.stopPropagation(); onItemActivate?.(item.id); }}
+            aria-label="Open this state and show the comment"
+          >
+            Show me →
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function groupByBreadcrumb(items: ThreadSummary[]): Array<[string, ThreadSummary[]]> {
+  const map = new Map<string, ThreadSummary[]>();
+  for (const item of items) {
+    const key = item.breadcrumb ?? '';
+    const arr = map.get(key) ?? [];
+    arr.push(item);
+    map.set(key, arr);
+  }
+  return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
 }

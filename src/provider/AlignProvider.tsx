@@ -8,6 +8,56 @@ import { OverlayRenderer } from '../overlay';
 import { subscribeToRouteChanges } from './useRouteChange';
 import { isBrowser } from './ssr';
 
+// Strip stale Supabase auth error fragments from the URL hash before the client
+// parses them. Keeps the last valid access_token block if present.
+if (isBrowser() && window.location.hash) {
+  const raw = window.location.hash.substring(1); // drop leading #
+  // Find the last access_token occurrence — that's the fresh one
+  const lastIdx = raw.lastIndexOf('access_token=');
+  if (lastIdx !== -1) {
+    // Walk backwards to find the start of this fragment block (after # or &sb=)
+    let start = lastIdx;
+    while (start > 0 && raw[start - 1] !== '#') start--;
+    const cleanHash = raw.substring(start);
+    window.history.replaceState(null, '', window.location.pathname + window.location.search + '#' + cleanHash);
+  } else if (raw.includes('error=')) {
+    // Only errors, no token — just strip it
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
+}
+
+// Global singleton cache — survives HMR, Strict Mode, and module re-evaluation
+const CACHE_KEY = '__align_client_cache__' as const;
+type ClientEntry = { supabase: SupabaseClient; auth: AuthClient };
+
+function getOrCreateClients(supabaseUrl: string, supabaseAnonKey: string): ClientEntry {
+  const g = globalThis as any;
+  if (!g[CACHE_KEY]) g[CACHE_KEY] = new Map<string, ClientEntry>();
+  const cache = g[CACHE_KEY] as Map<string, ClientEntry>;
+
+  const key = `${supabaseUrl}::${supabaseAnonKey}`;
+  let entry = cache.get(key);
+  if (!entry) {
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        storageKey: 'align-auth',
+        detectSessionInUrl: true,
+        flowType: 'implicit',
+        // No-op lock: Supabase's default `navigator.locks` coordination
+        // causes "Lock stolen" errors when multiple tabs / Strict Mode /
+        // visibility changes interleave, which can break session reads
+        // mid-insert. We accept the trade-off (each context independently
+        // refreshes the token) in exchange for reliable auth checks.
+        lock: async <R,>(_name: string, _timeout: number, fn: () => Promise<R>): Promise<R> => fn(),
+      },
+    });
+    const auth = new AuthClient(supabase);
+    entry = { supabase, auth };
+    cache.set(key, entry);
+  }
+  return entry;
+}
+
 export type AlignProviderProps = {
   projectId: string;
   supabaseUrl: string;
@@ -29,18 +79,8 @@ export function AlignProvider({
   const [portalEl, setPortalEl] = useState<HTMLElement | null>(null);
   const [theme, setTheme] = useState<AlignTheme>(initialTheme);
 
-  // Use refs to create stable singleton instances that survive Strict Mode double-mount
-  const supabaseRef = useRef<SupabaseClient | null>(null);
-  if (!supabaseRef.current) {
-    supabaseRef.current = createClient(supabaseUrl, supabaseAnonKey);
-  }
-  const supabase = supabaseRef.current;
-
-  const authRef = useRef<AuthClient | null>(null);
-  if (!authRef.current) {
-    authRef.current = new AuthClient(supabase);
-  }
-  const auth = authRef.current;
+  // Module-level singleton — safe across Strict Mode double-render
+  const { supabase, auth } = getOrCreateClients(supabaseUrl, supabaseAnonKey);
 
   // Store is created in useEffect to avoid realtime subscription during render
   const storeRef = useRef<CommentStore | null>(null);
@@ -62,10 +102,17 @@ export function AlignProvider({
     };
   }, [supabase, projectId, auth]);
 
-  // Auth listener
+  // Auth listener — Supabase emits INITIAL_SESSION on subscription, no need
+  // to also call restoreSession() (would race the auth lock under Strict Mode).
   useEffect(() => {
-    const unsub = auth.onAuthChange(setUser);
-    void auth.restoreSession();
+    const unsub = auth.onAuthChange(user => {
+      setUser(user);
+      // Clean up Supabase magic-link hash fragments after the session is
+      // established, so subsequent reloads don't replay stale tokens.
+      if (user && isBrowser() && window.location.hash.includes('access_token')) {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
+    });
     return unsub;
   }, [auth]);
 

@@ -282,6 +282,6 @@ The following module-level design docs will be created next (one per module):
 ## 11. Open Questions / Future Work
 
 - **Public read access** for unauthenticated viewers — define `projects.public_read` flag and corresponding RLS.
-- **Multi-page projects** — current design uses `url_path`; SPA route detection will need a `useAlignRoute(path)` hook.
+- **State-aware comments** — threads carry a `state_key` (slash-joined breadcrumb) recording the host-app state in which they were pinned. Hosts opt into stateful regions with `<AlignState name="…">`, which renders a `display: contents` wrapper carrying `data-align-state`. Capture and pin gating both walk the DOM ancestry of the click target / anchor element to compute the state stack — there is no single "current state", state is a property of *where* you clicked. The Sidebar surfaces threads pinned to states the reviewer is not currently in via an "Other states · N" pill. Auto-detection of `[role="dialog"]`, hash-based routes, and a `restoreState(stack)` callback are deferred to v2.
 - **Real-time presence** (out of v1) — would use Supabase Realtime presence channels.
 - **Self-hosted backend** (out of v1) — abstract the Supabase client behind a `Backend` interface to enable swappable implementations later.

@@ -12,6 +12,7 @@ export default defineConfig({
     'react/jsx-runtime',
     '@supabase/supabase-js',
     /^@radix-ui\//,
+    'boring-avatars',
   ],
   treeshake: true,
   minify: false,

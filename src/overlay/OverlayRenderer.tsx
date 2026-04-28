@@ -9,6 +9,7 @@ import { ThreadPopover } from './components/ThreadPopover';
 import { Sidebar, type ThreadSummary } from './components/Sidebar';
 import { DOMAnchor, type Pin } from './anchoring/DOMAnchor';
 import { startReanchorLoop } from './anchoring/reanchorLoop';
+import { getStateStackForElement, isStateMatch, stackToKey, keyToStack, hasActivatorOrTrigger, activateState, subscribeActivators } from '../provider/state';
 import type { Thread, PageSnapshot } from '../store/types';
 
 function resolveSystemTheme(): 'light' | 'dark' {
@@ -18,7 +19,7 @@ function resolveSystemTheme(): 'light' | 'dark' {
 
 export function OverlayRenderer() {
   const ctx = useAlignContext();
-  const { user, urlPath, store, signIn, theme, pinContainer } = ctx;
+  const { user, urlPath, store, signIn, signOut, theme, pinContainer } = ctx;
   const [snapshot, setSnapshot] = useState<PageSnapshot | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
@@ -30,6 +31,7 @@ export function OverlayRenderer() {
   const anchorCache = useRef<Map<string, Element>>(new Map());
   const [authEmail, setAuthEmail] = useState('');
   const [authSent, setAuthSent] = useState(false);
+  const [onboardName, setOnboardName] = useState('');
 
   // Resolve effective theme
   const effectiveTheme = theme === 'system' ? resolveSystemTheme() : theme;
@@ -57,29 +59,50 @@ export function OverlayRenderer() {
     return () => mq.removeEventListener('change', handler);
   }, [theme]);
 
-  // Subscribe to store
+  // Subscribe to store — only after auth has resolved, otherwise the fetch
+  // fires anonymously and RLS returns an empty page that never re-fetches.
   useEffect(() => {
-    if (!store) return;
+    if (!store || !user) return;
     return store.subscribe(urlPath, setSnapshot);
-  }, [store, urlPath]);
+  }, [store, urlPath, user]);
 
-  // Resolve pins on route change or snapshot change
+  const [stateMatch, setStateMatch] = useState<Map<string, boolean>>(new Map());
+  const [domVersion, setDomVersion] = useState(0);
+  const [activatorVersion, setActivatorVersion] = useState(0);
+
+  // Re-render when activator registry changes so the Show me button can
+  // appear/disappear as host state mounts/unmounts new activators.
   useEffect(() => {
+    return subscribeActivators(() => setActivatorVersion(v => v + 1));
+  }, []);
+
+  const resolveAllPins = useCallback(() => {
     if (!snapshot) return;
     const cache = new Map<string, Element>();
     const positions = new Map<string, { x: number; y: number }>();
+    const matches = new Map<string, boolean>();
     for (const thread of snapshot.threads) {
       const result = DOMAnchor.resolve(thread.pin);
       if (result) {
         cache.set(thread.id, result.element);
         const pos = DOMAnchor.reposition(thread.pin, result.element);
         positions.set(thread.id, pos);
+        const domStack = getStateStackForElement(result.element);
+        matches.set(thread.id, isStateMatch(thread.stateKey, domStack));
+      } else {
+        matches.set(thread.id, isStateMatch(thread.stateKey, []));
       }
     }
     anchorCache.current = cache;
     pinPositionsRef.current = positions;
     setPinPositions(positions);
-  }, [snapshot?.threads, urlPath]);
+    setStateMatch(matches);
+  }, [snapshot]);
+
+  // Resolve pins on route change, snapshot change, or DOM mutation
+  useEffect(() => {
+    resolveAllPins();
+  }, [resolveAllPins, urlPath, domVersion]);
 
   // Reanchor loop — uses imperative DOM updates for performance
   useEffect(() => {
@@ -98,6 +121,7 @@ export function OverlayRenderer() {
         if (el) el.style.transform = `translate(${x}px, ${y}px)`;
       },
       onRefreshHighlight: () => highlightRef.current?.refresh(),
+      onDOMMutation: () => setDomVersion(v => v + 1),
     });
   }, [snapshot]);
 
@@ -127,14 +151,14 @@ export function OverlayRenderer() {
       const result = DOMAnchor.resolve(pin);
       if (result) {
         const pos = DOMAnchor.reposition(pin, result.element);
-        // Store pin temporarily for the new thread flow
-        setPendingPin({ pin, x: pos.x, y: pos.y });
+        const stateKey = stackToKey(getStateStackForElement(result.element));
+        setPendingPin({ pin, x: pos.x, y: pos.y, stateKey });
       }
     },
     [store, user],
   );
 
-  const [pendingPin, setPendingPin] = useState<{ pin: Pin; x: number; y: number } | null>(null);
+  const [pendingPin, setPendingPin] = useState<{ pin: Pin; x: number; y: number; stateKey: string } | null>(null);
 
   const handleNewThreadSubmit = useCallback(
     async (body: string, mentions: string[]) => {
@@ -142,6 +166,7 @@ export function OverlayRenderer() {
       await store.addThread({
         urlPath,
         pin: pendingPin.pin,
+        stateKey: pendingPin.stateKey,
         body,
         mentions,
       });
@@ -173,11 +198,14 @@ export function OverlayRenderer() {
   const members = store?.getMembers();
   const memberList = members?.list ?? [];
 
-  const threadSummaries: ThreadSummary[] = useMemo(() => {
-    if (!snapshot) return [];
-    return snapshot.threads.map((t, i) => {
+  const { onPageSummaries, otherStateSummaries } = useMemo(() => {
+    const onPage: ThreadSummary[] = [];
+    const other: ThreadSummary[] = [];
+    if (!snapshot) return { onPageSummaries: onPage, otherStateSummaries: other };
+    snapshot.threads.forEach((t, i) => {
       const member = members?.byId.get(t.createdBy);
-      return {
+      const stack = keyToStack(t.stateKey);
+      const summary: ThreadSummary = {
         id: t.id,
         index: i + 1,
         authorName: member?.displayName ?? member?.email ?? 'Unknown',
@@ -187,9 +215,27 @@ export function OverlayRenderer() {
         replyCount: Math.max(0, t.comments.length - 1),
         resolved: t.resolved,
         unread: false,
+        breadcrumb: t.stateKey ? stack.join(' · ') : undefined,
+        stateStack: stack,
+        canActivate: stack.length > 0 && stack.every(s => hasActivatorOrTrigger(s)),
       };
+      if (stateMatch.get(t.id) ?? true) onPage.push(summary);
+      else other.push(summary);
     });
-  }, [snapshot, members]);
+    return { onPageSummaries: onPage, otherStateSummaries: other };
+  }, [snapshot, members, stateMatch, activatorVersion, domVersion]);
+
+  const handleItemActivate = useCallback(async (threadId: string) => {
+    const thread = snapshot?.threads.find(t => t.id === threadId);
+    if (!thread) return;
+    const stack = keyToStack(thread.stateKey);
+    setSidebarOpen(false);
+    const ok = await activateState(stack);
+    if (!ok) return;
+    // Wait one frame so the MutationObserver-driven resolveAllPins has run.
+    await new Promise<void>(r => requestAnimationFrame(() => r()));
+    setOpenThreadId(threadId);
+  }, [snapshot]);
 
   const handleSignIn = useCallback(async () => {
     if (!authEmail.trim()) return;
@@ -197,7 +243,13 @@ export function OverlayRenderer() {
     setAuthSent(true);
   }, [authEmail, signIn]);
 
-  // Auth gate
+  const handleSetName = useCallback(async () => {
+    const name = onboardName.trim();
+    if (!name) return;
+    await ctx.auth.setDisplayName(name);
+  }, [onboardName, ctx.auth]);
+
+  // Auth gate — email only
   if (!user) {
     return (
       <div className="align-auth-gate">
@@ -226,6 +278,29 @@ export function OverlayRenderer() {
     );
   }
 
+  // First-time name prompt
+  if (ctx.auth.needsDisplayName) {
+    return (
+      <div className="align-auth-gate">
+        <div className="align-auth-form">
+          <p>Welcome! What should we call you?</p>
+          <input
+            className="align-auth-input"
+            type="text"
+            placeholder="Your name"
+            value={onboardName}
+            onChange={e => setOnboardName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSetName()}
+            autoFocus
+          />
+          <button className="align-btn align-btn--primary" onClick={handleSetName}>
+            Continue
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const openThread = openThreadId ? snapshot?.threads.find(t => t.id === openThreadId) : null;
   const openPos = openThreadId ? (pinPositionsRef.current.get(openThreadId) ?? pinPositions.get(openThreadId)) : null;
 
@@ -233,6 +308,16 @@ export function OverlayRenderer() {
     <Tooltip.Provider delayDuration={400}>
       {/* Toolbar */}
       <div className="align-toolbar">
+        <div className="align-user-pill">
+          <span className="align-user-pill-name">{user.displayName ?? user.email.split('@')[0]}</span>
+          <button className="align-user-pill-signout" onClick={() => void signOut()} aria-label="Sign out">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </button>
+        </div>
         <button
           className={`align-btn align-btn--capture${isCapturing ? ' align-btn--active' : ''}`}
           onClick={() => setIsCapturing(!isCapturing)}
@@ -256,6 +341,7 @@ export function OverlayRenderer() {
           {snapshot?.threads.map((thread, i) => {
             const pos = pinPositions.get(thread.id);
             if (!pos) return null;
+            if (!(stateMatch.get(thread.id) ?? true)) return null;
             return (
               <PinMarker
                 key={thread.id}
@@ -321,7 +407,9 @@ export function OverlayRenderer() {
       <Sidebar
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        threadsOpen={threadSummaries}
+        threadsOpen={onPageSummaries}
+        threadsOtherState={otherStateSummaries}
+        onItemActivate={handleItemActivate}
         fetchResolved={async () => {
           if (!store) return [];
           const resolved = await store.fetchResolved(urlPath);

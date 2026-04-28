@@ -7,6 +7,7 @@ export async function insertThread(
     projectId: string;
     urlPath: string;
     pin: Pin;
+    stateKey: string;
     body: string;
     mentions: UserId[];
     createdBy: UserId;
@@ -18,6 +19,7 @@ export async function insertThread(
       project_id: input.projectId,
       url_path: input.urlPath,
       pin: input.pin,
+      state_key: input.stateKey,
       created_by: input.createdBy,
     })
     .select('id')

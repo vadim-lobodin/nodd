@@ -57,7 +57,6 @@ export function PinMarker({
       </Tooltip.Trigger>
       <Tooltip.Portal>
         <Tooltip.Content className="align-pin-tooltip" sideOffset={6}>
-          <span className="align-pin-tooltip-label">Comment #{index}</span>
           {snippet && <span className="align-pin-tooltip-snippet">{snippet}</span>}
           <Tooltip.Arrow className="align-pin-tooltip-arrow" />
         </Tooltip.Content>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { UserAvatar } from './UserAvatar';
 
 export interface ProjectMember {
   id: string;
@@ -180,18 +181,12 @@ export function MentionPicker({
           }}
           onMouseEnter={() => setHighlightedIndex(i)}
         >
-          {member.avatar_url ? (
-            <img
-              className="align-mention-avatar"
-              src={member.avatar_url}
-              alt=""
-              loading="lazy"
-            />
-          ) : (
-            <span className="align-mention-avatar align-mention-avatar--fallback">
-              {(member.display_name || member.email)[0]?.toUpperCase()}
-            </span>
-          )}
+          <UserAvatar
+            name={member.display_name || member.email}
+            avatarUrl={member.avatar_url}
+            size={24}
+            className="align-mention-avatar"
+          />
           <span className="align-mention-name">{member.display_name || member.email}</span>
           {member.display_name && (
             <span className="align-mention-email">{member.email}</span>

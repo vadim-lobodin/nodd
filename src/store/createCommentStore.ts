@@ -16,7 +16,7 @@ import { insertThread, insertComment, updateThreadResolved } from './mutations';
 
 export type CommentStore = {
   subscribe(urlPath: string, listener: (snapshot: PageSnapshot) => void): () => void;
-  addThread(input: { urlPath: string; pin: Pin; body: string; mentions?: UserId[] }): Promise<ThreadId>;
+  addThread(input: { urlPath: string; pin: Pin; stateKey?: string; body: string; mentions?: UserId[] }): Promise<ThreadId>;
   replyToThread(input: { threadId: ThreadId; body: string; mentions?: UserId[] }): Promise<CommentId>;
   resolveThread(threadId: ThreadId): Promise<void>;
   reopenThread(threadId: ThreadId): Promise<void>;
@@ -73,6 +73,7 @@ export function createCommentStore(deps: {
           projectId: payload.new.project_id,
           urlPath: payload.new.url_path,
           pin: payload.new.pin,
+          stateKey: payload.new.state_key ?? '',
           resolved: payload.new.resolved,
           resolvedBy: payload.new.resolved_by,
           resolvedAt: payload.new.resolved_at,
@@ -215,11 +216,13 @@ export function createCommentStore(deps: {
       const cid = tempId();
       const now = new Date().toISOString();
 
+      const stateKey = input.stateKey ?? '';
       const thread: Thread = {
         id: tid,
         projectId,
         urlPath: input.urlPath,
         pin: input.pin,
+        stateKey,
         resolved: false,
         resolvedBy: null,
         resolvedAt: null,
@@ -246,6 +249,7 @@ export function createCommentStore(deps: {
           projectId,
           urlPath: input.urlPath,
           pin: input.pin,
+          stateKey,
           body: input.body,
           mentions: input.mentions ?? [],
           createdBy: userId,

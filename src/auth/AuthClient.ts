@@ -13,6 +13,7 @@ type AuthChangeCallback = (user: CurrentUser | null) => void;
 export class AuthClient {
   private supabase: SupabaseClient;
   private _currentUser: CurrentUser | null = null;
+  private _hasExplicitName = false;
   private listeners = new Set<AuthChangeCallback>();
   private unsubscribeAuth: (() => void) | null = null;
 
@@ -28,10 +29,29 @@ export class AuthClient {
     const { error } = await this.supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: typeof window !== 'undefined' ? window.location.href : undefined,
+        emailRedirectTo: typeof window !== 'undefined'
+          ? window.location.origin + window.location.pathname + window.location.search
+          : undefined,
       },
     });
     if (error) throw error;
+  }
+
+  /** True when the user is logged in but hasn't set a display name yet. */
+  get needsDisplayName(): boolean {
+    return this._currentUser !== null && this._hasExplicitName === false;
+  }
+
+  async setDisplayName(name: string): Promise<void> {
+    const { error } = await this.supabase.auth.updateUser({
+      data: { display_name: name },
+    });
+    if (error) throw error;
+    if (this._currentUser) {
+      this._currentUser = { ...this._currentUser, displayName: name };
+      this._hasExplicitName = true;
+      this.notify();
+    }
   }
 
   async signOut(): Promise<void> {
@@ -45,6 +65,7 @@ export class AuthClient {
   async restoreSession(): Promise<CurrentUser | null> {
     const { data: { session } } = await this.supabase.auth.getSession();
     if (session?.user) {
+      this._hasExplicitName = !!session.user.user_metadata?.display_name;
       await this.hydrateUser(session.user.id, session.user.email ?? '');
     } else {
       this._currentUser = null;
@@ -56,13 +77,26 @@ export class AuthClient {
   onAuthChange(callback: AuthChangeCallback): () => void {
     this.listeners.add(callback);
 
-    // Set up Supabase auth listener on first subscriber
+    // Set up Supabase auth listener on first subscriber. Supabase fires
+    // 'INITIAL_SESSION' exactly once after registration, replacing the
+    // need for a separate restoreSession() call (which would race the
+    // auth lock under Strict Mode double-mount).
     if (!this.unsubscribeAuth) {
       const { data: { subscription } } = this.supabase.auth.onAuthStateChange(
         async (event: AuthChangeEvent, session: Session | null) => {
-          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+          if (
+            event === 'INITIAL_SESSION' ||
+            event === 'SIGNED_IN' ||
+            event === 'TOKEN_REFRESHED' ||
+            event === 'USER_UPDATED'
+          ) {
             if (session?.user) {
+              this._hasExplicitName = !!session.user.user_metadata?.display_name;
               await this.hydrateUser(session.user.id, session.user.email ?? '');
+            } else if (event === 'INITIAL_SESSION') {
+              // No persisted session — emit null so consumers stop waiting.
+              this._currentUser = null;
+              this.notify();
             }
           } else if (event === 'SIGNED_OUT') {
             this._currentUser = null;
@@ -79,10 +113,6 @@ export class AuthClient {
 
     return () => {
       this.listeners.delete(callback);
-      if (this.listeners.size === 0 && this.unsubscribeAuth) {
-        this.unsubscribeAuth();
-        this.unsubscribeAuth = null;
-      }
     };
   }
 
