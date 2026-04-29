@@ -383,8 +383,9 @@ export function OverlayRenderer() {
         />
       )}
 
-      {/* Thread popover */}
-      {openThread && openPos && (
+      {/* Thread popover — portals into the absolute pin container so it
+          scrolls with the page, anchored to the pin */}
+      {pinContainer && openThread && openPos && createPortal(
         <ThreadPopover
           threadId={openThread.id}
           anchorX={openPos.x}
@@ -396,11 +397,12 @@ export function OverlayRenderer() {
           onSubmitReply={handleReply}
           onToggleResolved={handleResolve}
           onClose={() => setOpenThreadId(null)}
-        />
+        />,
+        pinContainer,
       )}
 
       {/* New thread popover */}
-      {pendingPin && (
+      {pinContainer && pendingPin && createPortal(
         <ThreadPopover
           threadId="new"
           anchorX={pendingPin.x}
@@ -412,7 +414,8 @@ export function OverlayRenderer() {
           onSubmitReply={handleNewThreadSubmit}
           onToggleResolved={async () => {}}
           onClose={() => setPendingPin(null)}
-        />
+        />,
+        pinContainer,
       )}
 
       {/* Sidebar */}

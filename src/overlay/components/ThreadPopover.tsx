@@ -103,11 +103,16 @@ export function ThreadPopover({
     avatar_url: m.avatarUrl ?? undefined,
   }));
 
-  // Position
+  // Position — anchorX/Y are page-absolute (popover lives in the absolute
+  // pin container so it scrolls with the document). Clamp to keep within
+  // the current viewport.
   const popoverX = anchorX + GAP + 28; // offset from pin
   const popoverY = anchorY;
-  const clampedX = Math.min(popoverX, window.innerWidth - POPOVER_WIDTH - MARGIN);
-  const clampedY = Math.max(MARGIN, popoverY);
+  const scrollX = typeof window !== 'undefined' ? window.scrollX : 0;
+  const scrollY = typeof window !== 'undefined' ? window.scrollY : 0;
+  const innerW = typeof window !== 'undefined' ? window.innerWidth : 0;
+  const clampedX = Math.min(popoverX, scrollX + innerW - POPOVER_WIDTH - MARGIN);
+  const clampedY = Math.max(scrollY + MARGIN, popoverY);
 
   // Outside click
   useEffect(() => {

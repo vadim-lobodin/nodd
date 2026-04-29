@@ -145,6 +145,7 @@ export function AlignProvider({
     const pinEl = document.createElement('div');
     pinEl.id = 'align-pins';
     pinEl.setAttribute('data-align-pin-container', '');
+    pinEl.setAttribute('data-align-root', '');
     document.body.appendChild(pinEl);
     setPinContainerEl(pinEl);
 
