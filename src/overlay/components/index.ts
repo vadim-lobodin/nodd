@@ -1,7 +1,5 @@
 export { PinMarker } from './PinMarker';
 export type { PinMarkerProps } from './PinMarker';
-export { HoverHighlight } from './HoverHighlight';
-export type { HoverHighlightHandle } from './HoverHighlight';
 export { CaptureLayer } from './CaptureLayer';
 export type { CaptureLayerProps } from './CaptureLayer';
 export { ThreadPopover } from './ThreadPopover';

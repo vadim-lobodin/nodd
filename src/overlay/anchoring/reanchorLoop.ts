@@ -2,7 +2,6 @@ export type ReanchorOpts = {
   getPins: () => Array<{ id: string; pin: { offsetX: number; offsetY: number } }>;
   getElement: (pinId: string) => Element | null;
   setPinPosition: (pinId: string, x: number, y: number) => void;
-  onRefreshHighlight?: () => void;
   onDOMMutation?: () => void;
 };
 
@@ -39,7 +38,6 @@ export function startReanchorLoop(opts: ReanchorOpts): () => void {
         const y = r.top + window.scrollY + pin.offsetY * r.height - PIN_RADIUS;
         opts.setPinPosition(id, x, y);
       }
-      opts.onRefreshHighlight?.();
     });
   }
 

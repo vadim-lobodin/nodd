@@ -4,6 +4,7 @@ import * as Tabs from '@radix-ui/react-tabs';
 import * as ScrollArea from '@radix-ui/react-scroll-area';
 import * as Separator from '@radix-ui/react-separator';
 import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
+import { Logout, Close } from '@carbon/icons-react';
 import { UserAvatar } from './UserAvatar';
 import type { MemberProfile } from '../../store/types';
 
@@ -33,6 +34,8 @@ export type SidebarProps = {
   onItemHover: (threadId: string | null) => void;
   onItemActivate?: (threadId: string) => void;
   container?: HTMLElement | null;
+  userName?: string;
+  onSignOut?: () => void;
 };
 
 export function Sidebar({
@@ -45,11 +48,12 @@ export function Sidebar({
   onItemHover,
   onItemActivate,
   container,
+  userName,
+  onSignOut,
 }: SidebarProps) {
   const [activeTab, setActiveTab] = useState<'open' | 'resolved'>('open');
   const [resolvedItems, setResolvedItems] = useState<ThreadSummary[] | null>(null);
   const [resolvedStatus, setResolvedStatus] = useState<'idle' | 'loading' | 'error'>('idle');
-  const [search, setSearch] = useState('');
 
   const handleTabChange = useCallback(async (value: string) => {
     if (value === 'resolved') {
@@ -68,13 +72,7 @@ export function Sidebar({
   }, [fetchResolved]);
 
   const items = activeTab === 'open' ? threadsOpen : (resolvedItems ?? []);
-  const matchSearch = (t: ThreadSummary) =>
-    t.snippet.toLowerCase().includes(search.toLowerCase()) ||
-    t.authorName.toLowerCase().includes(search.toLowerCase()) ||
-    (t.breadcrumb?.toLowerCase().includes(search.toLowerCase()) ?? false);
-  const filtered = search ? items.filter(matchSearch) : items;
-  const filteredOther = search ? threadsOtherState.filter(matchSearch) : threadsOtherState;
-  const groupedOther = groupByBreadcrumb(filteredOther);
+  const groupedOther = groupByBreadcrumb(threadsOtherState);
 
   const formatTime = (iso: string) => {
     const d = new Date(iso);
@@ -93,14 +91,24 @@ export function Sidebar({
         >
           <div className="align-sidebar-header">
             <Dialog.Title className="align-sidebar-title">Comments</Dialog.Title>
-            <Dialog.Close asChild>
-              <button className="align-btn align-btn--close" aria-label="Close sidebar">
-                ✕
-              </button>
-            </Dialog.Close>
+            <div className="align-sidebar-header-actions">
+              {onSignOut && (
+                <button
+                  className="align-btn align-btn--close"
+                  onClick={onSignOut}
+                  aria-label={userName ? `Sign out ${userName}` : 'Sign out'}
+                  title={userName ? `Sign out ${userName}` : 'Sign out'}
+                >
+                  <Logout size={16} />
+                </button>
+              )}
+              <Dialog.Close asChild>
+                <button className="align-btn align-btn--close" aria-label="Close sidebar">
+                  <Close size={16} />
+                </button>
+              </Dialog.Close>
+            </div>
           </div>
-
-          <Separator.Root className="align-separator" />
 
           <Tabs.Root value={activeTab} onValueChange={handleTabChange}>
             <Tabs.List className="align-sidebar-tabs">
@@ -112,26 +120,13 @@ export function Sidebar({
               </Tabs.Trigger>
             </Tabs.List>
 
-            <input
-              className="align-sidebar-search"
-              type="text"
-              placeholder="Search comments..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-
             <Tabs.Content value="open" className="align-sidebar-tab-content" forceMount>
               {activeTab === 'open' && (
                 <ScrollArea.Root className="align-sidebar-list-scroll">
                   <ScrollArea.Viewport className="align-sidebar-list">
-                    {threadsOtherState.length > 0 && (
-                      <div className="align-sidebar-other-pill" aria-label={`${threadsOtherState.length} comments in other states`}>
-                        Other states · {threadsOtherState.length}
-                      </div>
-                    )}
                     <SidebarSection
                       heading="On this page"
-                      items={filtered}
+                      items={threadsOpen}
                       emptyMessage={threadsOtherState.length === 0 ? 'No comments on this page yet — add the first one.' : 'No comments visible in your current state.'}
                       formatTime={formatTime}
                       onItemOpen={onItemOpen}
@@ -160,7 +155,7 @@ export function Sidebar({
             <Tabs.Content value="resolved" className="align-sidebar-tab-content" forceMount>
               {activeTab === 'resolved' && (
                 <SidebarList
-                  items={filtered}
+                  items={items}
                   loading={resolvedStatus === 'loading'}
                   emptyMessage="Nothing here yet."
                   formatTime={formatTime}
@@ -265,16 +260,19 @@ function SidebarItem({
   onItemHover: (threadId: string | null) => void;
   onItemActivate?: (threadId: string) => void;
 }) {
-  const showActivate = item.canActivate && !!onItemActivate;
+  const handleOpen = () => {
+    if (onItemActivate && item.canActivate) onItemActivate(item.id);
+    else onItemOpen(item.id);
+  };
   return (
     <div
       className={`align-sidebar-item${item.unread ? ' align-sidebar-item--unread' : ''}`}
-      onClick={() => onItemOpen(item.id)}
+      onClick={handleOpen}
       onMouseEnter={() => onItemHover(item.id)}
       onMouseLeave={() => onItemHover(null)}
       role="button"
       tabIndex={0}
-      onKeyDown={e => e.key === 'Enter' && onItemOpen(item.id)}
+      onKeyDown={e => e.key === 'Enter' && handleOpen()}
     >
       <div className="align-sidebar-item-header">
         <UserAvatar
@@ -287,20 +285,11 @@ function SidebarItem({
         <span className="align-sidebar-item-time">{formatTime(item.createdAt)}</span>
       </div>
       <div className="align-sidebar-item-snippet">{item.snippet}</div>
-      <div className="align-sidebar-item-footer">
-        {item.replyCount > 0 && (
+      {item.replyCount > 0 && (
+        <div className="align-sidebar-item-footer">
           <span className="align-sidebar-item-replies">{item.replyCount} {item.replyCount === 1 ? 'reply' : 'replies'}</span>
-        )}
-        {showActivate && (
-          <button
-            className="align-sidebar-item-activate"
-            onClick={e => { e.stopPropagation(); onItemActivate?.(item.id); }}
-            aria-label="Open this state and show the comment"
-          >
-            Show me →
-          </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

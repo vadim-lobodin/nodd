@@ -3,6 +3,7 @@ import * as ScrollArea from '@radix-ui/react-scroll-area';
 import * as Separator from '@radix-ui/react-separator';
 import { MentionPicker, encodeMention, decodeMentions, type ProjectMember, type MentionReplacement } from './MentionPicker';
 import { UserAvatar } from './UserAvatar';
+import { ArrowUp, Checkmark, Close, Renew } from '@carbon/icons-react';
 import type { MemberProfile } from '../../store/types';
 
 export type ThreadComment = {
@@ -205,6 +206,7 @@ export function ThreadPopover({
         width: POPOVER_WIDTH,
       }}
     >
+      {comments.length > 0 && (
       <ScrollArea.Root className="align-popover-comments-scroll">
         <ScrollArea.Viewport className="align-popover-comments">
           {comments.map((comment, ci) => {
@@ -224,11 +226,13 @@ export function ThreadPopover({
                       <button
                         className="align-btn align-btn--resolve"
                         onClick={onToggleResolved}
+                        aria-label={resolved ? 'Reopen' : 'Resolve'}
+                        title={resolved ? 'Reopen' : 'Resolve'}
                       >
-                        {resolved ? 'Reopen' : 'Resolve'}
+                        {resolved ? <Renew size={16} /> : <Checkmark size={16} />}
                       </button>
                       <button className="align-btn align-btn--close" onClick={onClose} aria-label="Close">
-                        ✕
+                        <Close size={16} />
                       </button>
                     </div>
                   )}
@@ -244,26 +248,27 @@ export function ThreadPopover({
           <ScrollArea.Thumb className="align-scrollbar-thumb" />
         </ScrollArea.Scrollbar>
       </ScrollArea.Root>
-
-      <Separator.Root className="align-separator" />
+      )}
 
       <div className="align-popover-reply">
         <textarea
           ref={textareaRef}
+          autoFocus
           className="align-reply-input"
-          placeholder="Reply... (@ to mention)"
+          placeholder={comments.length === 0 ? 'Add a comment' : 'Reply...'}
           value={draft}
           onChange={e => { setDraft(e.target.value); handleTextareaInput(); }}
           onKeyDown={handleKeyDown}
           onClick={handleTextareaInput}
-          rows={2}
+          rows={1}
         />
         <button
           className="align-btn align-btn--send"
           disabled={!draft.trim() || submitting}
           onClick={handleSubmit}
+          aria-label="Send"
         >
-          {submitting ? '...' : 'Send'}
+          <ArrowUp size={16} />
         </button>
       </div>
 

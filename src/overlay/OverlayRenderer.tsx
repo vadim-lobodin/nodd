@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import * as Tooltip from '@radix-ui/react-tooltip';
+import { Add, Menu } from '@carbon/icons-react';
 import { useAlignContext } from '../provider/AlignContext';
 import { PinMarker } from './components/PinMarker';
-import { HoverHighlight, type HoverHighlightHandle } from './components/HoverHighlight';
 import { CaptureLayer } from './components/CaptureLayer';
 import { ThreadPopover } from './components/ThreadPopover';
 import { Sidebar, type ThreadSummary } from './components/Sidebar';
@@ -26,7 +26,6 @@ export function OverlayRenderer() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pinPositions, setPinPositions] = useState<Map<string, { x: number; y: number }>>(new Map());
   const pinPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
-  const highlightRef = useRef<HoverHighlightHandle>(null);
   const portalRootRef = useRef<HTMLElement | null>(null);
   const anchorCache = useRef<Map<string, Element>>(new Map());
   const [authEmail, setAuthEmail] = useState('');
@@ -51,7 +50,7 @@ export function OverlayRenderer() {
     if (typeof document === 'undefined') return;
     const body = document.body;
     const prevMargin = body.style.marginRight;
-    body.style.marginRight = sidebarOpen ? 'min(360px, 90vw)' : prevMargin || '';
+    body.style.marginRight = sidebarOpen ? 'min(300px, 90vw)' : prevMargin || '';
     return () => {
       body.style.marginRight = prevMargin;
     };
@@ -132,28 +131,15 @@ export function OverlayRenderer() {
         const el = document.querySelector(`[data-align-pin-id="${id}"]`) as HTMLElement | null;
         if (el) el.style.transform = `translate(${x}px, ${y}px)`;
       },
-      onRefreshHighlight: () => highlightRef.current?.refresh(),
       onDOMMutation: () => setDomVersion(v => v + 1),
     });
   }, [snapshot]);
 
-  const handlePinHover = useCallback(
-    (threadId: string | null) => {
-      if (!threadId) {
-        highlightRef.current?.hide();
-        return;
-      }
-      const el = anchorCache.current.get(threadId);
-      if (el) {
-        highlightRef.current?.show(el.getBoundingClientRect());
-      }
-    },
-    [],
-  );
-
   const handlePinOpen = useCallback((threadId: string) => {
     setOpenThreadId(prev => (prev === threadId ? null : threadId));
   }, []);
+
+  const handlePinHover = useCallback((_threadId: string | null) => {}, []);
 
   const handleCaptureCreate = useCallback(
     async (pin: Pin) => {
@@ -240,7 +226,6 @@ export function OverlayRenderer() {
     const thread = snapshot?.threads.find(t => t.id === threadId);
     if (!thread) return;
     const stack = keyToStack(thread.stateKey);
-    setSidebarOpen(false);
     const ok = await activateState(stack);
     if (!ok) return;
     // Wait one frame so the MutationObserver-driven resolveAllPins has run.
@@ -319,32 +304,21 @@ export function OverlayRenderer() {
     <Tooltip.Provider delayDuration={400}>
       {/* Toolbar */}
       <div className={`align-toolbar${sidebarOpen ? ' align-toolbar--shifted' : ''}`}>
-        <div className="align-user-pill">
-          <span className="align-user-pill-name">{user.displayName ?? user.email.split('@')[0]}</span>
-          <button className="align-user-pill-signout" onClick={() => void signOut()} aria-label="Sign out">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-          </button>
-        </div>
         <button
           className={`align-btn align-btn--capture${isCapturing ? ' align-btn--active' : ''}`}
           onClick={() => setIsCapturing(!isCapturing)}
+          aria-label="Add comment"
         >
-          +
+          <Add size={20} />
         </button>
         <button
           className="align-btn align-btn--sidebar"
           onClick={() => setSidebarOpen(!sidebarOpen)}
+          aria-label="Open comments"
         >
-          ☰ {snapshot?.threads.length ?? 0}
+          <Menu size={20} />
         </button>
       </div>
-
-      {/* Hover highlight — stays viewport-fixed */}
-      <HoverHighlight ref={highlightRef} />
 
       {/* Pins render into the separate absolute-positioned container so they scroll with the page */}
       {pinContainer && createPortal(
@@ -366,7 +340,6 @@ export function OverlayRenderer() {
                 snippet={thread.comments[0]?.body.slice(0, 120)}
                 tooltipContainer={portalRootRef.current}
                 onOpen={handlePinOpen}
-                onHoverChange={handlePinHover}
               />
             );
           })}
@@ -425,6 +398,8 @@ export function OverlayRenderer() {
         threadsOpen={onPageSummaries}
         threadsOtherState={otherStateSummaries}
         onItemActivate={handleItemActivate}
+        userName={user.displayName ?? user.email.split('@')[0]}
+        onSignOut={() => void signOut()}
         fetchResolved={async () => {
           if (!store) return [];
           const resolved = await store.fetchResolved(urlPath);
@@ -443,7 +418,7 @@ export function OverlayRenderer() {
           });
         }}
         onItemOpen={handlePinOpen}
-        onItemHover={handlePinHover}
+        onItemHover={() => {}}
         container={portalRootRef.current}
       />
     </Tooltip.Provider>

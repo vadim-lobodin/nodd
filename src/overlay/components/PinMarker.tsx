@@ -12,7 +12,6 @@ export type PinMarkerProps = {
   snippet?: string;
   tooltipContainer?: HTMLElement | null;
   onOpen: (threadId: string) => void;
-  onHoverChange: (threadId: string | null) => void;
 };
 
 const HOVER_DELAY_MS = 400;
@@ -29,7 +28,6 @@ export function PinMarker({
   snippet,
   tooltipContainer,
   onOpen,
-  onHoverChange,
 }: PinMarkerProps) {
   const [hovered, setHovered] = useState(false);
   const [tooltipOpen, setTooltipOpen] = useState(false);
@@ -62,13 +60,11 @@ export function PinMarker({
 
   const handleMouseEnter = useCallback(() => {
     setHovered(true);
-    onHoverChange(threadId);
-  }, [threadId, onHoverChange]);
+  }, []);
 
   const handleMouseLeave = useCallback(() => {
     setHovered(false);
-    onHoverChange(null);
-  }, [onHoverChange]);
+  }, []);
 
   const handleClick = useCallback(() => {
     onOpen(threadId);
