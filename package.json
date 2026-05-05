@@ -17,7 +17,9 @@
     "**/*.css"
   ],
   "files": [
-    "dist"
+    "dist",
+    "supabase/migrations",
+    "INSTALL.md"
   ],
   "scripts": {
     "build": "tsup",
