@@ -84,24 +84,17 @@ supabase/
 ├── config.toml                          ← supabase CLI project config
 ├── seed.sql                             ← dev fixtures (one project, two members, sample threads)
 └── migrations/
-    ├── 0001_projects.sql                ← projects table + RLS enable
-    ├── 0002_project_members.sql         ← members table + role enum + RLS enable
-    ├── 0003_threads_comments.sql        ← threads + comments tables, FKs, RLS enable
-    ├── 0004_profiles_view.sql           ← profiles view over auth.users
-    ├── 0005_helpers.sql                 ← is_project_member(uuid) SECURITY DEFINER fn
-    ├── 0006_rls_policies.sql            ← all SELECT/INSERT/UPDATE/DELETE policies
-    ├── 0007_indexes.sql                 ← threads_project_path_idx, comments_thread_idx
-    └── 0008_realtime_publication.sql    ← add threads + comments to supabase_realtime
+    └── 0001_align_init.sql              ← v1 baseline: tables, view, helper, RLS policies,
+                                          indexes, realtime publication (single file)
 ```
 
-Each migration is **scoped to one concern** so reviews stay small and rollbacks are localised. Files are numbered in apply order; the Supabase CLI enforces this.
+`0001_align_init.sql` is the **v1 baseline** applied as one file by fresh consumers — internally it's organised in sections (tables → view + helper → RLS policies → indexes → realtime). Treat it as frozen post-release: any post-v1 schema change ships as a new numbered file (`0002_*.sql`, `0003_*.sql`, …) so existing consumers can migrate forward incrementally.
 
 ## 6. Tables (canonical definitions)
 
 These mirror [DESIGN_DOC §3](../DESIGN_DOC.md#3-data-model) and are the single source of truth.
 
 ```sql
--- 0001_projects.sql
 create table projects (
   id          uuid primary key default gen_random_uuid(),
   name        text not null,
@@ -109,7 +102,6 @@ create table projects (
 );
 alter table projects enable row level security;
 
--- 0002_project_members.sql
 create type project_role as enum ('member', 'admin');
 
 create table project_members (
@@ -121,12 +113,12 @@ create table project_members (
 );
 alter table project_members enable row level security;
 
--- 0003_threads_comments.sql
 create table threads (
   id           uuid primary key default gen_random_uuid(),
   project_id   uuid not null references projects(id) on delete cascade,
   url_path     text not null,
   pin          jsonb not null,
+  state_key    text not null default '',
   resolved     boolean not null default false,
   resolved_by  uuid references auth.users(id),
   resolved_at  timestamptz,
@@ -150,7 +142,6 @@ alter table comments enable row level security;
 ## 7. The `profiles` View
 
 ```sql
--- 0004_profiles_view.sql
 create or replace view profiles as
 select
   u.id,
@@ -167,7 +158,6 @@ The view never exposes `auth.users` columns the client shouldn't see (encrypted 
 ## 8. Membership Helper Function
 
 ```sql
--- 0005_helpers.sql
 create or replace function is_project_member(_project_id uuid)
 returns boolean
 language sql
@@ -198,8 +188,6 @@ Every RLS policy delegates to this helper. Centralising the check has three conc
 ## 9. RLS Policies
 
 ```sql
--- 0006_rls_policies.sql
-
 -- projects ----------------------------------------------------------
 create policy projects_select_member on projects
   for select using (is_project_member(id));
@@ -266,7 +254,6 @@ Behavioural summary, mirrored against [DESIGN_DOC §3](../DESIGN_DOC.md#3-data-m
 ## 10. Indexes
 
 ```sql
--- 0007_indexes.sql
 create index threads_project_path_idx
   on threads (project_id, url_path)
   where resolved = false;
@@ -280,7 +267,6 @@ The partial index on unresolved threads matches the **default page-scoped query*
 ## 11. Realtime Publication
 
 ```sql
--- 0008_realtime_publication.sql
 alter publication supabase_realtime add table threads;
 alter publication supabase_realtime add table comments;
 ```

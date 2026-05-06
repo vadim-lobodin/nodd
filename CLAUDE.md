@@ -14,6 +14,8 @@ npm run dev         # tsup --watch
 npm run typecheck   # tsc --noEmit (no test runner configured)
 ```
 
+**CLI** (`bin/align.mjs`, exposed via `package.json#bin` as `align`): consumer-facing onboarding tool. `init` creates a Supabase project via the Management API, applies the migrations, configures auth redirects, writes `.env.local` + `.align/config.json`, and prints an `<AlignProvider>` snippet. `add-origin <url>` patches the redirect allowlist after deploy. Reads `SUPABASE_ACCESS_TOKEN` from env (never persisted). ESM, no extra deps — uses built-in `fetch`, `readline`, `crypto`. Don't add npm deps here without a strong reason; the CLI runs via `npx` and bloating it slows cold starts.
+
 Database (against the local or linked Supabase project):
 ```bash
 supabase start          # local stack on ports 54321 (api), 54322 (db), 54323 (studio), 54324 (inbucket)
@@ -36,7 +38,7 @@ const { user, signIn, signOut, toggleOverlay, isVisible, ... } = useAlign();
 | `src/auth/` | `AuthClient` wraps Supabase magic-link sign-in + session restore. |
 | `src/store/` | `CommentStore` — page-scoped fetch, IndexedDB cache, optimistic CRUD with temp IDs, Realtime subscription. Files are split by concern (`query`, `mutations`, `realtime`, `cache`, `state`, `members`). |
 | `src/overlay/` | React UI rendered via portal: `OverlayRenderer`, `Sidebar`, `ThreadPopover`, `PinMarker`, `CaptureLayer`, `MentionPicker`, plus `anchoring/` (selector + fingerprint + resolver + ResizeObserver re-anchor loop). |
-| `supabase/` | SQL migrations, RLS policies, indexes. **Not bundled** in the npm package — shipped as source for consumers to apply. |
+| `supabase/` | SQL migrations, RLS policies, indexes. Bundled in the npm package via `package.json` `files` so consumers can apply them after `npm i`. |
 
 Each module has its own `README.md` with detailed design notes; consult them before deeper changes.
 
@@ -65,9 +67,9 @@ Magic link via `supabase.auth.signInWithOtp({ email })` with `emailRedirectTo: w
 
 ### RLS contract (every new query must respect this)
 
-- All Align-owned tables have RLS enabled; `is_project_member(project_id)` (SECURITY DEFINER, in `0005_helpers.sql`) gates every read. Reuse it — don't reimplement membership checks per policy.
+- All Align-owned tables have RLS enabled; `is_project_member(project_id)` (SECURITY DEFINER, defined in the baseline `0001_align_init.sql`) gates every read. Reuse it — don't reimplement membership checks per policy.
 - `threads.created_by` and `comments.author_id` must equal `auth.uid()` on insert. Comment edits are author-only.
-- Migrations are forward-only and numbered (`0001_*.sql` … `000N_*.sql`). To correct a prior migration, ship a new file — never rewrite an existing one.
+- `0001_align_init.sql` is the v1 baseline — applied as one file by fresh consumers. Treat it as frozen post-release; any schema change ships as a new numbered file (`0002_*.sql`, `0003_*.sql`, …). Forward-only: never rewrite an existing migration.
 
 ### Build output
 

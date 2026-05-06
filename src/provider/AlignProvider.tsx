@@ -63,6 +63,28 @@ export type AlignProviderProps = {
   supabaseUrl: string;
   supabaseAnonKey: string;
   theme?: AlignTheme;
+  /**
+   * If set, when a user signs in whose email matches this value, the project
+   * row (using `projectId`) and an admin `project_members` row for the user
+   * are auto-created via the `align_bootstrap_project` RPC. Removes the
+   * manual SQL setup step for the project owner. Server enforces email match
+   * and first-come-first-served: subsequent strangers cannot claim.
+   */
+  bootstrapAdminEmail?: string;
+  /**
+   * Display name for the auto-created project. Defaults to "My Prototype".
+   * Only used on the first bootstrap call.
+   */
+  projectName?: string;
+  /**
+   * If true, any authenticated user (not just the admin) is auto-added to
+   * `project_members` as `member` on first sign-in via the `align_join_project`
+   * RPC. Use this for prototypes you want to share openly — anyone with the
+   * deploy URL who can receive the magic-link email becomes a commenter.
+   * Without this flag, only the bootstrap admin is auto-membered; teammates
+   * must be added via SQL or an invite UI.
+   */
+  openMembership?: boolean;
   children: ReactNode;
 };
 
@@ -71,6 +93,9 @@ export function AlignProvider({
   supabaseUrl,
   supabaseAnonKey,
   theme: initialTheme = 'system',
+  bootstrapAdminEmail,
+  projectName = 'My Prototype',
+  openMembership = false,
   children,
 }: AlignProviderProps) {
   const [user, setUser] = useState<CurrentUser | null>(null);
@@ -120,6 +145,33 @@ export function AlignProvider({
   useEffect(() => {
     return subscribeToRouteChanges(setUrlPath);
   }, []);
+
+  // Auto-onboard: admin claims project + membership; everyone else joins as
+  // member when openMembership is on. Idempotent server-side; client ref
+  // prevents repeated calls within a single session.
+  const onboardedRef = useRef(false);
+  useEffect(() => {
+    if (!user || onboardedRef.current) return;
+
+    const isAdmin = bootstrapAdminEmail && user.email === bootstrapAdminEmail;
+    if (!isAdmin && !openMembership) return;
+
+    onboardedRef.current = true;
+    const call = isAdmin
+      ? supabase.rpc('align_bootstrap_project', {
+          _project_id: projectId,
+          _project_name: projectName,
+          _expected_email: bootstrapAdminEmail,
+        })
+      : supabase.rpc('align_join_project', { _project_id: projectId });
+
+    void call.then(({ error }) => {
+      if (error) {
+        console.warn('[align] onboard failed:', error.message);
+        onboardedRef.current = false;
+      }
+    });
+  }, [user, bootstrapAdminEmail, openMembership, projectId, projectName, supabase]);
 
   // Resolve system theme
   const resolvedTheme = useMemo(() => {

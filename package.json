@@ -13,11 +13,18 @@
     },
     "./style.css": "./dist/style.css"
   },
+  "bin": {
+    "align": "./bin/align.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "sideEffects": [
     "**/*.css"
   ],
   "files": [
     "dist",
+    "bin",
     "supabase/migrations",
     "INSTALL.md"
   ],
