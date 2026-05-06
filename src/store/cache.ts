@@ -15,7 +15,7 @@ let store: ReturnType<typeof createStore> | null = null;
 
 function getStore() {
   if (!store) {
-    store = createStore('align-cache', 'pages');
+    store = createStore('nodd-cache', 'pages');
   }
   return store;
 }

@@ -1,16 +1,16 @@
-# Align — Architecture Design
+# Nodd — Architecture Design
 
-> System-wide architecture, module decomposition, and key design decisions for Align — a drop-in React library that adds Figma-like spatial comments to live React prototypes.
+> System-wide architecture, module decomposition, and key design decisions for Nodd — a drop-in React library that adds Figma-like spatial comments to live React prototypes.
 
 Related: [Goal & Requirements](GOAL&REQUIREMENTS.md)
 
 ## 1. High-Level Architecture
 
-Align is a **client-side React library** + a **Supabase-hosted backend**. There is no custom server. The library is distributed via npm; consumers wrap their app in `<AlignProvider>`, which boots a runtime that renders an overlay on top of the host app and synchronises comments through the Supabase JS client.
+Nodd is a **client-side React library** + a **Supabase-hosted backend**. There is no custom server. The library is distributed via npm; consumers wrap their app in `<NoddProvider>`, which boots a runtime that renders an overlay on top of the host app and synchronises comments through the Supabase JS client.
 
 ```mermaid
 graph TD
-  Host[Host React App] --> Provider[AlignProvider<br/>runtime + context]
+  Host[Host React App] --> Provider[NoddProvider<br/>runtime + context]
   Provider --> Auth[AuthClient]
   Provider --> Store[CommentStore]
   Provider --> Overlay[OverlayRenderer]
@@ -20,7 +20,7 @@ graph TD
 ```
 
 ### Layers
-1. **Integration layer** — `AlignProvider` is the only public component the host app sees. Everything else is internal.
+1. **Integration layer** — `NoddProvider` is the only public component the host app sees. Everything else is internal.
 2. **Runtime layer** — Owns app state (current user, project id, page id, overlay visibility), coordinates modules, and renders the overlay via a React portal.
 3. **Domain layer** — `CommentStore` (data + sync), `AuthClient` (session), `OverlayRenderer` (UI), `DOMAnchor` (positioning).
 4. **Backend layer** — Supabase: Postgres tables + Row-Level Security + Realtime channels + Auth (magic link).
@@ -37,7 +37,7 @@ Five modules, each owning one concern. Consumer-facing surface is intentionally 
 
 | Module | Path | Responsibility |
 |--------|------|----------------|
-| `AlignProvider` | `src/provider/` | Public entry point. Boots runtime, wires context, mounts portal, exposes `useAlign()`. |
+| `NoddProvider` | `src/provider/` | Public entry point. Boots runtime, wires context, mounts portal, exposes `useNodd()`. |
 | `OverlayRenderer` | `src/overlay/` | Renders pin markers, hover highlight, click-to-pin capture layer, sidebar/panel, comment thread popovers. |
 | `CommentStore` | `src/store/` | In-memory + IndexedDB cache, optimistic CRUD, Realtime subscription, page-scoped fetching. |
 | `AuthClient` | `src/auth/` | Magic-link sign-in, session restore, sign-out, current-user observable. |
@@ -46,17 +46,17 @@ Five modules, each owning one concern. Consumer-facing surface is intentionally 
 ### Public API surface
 ```ts
 // Component
-<AlignProvider projectId="..." supabaseUrl="..." supabaseAnonKey="..."> {children} </AlignProvider>
+<NoddProvider projectId="..." supabaseUrl="..." supabaseAnonKey="..."> {children} </NoddProvider>
 
 // Hook (advanced — for custom toggles, programmatic open, etc.)
-const { user, signIn, signOut, toggleOverlay, isVisible } = useAlign();
+const { user, signIn, signOut, toggleOverlay, isVisible } = useNodd();
 ```
 
 That's it. Everything else is internal.
 
 ### Dependency direction
-`AlignProvider` → `{AuthClient, CommentStore, OverlayRenderer}` → `DOMAnchor` (utility) → Supabase JS client.
-No module imports `AlignProvider`. No circular dependencies.
+`NoddProvider` → `{AuthClient, CommentStore, OverlayRenderer}` → `DOMAnchor` (utility) → Supabase JS client.
+No module imports `NoddProvider`. No circular dependencies.
 
 ## 3. Data Model
 
@@ -65,7 +65,7 @@ All tables live in the host project's Supabase instance. Schema is shipped as SQ
 ### Tables
 
 ```sql
--- Project: an instance of Align (one per prototype/site)
+-- Project: an instance of Nodd (one per prototype/site)
 create table projects (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -131,7 +131,7 @@ type Pin = {
 ```mermaid
 sequenceDiagram
   participant U as User
-  participant A as AlignProvider
+  participant A as NoddProvider
   participant SB as Supabase Auth
   U->>A: clicks pin / opens overlay
   A->>U: shows "enter your email" form
@@ -144,7 +144,7 @@ sequenceDiagram
 ```
 
 - Library uses `@supabase/supabase-js` `signInWithOtp` with `emailRedirectTo: window.location.href`.
-- Session persisted to `localStorage` by Supabase client; restored on `AlignProvider` mount.
+- Session persisted to `localStorage` by Supabase client; restored on `NoddProvider` mount.
 - Unauthenticated users see read-only pins (or nothing, depending on `projects.public_read`); cannot create or reply.
 - Invite-link flow (out of v1) is a stretch goal: a project admin generates a tokenised URL that auto-creates a `project_members` row on first sign-in.
 
@@ -154,7 +154,7 @@ Pins must survive page reloads and minor layout/markup changes. We use a **three
 
 ### Tier 1 — Selector path (primary)
 At pin creation, walk from the clicked element up to `<body>` and build a CSS selector:
-- Prefer stable attributes: `[data-align-id]`, `[data-testid]`, `[id]`, `[role]`.
+- Prefer stable attributes: `[data-nodd-id]`, `[data-testid]`, `[id]`, `[role]`.
 - Fall back to `tag.className:nth-of-type(n)`.
 - Cap depth at 8 ancestors to avoid brittleness.
 
@@ -177,12 +177,12 @@ A single `ResizeObserver` watches `document.body` and re-runs position calculati
 
 The non-functional requirement "**zero layout shift**" is critical. Our approach:
 
-1. **Single React portal** mounted to a `<div id="align-root">` appended to `document.body` on `AlignProvider` mount.
+1. **Single React portal** mounted to a `<div id="nodd-root">` appended to `document.body` on `NoddProvider` mount.
 2. The root is `position: fixed; inset: 0; z-index: 2147483000; pointer-events: none;` — it overlays the entire viewport without affecting host layout.
 3. **Pin markers** set `pointer-events: auto` only on themselves, so the rest of the page remains clickable.
 4. **Capture mode** (when the user clicks "Add comment"): the root flips to `pointer-events: auto` to intercept the next click; on click, we use `document.elementFromPoint(x, y)` *after* temporarily hiding the overlay (`visibility: hidden` for one frame) so we hit-test the host DOM, then re-show.
 5. **Toggle off**: the entire portal is unmounted (`return null` from overlay), guaranteeing zero CSS or DOM presence.
-6. All Align styles are scoped under `[data-align-root]` and use CSS custom properties to avoid bleeding into the host. We ship a single CSS file with no global selectors.
+6. All Nodd styles are scoped under `[data-nodd-root]` and use CSS custom properties to avoid bleeding into the host. We ship a single CSS file with no global selectors.
 
 ## 7. Build & Distribution
 
@@ -204,7 +204,7 @@ Chosen over Vite library mode for simplicity — zero config, fast esbuild-based
 
 ### npm package shape
 ```
-@align/react/
+nodd/
 ├── dist/
 │   ├── index.js        (CJS)
 │   ├── index.mjs       (ESM)
@@ -217,7 +217,7 @@ Chosen over Vite library mode for simplicity — zero config, fast esbuild-based
 ### `package.json` essentials
 ```jsonc
 {
-  "name": "@align/react",
+  "name": "nodd",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -238,8 +238,8 @@ Chosen over Vite library mode for simplicity — zero config, fast esbuild-based
 
 Consumer integration is two lines:
 ```tsx
-import { AlignProvider } from '@align/react';
-import '@align/react/style.css';
+import { NoddProvider } from 'nodd';
+import 'nodd/style.css';
 ```
 
 ## 8. Sub-200ms Comment Load Strategy
@@ -266,14 +266,14 @@ The non-functional requirement "comments for a page must load within 200ms" driv
 
 - **Separation of concerns** — Each module has one job; data, UI, anchoring, and auth never mix.
 - **Explicit over implicit** — Public API is one component + one hook. No global side-effects, no monkey-patching.
-- **Zero host impact** — When the overlay is off, Align is unmounted. No layout shift, no DOM mutation, no CSS leakage.
+- **Zero host impact** — When the overlay is off, Nodd is unmounted. No layout shift, no DOM mutation, no CSS leakage.
 - **Fast first paint** — Optimistic cache + page-scoped queries prioritise perceived speed over consistency on first load.
 
 ## 10. Module Documentation Index
 
 The following module-level design docs will be created next (one per module):
 
-- `src/provider/README.md` — AlignProvider runtime
+- `src/provider/README.md` — NoddProvider runtime
 - `src/overlay/README.md` — OverlayRenderer
 - `src/store/README.md` — CommentStore
 - `src/auth/README.md` — AuthClient
@@ -282,6 +282,6 @@ The following module-level design docs will be created next (one per module):
 ## 11. Open Questions / Future Work
 
 - **Public read access** for unauthenticated viewers — define `projects.public_read` flag and corresponding RLS.
-- **State-aware comments** — threads carry a `state_key` (slash-joined breadcrumb) recording the host-app state in which they were pinned. Hosts opt into stateful regions with `<AlignState name="…">`, which renders a `display: contents` wrapper carrying `data-align-state`. Capture and pin gating both walk the DOM ancestry of the click target / anchor element to compute the state stack — there is no single "current state", state is a property of *where* you clicked. The Sidebar surfaces threads pinned to states the reviewer is not currently in via an "Other states · N" pill. Auto-detection of `[role="dialog"]`, hash-based routes, and a `restoreState(stack)` callback are deferred to v2.
+- **State-aware comments** — threads carry a `state_key` (slash-joined breadcrumb) recording the host-app state in which they were pinned. Hosts opt into stateful regions with `<NoddState name="…">`, which renders a `display: contents` wrapper carrying `data-nodd-state`. Capture and pin gating both walk the DOM ancestry of the click target / anchor element to compute the state stack — there is no single "current state", state is a property of *where* you clicked. The Sidebar surfaces threads pinned to states the reviewer is not currently in via an "Other states · N" pill. Auto-detection of `[role="dialog"]`, hash-based routes, and a `restoreState(stack)` callback are deferred to v2.
 - **Real-time presence** (out of v1) — would use Supabase Realtime presence channels.
 - **Self-hosted backend** (out of v1) — abstract the Supabase client behind a `Backend` interface to enable swappable implementations later.

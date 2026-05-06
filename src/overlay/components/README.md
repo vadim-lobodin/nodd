@@ -1,8 +1,8 @@
 # Overlay Components
 
-> The visible UI of Align: pin markers, hover highlight, comment thread popover, slide-out sidebar, the @mention picker, and the click-to-pin capture layer. This document specifies the **component-level contract** — props, state, and interaction sequences — for every React component rendered into the `[data-align-root]` portal.
+> The visible UI of Nodd: pin markers, hover highlight, comment thread popover, slide-out sidebar, the @mention picker, and the click-to-pin capture layer. This document specifies the **component-level contract** — props, state, and interaction sequences — for every React component rendered into the `[data-nodd-root]` portal.
 
-Parent: [OverlayRenderer](../README.md) · Architecture: [Align — Architecture Design](../../../DESIGN_DOC.md)
+Parent: [OverlayRenderer](../README.md) · Architecture: [Nodd — Architecture Design](../../../DESIGN_DOC.md)
 
 ## 1. Purpose & Why This Exists
 
@@ -31,7 +31,7 @@ graph TD
   Pins -.hover.- Hover
 ```
 
-Every component reads from `useAlignContext()` (store, auth, route) and emits via injected callbacks. None talks directly to Supabase or to other components — `OverlayRenderer` is the bus.
+Every component reads from `useNoddContext()` (store, auth, route) and emits via injected callbacks. None talks directly to Supabase or to other components — `OverlayRenderer` is the bus.
 
 ## 3. File Layout
 
@@ -117,17 +117,17 @@ Hover events fire many times per second. Pushing a `rect` through React state on
 ### 5.4 Style
 
 ```css
-[data-align-root] .align-hover-highlight {
+[data-nodd-root] .nodd-hover-highlight {
   position: absolute;
   pointer-events: none;
-  outline: 2px solid var(--align-accent);
+  outline: 2px solid var(--nodd-accent);
   border-radius: 4px;
   box-shadow: 0 0 0 6px rgba(79, 70, 229, 0.12);
   display: none;
   transition: transform 80ms linear, width 80ms linear, height 80ms linear;
 }
 @media (prefers-reduced-motion: reduce) {
-  [data-align-root] .align-hover-highlight { transition: none; }
+  [data-nodd-root] .nodd-hover-highlight { transition: none; }
 }
 ```
 
@@ -139,7 +139,7 @@ Slide-out drawer pinned to the right edge of the viewport. Lists every thread on
 
 ```ts
 type SidebarProps = {
-  open: boolean;                                // controlled by AlignProvider
+  open: boolean;                                // controlled by NoddProvider
   onClose: () => void;
   urlPath: string;
   threadsOpen: ThreadSummary[];                 // from CommentStore (live)
@@ -337,7 +337,7 @@ The popover does **not** close on:
 
 - 320 px wide; `max-height: min(60vh, 480px)` after placement clamp.
 - Header: thread index (`#3`), author, timestamp, "Resolve" toggle (member-only), close (✕).
-- Body: comment list, scrollable. Mention chips are inline `<span class="align-mention">` rendered from `body` + `mentions[]`.
+- Body: comment list, scrollable. Mention chips are inline `<span class="nodd-mention">` rendered from `body` + `mentions[]`.
 - Footer: avatar + textarea + Send button. Send disabled while `submitting` or `draft.trim() === ''`.
 
 ### 7.8 Accessibility
@@ -425,7 +425,7 @@ on document.click (capture phase):
   }
 ```
 
-Why `visibility:hidden` and not `display:none`: `display:none` triggers reflow on every capture click and can flicker the host page; `visibility:hidden` removes Align from hit-testing on the next paint while preserving layout. One `rAF` is sufficient because the browser's hit-tester uses the most recently committed paint.
+Why `visibility:hidden` and not `display:none`: `display:none` triggers reflow on every capture click and can flicker the host page; `visibility:hidden` removes Nodd from hit-testing on the next paint while preserving layout. One `rAF` is sufficient because the browser's hit-tester uses the most recently committed paint.
 
 ### 9.3 Props
 

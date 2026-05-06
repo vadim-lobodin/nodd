@@ -59,8 +59,8 @@ export function CaptureLayer({ onCreate, onCancel, portalRootRef }: CaptureLayer
   }, [handleClick, handleKeyDown]);
 
   return (
-    <div className="align-capture-layer">
-      <div className="align-capture-toast">
+    <div className="nodd-capture-layer">
+      <div className="nodd-capture-toast">
         Click anywhere to leave a comment — press Esc to cancel
       </div>
     </div>

@@ -14,12 +14,12 @@ function installHistoryPatch(): void {
 
   history.pushState = function (...args: Parameters<typeof history.pushState>) {
     originalPushState!(...args);
-    window.dispatchEvent(new CustomEvent('align:locationchange'));
+    window.dispatchEvent(new CustomEvent('nodd:locationchange'));
   };
 
   history.replaceState = function (...args: Parameters<typeof history.replaceState>) {
     originalReplaceState!(...args);
-    window.dispatchEvent(new CustomEvent('align:locationchange'));
+    window.dispatchEvent(new CustomEvent('nodd:locationchange'));
   };
 }
 
@@ -41,7 +41,7 @@ export function subscribeToRouteChanges(onChange: (path: string) => void): () =>
 
   window.addEventListener('popstate', handler);
   window.addEventListener('hashchange', handler);
-  window.addEventListener('align:locationchange', handler);
+  window.addEventListener('nodd:locationchange', handler);
 
   // Emit initial value
   onChange(window.location.pathname + window.location.search);
@@ -49,7 +49,7 @@ export function subscribeToRouteChanges(onChange: (path: string) => void): () =>
   return () => {
     window.removeEventListener('popstate', handler);
     window.removeEventListener('hashchange', handler);
-    window.removeEventListener('align:locationchange', handler);
+    window.removeEventListener('nodd:locationchange', handler);
     uninstallHistoryPatch();
   };
 }

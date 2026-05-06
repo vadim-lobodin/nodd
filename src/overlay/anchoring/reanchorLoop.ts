@@ -10,7 +10,7 @@ const PIN_RADIUS = 14;
 function isInsideAlign(node: Node | null): boolean {
   let cur: Node | null = node;
   while (cur) {
-    if (cur instanceof Element && (cur.hasAttribute('data-align-root') || cur.hasAttribute('data-align-pin-container'))) {
+    if (cur instanceof Element && (cur.hasAttribute('data-nodd-root') || cur.hasAttribute('data-nodd-pin-container'))) {
       return true;
     }
     cur = cur.parentNode;

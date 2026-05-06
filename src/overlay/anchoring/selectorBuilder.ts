@@ -10,9 +10,9 @@ function isHashLikeClass(cls: string): boolean {
 }
 
 function getSegment(el: Element): string {
-  // Priority 1: data-align-id
-  const alignId = el.getAttribute('data-align-id');
-  if (alignId) return `${el.tagName.toLowerCase()}[data-align-id="${alignId}"]`;
+  // Priority 1: data-nodd-id
+  const noddId = el.getAttribute('data-nodd-id');
+  if (noddId) return `${el.tagName.toLowerCase()}[data-nodd-id="${noddId}"]`;
 
   // Priority 2: data-testid
   const testId = el.getAttribute('data-testid');

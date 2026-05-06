@@ -1,5 +1,5 @@
 {
-  "name": "@align/react",
+  "name": "nodd",
   "version": "0.1.0",
   "description": "Figma-like comments on top of live React prototypes",
   "main": "dist/index.js",
@@ -14,7 +14,7 @@
     "./style.css": "./dist/style.css"
   },
   "bin": {
-    "align": "./bin/align.mjs"
+    "nodd": "./bin/nodd.mjs"
   },
   "engines": {
     "node": ">=18"

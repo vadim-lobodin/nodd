@@ -61,7 +61,7 @@ function renderBodyWithMentions(body: string, memberMap: Map<string, MemberProfi
     }
     const member = memberMap.get(match[1]);
     parts.push(
-      <span key={match.index} className="align-mention-chip">
+      <span key={match.index} className="nodd-mention-chip">
         @{member?.displayName ?? match[2]}
       </span>,
     );
@@ -198,63 +198,63 @@ export function ThreadPopover({
   return (
     <div
       ref={popoverRef}
-      className="align-popover"
+      className="nodd-popover"
       role="dialog"
-      aria-labelledby={`align-thread-${threadId}`}
+      aria-labelledby={`nodd-thread-${threadId}`}
       style={{
         transform: `translate(${clampedX}px, ${clampedY}px)`,
         width: POPOVER_WIDTH,
       }}
     >
       {comments.length > 0 && (
-      <ScrollArea.Root className="align-popover-comments-scroll">
-        <ScrollArea.Viewport className="align-popover-comments">
+      <ScrollArea.Root className="nodd-popover-comments-scroll">
+        <ScrollArea.Viewport className="nodd-popover-comments">
           {comments.map((comment, ci) => {
             const member = memberMap.get(comment.authorId);
             return (
-              <div key={comment.id} className={`align-comment${comment.pending ? ' align-comment--pending' : ''}`}>
-                <div className="align-comment-header">
+              <div key={comment.id} className={`nodd-comment${comment.pending ? ' nodd-comment--pending' : ''}`}>
+                <div className="nodd-comment-header">
                   <UserAvatar
                     name={member?.displayName ?? member?.email ?? '?'}
                     avatarUrl={member?.avatarUrl}
                     size={24}
                   />
-                  <span className="align-comment-author">{member?.displayName ?? member?.email ?? 'Unknown'}</span>
-                  <span className="align-comment-time">{formatTime(comment.createdAt)}</span>
+                  <span className="nodd-comment-author">{member?.displayName ?? member?.email ?? 'Unknown'}</span>
+                  <span className="nodd-comment-time">{formatTime(comment.createdAt)}</span>
                   {ci === 0 && (
-                    <div className="align-popover-actions">
+                    <div className="nodd-popover-actions">
                       <button
-                        className="align-btn align-btn--resolve"
+                        className="nodd-btn nodd-btn--resolve"
                         onClick={onToggleResolved}
                         aria-label={resolved ? 'Reopen' : 'Resolve'}
                         title={resolved ? 'Reopen' : 'Resolve'}
                       >
                         {resolved ? <Renew size={16} /> : <Checkmark size={16} />}
                       </button>
-                      <button className="align-btn align-btn--close" onClick={onClose} aria-label="Close">
+                      <button className="nodd-btn nodd-btn--close" onClick={onClose} aria-label="Close">
                         <Close size={16} />
                       </button>
                     </div>
                   )}
                 </div>
-                <div className="align-comment-body">
+                <div className="nodd-comment-body">
                   {renderBodyWithMentions(comment.body, memberMap)}
                 </div>
               </div>
             );
           })}
         </ScrollArea.Viewport>
-        <ScrollArea.Scrollbar className="align-scrollbar" orientation="vertical">
-          <ScrollArea.Thumb className="align-scrollbar-thumb" />
+        <ScrollArea.Scrollbar className="nodd-scrollbar" orientation="vertical">
+          <ScrollArea.Thumb className="nodd-scrollbar-thumb" />
         </ScrollArea.Scrollbar>
       </ScrollArea.Root>
       )}
 
-      <div className="align-popover-reply">
+      <div className="nodd-popover-reply">
         <textarea
           ref={textareaRef}
           autoFocus
-          className="align-reply-input"
+          className="nodd-reply-input"
           placeholder={comments.length === 0 ? 'Add a comment' : 'Reply...'}
           value={draft}
           onChange={e => { setDraft(e.target.value); handleTextareaInput(); }}
@@ -263,7 +263,7 @@ export function ThreadPopover({
           rows={1}
         />
         <button
-          className="align-btn align-btn--send"
+          className="nodd-btn nodd-btn--send"
           disabled={!draft.trim() || submitting}
           onClick={handleSubmit}
           aria-label="Send"

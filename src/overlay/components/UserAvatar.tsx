@@ -14,7 +14,7 @@ export function UserAvatar({ name, avatarUrl, size = 24, className }: UserAvatar
   if (avatarUrl) {
     return (
       <img
-        className={`align-avatar ${className ?? ''}`}
+        className={`nodd-avatar ${className ?? ''}`}
         src={avatarUrl}
         alt=""
         loading="lazy"
@@ -25,7 +25,7 @@ export function UserAvatar({ name, avatarUrl, size = 24, className }: UserAvatar
 
   return (
     <span
-      className={`align-avatar ${className ?? ''}`}
+      className={`nodd-avatar ${className ?? ''}`}
       style={{ width: size, height: size, display: 'inline-flex', flexShrink: 0 }}
     >
       <BoringAvatar

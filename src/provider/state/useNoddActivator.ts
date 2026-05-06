@@ -3,12 +3,12 @@ import { registerActivator, subscribeActivators, hasActivatorOrTrigger, type Act
 
 /**
  * Register a function that activates the named state when called. The
- * activator should mount the matching `<AlignState name="...">` (e.g. open
+ * activator should mount the matching `<NoddState name="...">` (e.g. open
  * the modal, navigate to the wizard step). Mount this hook *outside* any
  * conditional render so the activator stays registered even when the state
  * is currently inactive — that's the whole point.
  */
-export function useAlignActivator(name: string, fn: Activator): void {
+export function useNoddActivator(name: string, fn: Activator): void {
   useEffect(() => {
     return registerActivator(name, fn);
   }, [name, fn]);
@@ -17,7 +17,7 @@ export function useAlignActivator(name: string, fn: Activator): void {
 /**
  * Returns whether the given state stack can be activated right now —
  * either an activator is registered for each segment, or a
- * `[data-align-open-state]` trigger exists in the current DOM.
+ * `[data-nodd-open-state]` trigger exists in the current DOM.
  *
  * Re-evaluates when activators change or when the DOM mutates (so a
  * trigger appearing on a newly-loaded page becomes available).

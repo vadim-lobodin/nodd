@@ -1,5 +1,5 @@
 // Activator registry — module-level so activators stay registered even when
-// their target `<AlignState>` is unmounted. Hosts call `useAlignActivator(name, fn)`
+// their target `<NoddState>` is unmounted. Hosts call `useNoddActivator(name, fn)`
 // outside their conditional render so the activator is always available.
 
 export type Activator = () => void | Promise<void>;
@@ -29,7 +29,7 @@ export function getActivator(name: string): Activator | undefined {
 export function hasActivatorOrTrigger(name: string): boolean {
   if (activators.has(name)) return true;
   if (typeof document === 'undefined') return false;
-  return document.querySelector(`[data-align-open-state="${cssEscape(name)}"]`) !== null;
+  return document.querySelector(`[data-nodd-open-state="${cssEscape(name)}"]`) !== null;
 }
 
 export function subscribeActivators(listener: () => void): () => void {
@@ -47,12 +47,12 @@ function cssEscape(s: string): string {
 
 function findStateElement(name: string): Element | null {
   if (typeof document === 'undefined') return null;
-  return document.querySelector(`[data-align-state="${cssEscape(name)}"]`);
+  return document.querySelector(`[data-nodd-state="${cssEscape(name)}"]`);
 }
 
 function findTrigger(name: string): HTMLElement | null {
   if (typeof document === 'undefined') return null;
-  return document.querySelector(`[data-align-open-state="${cssEscape(name)}"]`) as HTMLElement | null;
+  return document.querySelector(`[data-nodd-open-state="${cssEscape(name)}"]`) as HTMLElement | null;
 }
 
 function waitForState(name: string, timeoutMs: number): Promise<Element | null> {

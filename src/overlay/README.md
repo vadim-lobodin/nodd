@@ -1,17 +1,17 @@
 # OverlayRenderer
 
-> Renders the entire Align UI on top of the host React app: pin markers, hover highlight, click-to-pin capture layer, sidebar panel, comment thread popovers, and the @mention picker. Owns DOM anchoring of pins to host elements and re-positioning on layout changes.
+> Renders the entire Nodd UI on top of the host React app: pin markers, hover highlight, click-to-pin capture layer, sidebar panel, comment thread popovers, and the @mention picker. Owns DOM anchoring of pins to host elements and re-positioning on layout changes.
 
-Related: [Align — Architecture Design](../../DESIGN_DOC.md) · [Align — Goal & Requirements](../../GOAL%26REQUIREMENTS.md)
+Related: [Nodd — Architecture Design](../../DESIGN_DOC.md) · [Nodd — Goal & Requirements](../../GOAL%26REQUIREMENTS.md)
 
 ## 1. Purpose
 
-`OverlayRenderer` is the visual layer of Align. It is mounted by `AlignProvider` into a single React portal and is responsible for every pixel Align draws on screen. It must satisfy two non-functional requirements from the architecture:
+`OverlayRenderer` is the visual layer of Nodd. It is mounted by `NoddProvider` into a single React portal and is responsible for every pixel Nodd draws on screen. It must satisfy two non-functional requirements from the architecture:
 
-1. **Zero layout shift on the host app.** When the overlay is hidden, no Align DOM, styles, or event listeners may affect host layout or interactivity.
+1. **Zero layout shift on the host app.** When the overlay is hidden, no Nodd DOM, styles, or event listeners may affect host layout or interactivity.
 2. **Sub-200ms perceived response.** Pin layout passes (post-fetch from `CommentStore`) must complete in under 20 ms; hover highlight must track the cursor at 60 fps.
 
-The module is intentionally side-effect free with respect to the host: it renders into a portal, scopes all CSS under `[data-align-root]`, and uses `pointer-events` gating to remain transparent to the host's interactivity.
+The module is intentionally side-effect free with respect to the host: it renders into a portal, scopes all CSS under `[data-nodd-root]`, and uses `pointer-events` gating to remain transparent to the host's interactivity.
 
 ## 2. Internal Structure
 
@@ -19,7 +19,7 @@ The module is intentionally side-effect free with respect to the host: it render
 
 ```mermaid
 graph TD
-  Portal["#align-root portal<br/>position:fixed; inset:0;<br/>pointer-events:none"]
+  Portal["#nodd-root portal<br/>position:fixed; inset:0;<br/>pointer-events:none"]
   Portal --> Capture[CaptureLayer]
   Portal --> Pins[PinMarkers]
   Portal --> Hover[HoverHighlight]
@@ -35,18 +35,18 @@ A diagram of this structure is rendered in the chat (visId `module-arch-overlay`
 
 ## 3. Public Interface
 
-`OverlayRenderer` is **not** a public-API module. It is internal to the `@align/react` package and only consumed by `AlignProvider`. Its surface to the rest of the library:
+`OverlayRenderer` is **not** a public-API module. It is internal to the `nodd` package and only consumed by `NoddProvider`. Its surface to the rest of the library:
 
 | Export | Kind | Description |
 |--------|------|-------------|
-| `<OverlayRenderer />` | React component | Renders the portal contents. Reads `useAlignContext()` for store/auth/visibility/route. Returns `null` when overlay is toggled off. |
+| `<OverlayRenderer />` | React component | Renders the portal contents. Reads `useNoddContext()` for store/auth/visibility/route. Returns `null` when overlay is toggled off. |
 | `useCaptureMode()` | Hook (internal) | Exposes `{ isCapturing, beginCapture, cancelCapture }` so toolbar/sidebar UI elsewhere can trigger capture. |
 | `OverlayMessages` | Type | Discriminated union of internal events (`pin.created`, `pin.dismissed`, `thread.opened`). Emitted to `CommentStore` via injected callbacks; never exported from the package. |
 
-`OverlayRenderer` is mounted by `AlignProvider` like:
+`OverlayRenderer` is mounted by `NoddProvider` like:
 
 ```tsx
-{isVisible && createPortal(<OverlayRenderer />, alignRootEl)}
+{isVisible && createPortal(<OverlayRenderer />, noddRootEl)}
 ```
 
 ## 4. Output Contract
@@ -55,7 +55,7 @@ A diagram of this structure is rendered in the chat (visId `module-arch-overlay`
 
 | Output | Guarantee |
 |--------|-----------|
-| Portal root `<div data-align-root>` | Mounted at `document.body`; `position:fixed; inset:0; z-index:2147483000; pointer-events:none`. Removed entirely when overlay is hidden. |
+| Portal root `<div data-nodd-root>` | Mounted at `document.body`; `position:fixed; inset:0; z-index:2147483000; pointer-events:none`. Removed entirely when overlay is hidden. |
 | Pin markers | One per resolved (non-orphan) thread on the current `url_path`; positioned at `bbox.topLeft + (offsetX·w, offsetY·h)`; `pointer-events:auto` only on the marker element. |
 | Hover highlight | A single absolutely-positioned rectangle outlining the anchored element of the currently-hovered pin; `pointer-events:none`. |
 | Capture click | When `isCapturing`, the next click on the host page is intercepted, mapped to a host element via the `elementFromPoint` trick (§7), converted to a `Pin` via `DOMAnchor.create`, and emitted as `pin.created`. The original click is **not** forwarded to the host. |
@@ -82,36 +82,36 @@ src/overlay/
 │   ├── resolver.ts            ← tier-1/2/3 matching
 │   └── reanchorLoop.ts        ← ResizeObserver-driven rAF position recalculation
 ├── styles/
-│   └── overlay.css            ← all rules scoped under [data-align-root]
+│   └── overlay.css            ← all rules scoped under [data-nodd-root]
 └── __tests__/                 ← jsdom + Playwright snapshots
 ```
 
 ## 6. Layout & Z-Index
 
-The portal root is the only element Align ever appends to `document.body`:
+The portal root is the only element Nodd ever appends to `document.body`:
 
 ```css
-[data-align-root] {
+[data-nodd-root] {
   position: fixed;
   inset: 0;
   z-index: 2147483000;        /* one below max int to leave room for tooltips */
   pointer-events: none;        /* transparent to host */
   /* CSS custom properties for theming */
-  --align-accent: #4f46e5;
-  --align-pin-size: 28px;
-  --align-bg: rgba(17, 17, 17, 0.92);
-  --align-fg: #fff;
+  --nodd-accent: #4f46e5;
+  --nodd-pin-size: 28px;
+  --nodd-bg: rgba(17, 17, 17, 0.92);
+  --nodd-fg: #fff;
 }
 
-[data-align-root] .align-pin,
-[data-align-root] .align-popover,
-[data-align-root] .align-sidebar,
-[data-align-root] .align-capture-active {
+[data-nodd-root] .nodd-pin,
+[data-nodd-root] .nodd-popover,
+[data-nodd-root] .nodd-sidebar,
+[data-nodd-root] .nodd-capture-active {
   pointer-events: auto;        /* re-enable only where we need clicks */
 }
 ```
 
-All overlay CSS rules live under `[data-align-root]` to prevent any leakage. Host page styles cannot affect Align because Align uses fixed positioning and explicit values for every property that could inherit.
+All overlay CSS rules live under `[data-nodd-root]` to prevent any leakage. Host page styles cannot affect Nodd because Nodd uses fixed positioning and explicit values for every property that could inherit.
 
 ## 7. Capture-Mode Click Flow
 
@@ -162,7 +162,7 @@ When the user hovers a pin (or hovers a sidebar list item), the overlay outlines
 
 - Single `<HoverHighlight>` instance reused across all pins (one DOM node).
 - On hover: read `getBoundingClientRect()` of the resolved element; set the highlight's `transform: translate(left, top)` and `width`/`height`.
-- Style: `outline: 2px solid var(--align-accent); border-radius: 4px;` plus a subtle box-shadow halo.
+- Style: `outline: 2px solid var(--nodd-accent); border-radius: 4px;` plus a subtle box-shadow halo.
 - `pointer-events: none` so it never intercepts clicks.
 - Hidden via `display:none` when no pin is hovered.
 
@@ -231,7 +231,7 @@ export const DOMAnchor: {
 
 Walks from `target` up to `<body>`, capped at 8 ancestors. For each level, picks the first available stable identifier in this priority:
 
-1. `[data-align-id="…"]`
+1. `[data-nodd-id="…"]`
 2. `[data-testid="…"]`
 3. `#id` (only if the id is unique in the document)
 4. `[role="…"]`
@@ -316,16 +316,16 @@ function scheduleRecalc() {
 Key properties:
 - **Single observer** on `document.body` (not per-element) — cheap and catches all layout changes.
 - **rAF coalescing** — multiple resize ticks within a frame collapse into one position pass.
-- **No selector resolution** in this loop. Selector resolution is expensive and only re-run on route change (`url_path` change observed via `useAlignRoute`).
+- **No selector resolution** in this loop. Selector resolution is expensive and only re-run on route change (`url_path` change observed via `useNoddRoute`).
 - **`isConnected` guard** — if the cached element was detached (e.g. virtualized list scrolled it out), the pin is hidden until route change re-resolves.
 - Observer is torn down with the overlay; no leaks when toggled off.
 
 ## 15. CSS Scoping
 
-All styles in `styles/overlay.css` are nested under `[data-align-root]`. Rules:
+All styles in `styles/overlay.css` are nested under `[data-nodd-root]`. Rules:
 
 - No global selectors (no bare `body`, `*`, etc.).
-- No CSS resets that could inherit; every property is set explicitly on Align elements.
+- No CSS resets that could inherit; every property is set explicitly on Nodd elements.
 - Theming via CSS custom properties on the root, so consumers may override accent color / font.
 - `font-family` is set to `system-ui, -apple-system, "Segoe UI", sans-serif` to match host conventions without depending on host's font stack.
 - Animations respect `@media (prefers-reduced-motion: reduce)`.
@@ -366,6 +366,6 @@ The CSS file ships as `dist/style.css` (per DESIGN_DOC §7) and consumers import
 
 ## 19. Links
 
-- **Parent:** [Align — Architecture Design](../../DESIGN_DOC.md)
+- **Parent:** [Nodd — Architecture Design](../../DESIGN_DOC.md)
 - **Sibling modules:** `src/provider/README.md`, `src/store/README.md`, `src/auth/README.md`, `supabase/README.md` (to be created)
 - **References:** DESIGN_DOC §5 (DOM anchoring), §6 (z-index & pointer-events), §8 (sub-200ms strategy)

@@ -6,14 +6,14 @@ Related: [Architecture](../../DESIGN_DOC.md) · §8 *Sub-200ms Comment Load Stra
 
 ## 1. Purpose
 
-`CommentStore` is the single source of truth for thread and comment data inside the running Align overlay. Its responsibilities:
+`CommentStore` is the single source of truth for thread and comment data inside the running Nodd overlay. Its responsibilities:
 
 1. Render-fast, page-scoped reads (threads + comments for the current `url_path`).
 2. Optimistic create / reply / resolve / reopen with rollback on failure.
 3. Realtime convergence with the Supabase backend so multiple viewers stay in sync.
 4. Offline-tolerant first paint via an IndexedDB cache keyed by `(projectId, urlPath)`.
 
-Everything else in Align (`OverlayRenderer`, `useAlign`) reads from this store; nothing else talks to the `threads` / `comments` tables.
+Everything else in Nodd (`OverlayRenderer`, `useNodd`) reads from this store; nothing else talks to the `threads` / `comments` tables.
 
 ## 2. Internal Architecture
 
@@ -22,7 +22,7 @@ Single-responsibility, event-driven internally — three coordinated sub-compone
 ```
 +----------------------+         subscribe()         +-------------------+
 |  OverlayRenderer /   | <-------------------------- |   In-memory       |
-|  useAlign consumers  |     state snapshots         |   state (per      |
+|  useNodd consumers  |     state snapshots         |   state (per      |
 +----------------------+ --------------------------> |   url_path)       |
         ^   ^   ^                                    +---------+---------+
         |   |   |                                              |
@@ -42,7 +42,7 @@ See the architecture diagram in the session UI (`module-arch-store`) for the ful
 
 ## 3. Public API
 
-The module exports a single factory `createCommentStore(deps)` returning a `CommentStore`. The provider creates one instance per `AlignProvider` mount and disposes it on unmount.
+The module exports a single factory `createCommentStore(deps)` returning a `CommentStore`. The provider creates one instance per `NoddProvider` mount and disposes it on unmount.
 
 ```ts
 type CommentStore = {
@@ -148,7 +148,7 @@ The store exposes immutable snapshots — listeners receive a fresh `PageSnapsho
 ## 5. IndexedDB Cache
 
 ### Schema (single object store)
-- **Database:** `align-cache`
+- **Database:** `nodd-cache`
 - **Object store:** `pages`
 - **Key:** `${projectId}::${urlPath}`
 - **Value:**
@@ -234,7 +234,7 @@ Rollback restores `prevSnapshot` / `prevComments` / `prevResolved` exactly — n
 
 ## 8. Realtime Subscription
 
-One Supabase Realtime channel per `AlignProvider` mount, scoped to the project:
+One Supabase Realtime channel per `NoddProvider` mount, scoped to the project:
 
 ```ts
 const channel = supabase
@@ -286,7 +286,7 @@ On `channel.subscribe` callbacks `CHANNEL_ERROR` or `TIMED_OUT`:
 
 ## 9. Member & Profile Prefetch
 
-Per DESIGN_DOC §8 point 5, comment rendering must **never** block on user lookups. The store therefore prefetches the `project_members ⨝ profiles` set once per `AlignProvider` mount and caches it in memory for the lifetime of the session.
+Per DESIGN_DOC §8 point 5, comment rendering must **never** block on user lookups. The store therefore prefetches the `project_members ⨝ profiles` set once per `NoddProvider` mount and caches it in memory for the lifetime of the session.
 
 ### Fetch
 On factory init (before the first `subscribe(urlPath)`), the store issues:

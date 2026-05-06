@@ -1,14 +1,14 @@
 # SupabaseSchema — Module Design
 
-> SQL migrations, table definitions, indexes, views, and Row-Level Security policies for the Align backend. This module is **not bundled** with the npm package; it is shipped as source under `supabase/` and applied by consumers to their own Supabase project.
+> SQL migrations, table definitions, indexes, views, and Row-Level Security policies for the Nodd backend. This module is **not bundled** with the npm package; it is shipped as source under `supabase/` and applied by consumers to their own Supabase project.
 
-Parent: [Align — Architecture Design](../DESIGN_DOC.md) · Sibling modules: [`src/provider/`](../src/provider/README.md), [`src/auth/`](../src/auth/README.md), [`src/store/`](../src/store/README.md), [`src/overlay/`](../src/overlay/README.md)
+Parent: [Nodd — Architecture Design](../DESIGN_DOC.md) · Sibling modules: [`src/provider/`](../src/provider/README.md), [`src/auth/`](../src/auth/README.md), [`src/store/`](../src/store/README.md), [`src/overlay/`](../src/overlay/README.md)
 
 ## 1. Purpose
 
-`SupabaseSchema` is the source of truth for Align's persistent state. It owns every Postgres object Align relies on — `projects`, `project_members`, `threads`, `comments`, the `profiles` view, indexes that make the page-scoped query fast, and the Row-Level Security (RLS) policies that enforce membership server-side. The module is consumed by `AuthClient` and `CommentStore` indirectly via `@supabase/supabase-js` (against the host's Supabase project) and is the foundation of the architecture's "BaaS backend, no custom server" decision.
+`SupabaseSchema` is the source of truth for Nodd's persistent state. It owns every Postgres object Nodd relies on — `projects`, `project_members`, `threads`, `comments`, the `profiles` view, indexes that make the page-scoped query fast, and the Row-Level Security (RLS) policies that enforce membership server-side. The module is consumed by `AuthClient` and `CommentStore` indirectly via `@supabase/supabase-js` (against the host's Supabase project) and is the foundation of the architecture's "BaaS backend, no custom server" decision.
 
-This module is intentionally separate from the React library: it ships as plain SQL so that consumers can audit, apply, and evolve it with standard Supabase tooling (`supabase db push`) without depending on Align's runtime code.
+This module is intentionally separate from the React library: it ships as plain SQL so that consumers can audit, apply, and evolve it with standard Supabase tooling (`supabase db push`) without depending on Nodd's runtime code.
 
 ## 2. Internal Structure
 
@@ -46,7 +46,7 @@ This module exposes a **SQL surface**, not a JS/TS surface. Its consumers are:
 
 | Object | Kind | Purpose |
 |--------|------|---------|
-| `projects` | table | One row per Align project (prototype/site). |
+| `projects` | table | One row per Nodd project (prototype/site). |
 | `project_members` | table | Membership: which `auth.users` belong to which project, with role. |
 | `threads` | table | Top-level comment thread; carries the DOM-anchor `pin` jsonb and `url_path`. |
 | `comments` | table | Individual messages within a thread; `mentions[]` references `auth.users.id`. |
@@ -68,7 +68,7 @@ Both channels rely on the standard Supabase `supabase_realtime` publication; mig
 
 | Surface | Guarantee |
 |---------|-----------|
-| RLS coverage | Every Align-owned table has RLS `ENABLED` and at least one policy per CRUD verb. No table is reachable via the anon key without a matching policy. |
+| RLS coverage | Every Nodd-owned table has RLS `ENABLED` and at least one policy per CRUD verb. No table is reachable via the anon key without a matching policy. |
 | Member-gated reads | A user can only `SELECT` threads/comments belonging to a project they are a member of (`is_project_member(threads.project_id)`). |
 | Self-only writes | `comments.author_id` and `threads.created_by` must equal `auth.uid()` on `INSERT`. `comments.body` is mutable only by its author. |
 | Cascade deletes | Deleting a `project` cascades to `project_members`, `threads`, `comments`. Deleting a `thread` cascades to its `comments`. |
@@ -84,11 +84,11 @@ supabase/
 ├── config.toml                          ← supabase CLI project config
 ├── seed.sql                             ← dev fixtures (one project, two members, sample threads)
 └── migrations/
-    └── 0001_align_init.sql              ← v1 baseline: tables, view, helper, RLS policies,
+    └── 0001_nodd_init.sql              ← v1 baseline: tables, view, helper, RLS policies,
                                           indexes, realtime publication (single file)
 ```
 
-`0001_align_init.sql` is the **v1 baseline** applied as one file by fresh consumers — internally it's organised in sections (tables → view + helper → RLS policies → indexes → realtime). Treat it as frozen post-release: any post-v1 schema change ships as a new numbered file (`0002_*.sql`, `0003_*.sql`, …) so existing consumers can migrate forward incrementally.
+`0001_nodd_init.sql` is the **v1 baseline** applied as one file by fresh consumers — internally it's organised in sections (tables → view + helper → RLS policies → indexes → realtime). Treat it as frozen post-release: any post-v1 schema change ships as a new numbered file (`0002_*.sql`, `0003_*.sql`, …) so existing consumers can migrate forward incrementally.
 
 ## 6. Tables (canonical definitions)
 
@@ -331,6 +331,6 @@ Seed data exists **for local development and demos only** — it is never applie
 
 ## 17. Links
 
-- **Parent:** [Align — Architecture Design](../DESIGN_DOC.md)
+- **Parent:** [Nodd — Architecture Design](../DESIGN_DOC.md)
 - **Sibling modules:** [`src/provider/README.md`](../src/provider/README.md), [`src/auth/README.md`](../src/auth/README.md), [`src/store/README.md`](../src/store/README.md), [`src/overlay/README.md`](../src/overlay/README.md)
 - **References:** DESIGN_DOC §3 (Data Model), §4 (Auth Flow), §8 (Sub-200ms Strategy), §11 (Open Questions)

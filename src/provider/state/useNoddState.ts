@@ -1,8 +1,8 @@
 import { useContext } from 'react';
-import { AlignStateContext } from './AlignStateContext';
+import { NoddStateContext } from './NoddStateContext';
 
-export function useAlignState(): readonly string[] {
-  return useContext(AlignStateContext);
+export function useNoddState(): readonly string[] {
+  return useContext(NoddStateContext);
 }
 
 export function stackToKey(stack: readonly string[]): string {

@@ -83,18 +83,18 @@ export function Sidebar({
     <Dialog.Root open={open} onOpenChange={o => { if (!o) onClose(); }} modal={false}>
       <Dialog.Portal container={container}>
         <Dialog.Content
-          className="align-sidebar"
+          className="nodd-sidebar"
           aria-describedby={undefined}
           onOpenAutoFocus={e => e.preventDefault()}
           onInteractOutside={e => e.preventDefault()}
           onPointerDownOutside={e => e.preventDefault()}
         >
-          <div className="align-sidebar-header">
-            <Dialog.Title className="align-sidebar-title">Comments</Dialog.Title>
-            <div className="align-sidebar-header-actions">
+          <div className="nodd-sidebar-header">
+            <Dialog.Title className="nodd-sidebar-title">Comments</Dialog.Title>
+            <div className="nodd-sidebar-header-actions">
               {onSignOut && (
                 <button
-                  className="align-btn align-btn--close"
+                  className="nodd-btn nodd-btn--close"
                   onClick={onSignOut}
                   aria-label={userName ? `Sign out ${userName}` : 'Sign out'}
                   title={userName ? `Sign out ${userName}` : 'Sign out'}
@@ -103,7 +103,7 @@ export function Sidebar({
                 </button>
               )}
               <Dialog.Close asChild>
-                <button className="align-btn align-btn--close" aria-label="Close sidebar">
+                <button className="nodd-btn nodd-btn--close" aria-label="Close sidebar">
                   <Close size={16} />
                 </button>
               </Dialog.Close>
@@ -111,19 +111,19 @@ export function Sidebar({
           </div>
 
           <Tabs.Root value={activeTab} onValueChange={handleTabChange}>
-            <Tabs.List className="align-sidebar-tabs">
-              <Tabs.Trigger value="open" className="align-sidebar-tab">
+            <Tabs.List className="nodd-sidebar-tabs">
+              <Tabs.Trigger value="open" className="nodd-sidebar-tab">
                 Open ({threadsOpen.length})
               </Tabs.Trigger>
-              <Tabs.Trigger value="resolved" className="align-sidebar-tab">
+              <Tabs.Trigger value="resolved" className="nodd-sidebar-tab">
                 Resolved
               </Tabs.Trigger>
             </Tabs.List>
 
-            <Tabs.Content value="open" className="align-sidebar-tab-content" forceMount>
+            <Tabs.Content value="open" className="nodd-sidebar-tab-content" forceMount>
               {activeTab === 'open' && (
-                <ScrollArea.Root className="align-sidebar-list-scroll">
-                  <ScrollArea.Viewport className="align-sidebar-list">
+                <ScrollArea.Root className="nodd-sidebar-list-scroll">
+                  <ScrollArea.Viewport className="nodd-sidebar-list">
                     <SidebarSection
                       heading="On this page"
                       items={threadsOpen}
@@ -146,13 +146,13 @@ export function Sidebar({
                       />
                     ))}
                   </ScrollArea.Viewport>
-                  <ScrollArea.Scrollbar className="align-scrollbar" orientation="vertical">
-                    <ScrollArea.Thumb className="align-scrollbar-thumb" />
+                  <ScrollArea.Scrollbar className="nodd-scrollbar" orientation="vertical">
+                    <ScrollArea.Thumb className="nodd-scrollbar-thumb" />
                   </ScrollArea.Scrollbar>
                 </ScrollArea.Root>
               )}
             </Tabs.Content>
-            <Tabs.Content value="resolved" className="align-sidebar-tab-content" forceMount>
+            <Tabs.Content value="resolved" className="nodd-sidebar-tab-content" forceMount>
               {activeTab === 'resolved' && (
                 <SidebarList
                   items={items}
@@ -187,20 +187,20 @@ function SidebarList({
   onItemHover: (threadId: string | null) => void;
 }) {
   return (
-    <ScrollArea.Root className="align-sidebar-list-scroll">
-      <ScrollArea.Viewport className="align-sidebar-list">
+    <ScrollArea.Root className="nodd-sidebar-list-scroll">
+      <ScrollArea.Viewport className="nodd-sidebar-list">
         {loading && (
-          <div className="align-sidebar-loading">Loading...</div>
+          <div className="nodd-sidebar-loading">Loading...</div>
         )}
         {items.length === 0 && !loading && (
-          <div className="align-sidebar-empty">{emptyMessage}</div>
+          <div className="nodd-sidebar-empty">{emptyMessage}</div>
         )}
         {items.map(item => (
           <SidebarItem key={item.id} item={item} formatTime={formatTime} onItemOpen={onItemOpen} onItemHover={onItemHover} />
         ))}
       </ScrollArea.Viewport>
-      <ScrollArea.Scrollbar className="align-scrollbar" orientation="vertical">
-        <ScrollArea.Thumb className="align-scrollbar-thumb" />
+      <ScrollArea.Scrollbar className="nodd-scrollbar" orientation="vertical">
+        <ScrollArea.Thumb className="nodd-scrollbar-thumb" />
       </ScrollArea.Scrollbar>
     </ScrollArea.Root>
   );
@@ -227,10 +227,10 @@ function SidebarSection({
 }) {
   if (items.length === 0 && !emptyMessage) return null;
   return (
-    <div className={`align-sidebar-section${muted ? ' align-sidebar-section--muted' : ''}`}>
-      {heading && <div className="align-sidebar-section-heading">{heading}</div>}
+    <div className={`nodd-sidebar-section${muted ? ' nodd-sidebar-section--muted' : ''}`}>
+      {heading && <div className="nodd-sidebar-section-heading">{heading}</div>}
       {items.length === 0 ? (
-        <div className="align-sidebar-empty">{emptyMessage}</div>
+        <div className="nodd-sidebar-empty">{emptyMessage}</div>
       ) : (
         items.map(item => (
           <SidebarItem
@@ -266,7 +266,7 @@ function SidebarItem({
   };
   return (
     <div
-      className={`align-sidebar-item${item.unread ? ' align-sidebar-item--unread' : ''}`}
+      className={`nodd-sidebar-item${item.unread ? ' nodd-sidebar-item--unread' : ''}`}
       onClick={handleOpen}
       onMouseEnter={() => onItemHover(item.id)}
       onMouseLeave={() => onItemHover(null)}
@@ -274,20 +274,20 @@ function SidebarItem({
       tabIndex={0}
       onKeyDown={e => e.key === 'Enter' && handleOpen()}
     >
-      <div className="align-sidebar-item-header">
+      <div className="nodd-sidebar-item-header">
         <UserAvatar
           name={item.authorName}
           avatarUrl={item.authorAvatarUrl}
           size={20}
-          className="align-avatar--sm"
+          className="nodd-avatar--sm"
         />
-        <span className="align-sidebar-item-author">{item.authorName}</span>
-        <span className="align-sidebar-item-time">{formatTime(item.createdAt)}</span>
+        <span className="nodd-sidebar-item-author">{item.authorName}</span>
+        <span className="nodd-sidebar-item-time">{formatTime(item.createdAt)}</span>
       </div>
-      <div className="align-sidebar-item-snippet">{item.snippet}</div>
+      <div className="nodd-sidebar-item-snippet">{item.snippet}</div>
       {item.replyCount > 0 && (
-        <div className="align-sidebar-item-footer">
-          <span className="align-sidebar-item-replies">{item.replyCount} {item.replyCount === 1 ? 'reply' : 'replies'}</span>
+        <div className="nodd-sidebar-item-footer">
+          <span className="nodd-sidebar-item-replies">{item.replyCount} {item.replyCount === 1 ? 'reply' : 'replies'}</span>
         </div>
       )}
     </div>

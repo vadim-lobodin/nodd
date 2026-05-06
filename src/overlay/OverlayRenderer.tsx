@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { Add, Menu } from '@carbon/icons-react';
-import { useAlignContext } from '../provider/AlignContext';
+import { useNoddContext } from '../provider/NoddContext';
 import { PinMarker } from './components/PinMarker';
 import { CaptureLayer } from './components/CaptureLayer';
 import { ThreadPopover } from './components/ThreadPopover';
@@ -18,7 +18,7 @@ function resolveSystemTheme(): 'light' | 'dark' {
 }
 
 export function OverlayRenderer() {
-  const ctx = useAlignContext();
+  const ctx = useNoddContext();
   const { user, urlPath, store, signIn, signOut, theme, pinContainer } = ctx;
   const [snapshot, setSnapshot] = useState<PageSnapshot | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -37,10 +37,10 @@ export function OverlayRenderer() {
 
   // Get portal root and set theme attribute
   useEffect(() => {
-    const el = document.getElementById('align-root');
+    const el = document.getElementById('nodd-root');
     portalRootRef.current = el;
     if (el) {
-      el.setAttribute('data-align-theme', effectiveTheme);
+      el.setAttribute('data-nodd-theme', effectiveTheme);
     }
   }, [effectiveTheme]);
 
@@ -63,7 +63,7 @@ export function OverlayRenderer() {
     const handler = () => {
       const el = portalRootRef.current;
       if (el) {
-        el.setAttribute('data-align-theme', mq.matches ? 'dark' : 'light');
+        el.setAttribute('data-nodd-theme', mq.matches ? 'dark' : 'light');
       }
     };
     mq.addEventListener('change', handler);
@@ -128,7 +128,7 @@ export function OverlayRenderer() {
         // Update ref for popover positioning
         pinPositionsRef.current.set(id, { x, y });
         // Imperative DOM update — no React re-render
-        const el = document.querySelector(`[data-align-pin-id="${id}"]`) as HTMLElement | null;
+        const el = document.querySelector(`[data-nodd-pin-id="${id}"]`) as HTMLElement | null;
         if (el) el.style.transform = `translate(${x}px, ${y}px)`;
       },
       onDOMMutation: () => setDomVersion(v => v + 1),
@@ -248,24 +248,24 @@ export function OverlayRenderer() {
   // Auth gate — email only
   if (!user) {
     return (
-      <div className="align-auth-gate">
+      <div className="nodd-auth-gate">
         {authSent ? (
-          <div className="align-auth-sent">
+          <div className="nodd-auth-sent">
             <p>Check your email for a sign-in link.</p>
-            <button className="align-btn" onClick={() => setAuthSent(false)}>Try again</button>
+            <button className="nodd-btn" onClick={() => setAuthSent(false)}>Try again</button>
           </div>
         ) : (
-          <div className="align-auth-form">
+          <div className="nodd-auth-form">
             <p>Sign in to leave comments</p>
             <input
-              className="align-auth-input"
+              className="nodd-auth-input"
               type="email"
               placeholder="you@example.com"
               value={authEmail}
               onChange={e => setAuthEmail(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSignIn()}
             />
-            <button className="align-btn align-btn--primary" onClick={handleSignIn}>
+            <button className="nodd-btn nodd-btn--primary" onClick={handleSignIn}>
               Send magic link
             </button>
           </div>
@@ -277,11 +277,11 @@ export function OverlayRenderer() {
   // First-time name prompt
   if (ctx.auth.needsDisplayName) {
     return (
-      <div className="align-auth-gate">
-        <div className="align-auth-form">
+      <div className="nodd-auth-gate">
+        <div className="nodd-auth-form">
           <p>Welcome! What should we call you?</p>
           <input
-            className="align-auth-input"
+            className="nodd-auth-input"
             type="text"
             placeholder="Your name"
             value={onboardName}
@@ -289,7 +289,7 @@ export function OverlayRenderer() {
             onKeyDown={e => e.key === 'Enter' && handleSetName()}
             autoFocus
           />
-          <button className="align-btn align-btn--primary" onClick={handleSetName}>
+          <button className="nodd-btn nodd-btn--primary" onClick={handleSetName}>
             Continue
           </button>
         </div>
@@ -303,16 +303,16 @@ export function OverlayRenderer() {
   return (
     <Tooltip.Provider delayDuration={400}>
       {/* Toolbar */}
-      <div className={`align-toolbar${sidebarOpen ? ' align-toolbar--shifted' : ''}`}>
+      <div className={`nodd-toolbar${sidebarOpen ? ' nodd-toolbar--shifted' : ''}`}>
         <button
-          className={`align-btn align-btn--capture${isCapturing ? ' align-btn--active' : ''}`}
+          className={`nodd-btn nodd-btn--capture${isCapturing ? ' nodd-btn--active' : ''}`}
           onClick={() => setIsCapturing(!isCapturing)}
           aria-label="Add comment"
         >
           <Add size={20} />
         </button>
         <button
-          className="align-btn align-btn--sidebar"
+          className="nodd-btn nodd-btn--sidebar"
           onClick={() => setSidebarOpen(!sidebarOpen)}
           aria-label="Open comments"
         >

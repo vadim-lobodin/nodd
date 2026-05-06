@@ -2,9 +2,9 @@ import { createContext, useContext } from 'react';
 import type { AuthClient, CurrentUser } from '../auth';
 import type { CommentStore } from '../store';
 
-export type AlignTheme = 'light' | 'dark' | 'system';
+export type NoddTheme = 'light' | 'dark' | 'system';
 
-export type AlignContextValue = {
+export type NoddContextValue = {
   projectId: string;
   user: CurrentUser | null;
   signIn: (email: string) => Promise<void>;
@@ -12,8 +12,8 @@ export type AlignContextValue = {
   isVisible: boolean;
   toggleOverlay: () => void;
   setVisible: (v: boolean) => void;
-  theme: AlignTheme;
-  setTheme: (theme: AlignTheme) => void;
+  theme: NoddTheme;
+  setTheme: (theme: NoddTheme) => void;
   urlPath: string;
   auth: AuthClient;
   store: CommentStore;
@@ -24,18 +24,18 @@ const defaultSignIn = async () => {};
 const defaultSignOut = async () => {};
 const noop = () => {};
 
-export const AlignContext = createContext<AlignContextValue | null>(null);
+export const NoddContext = createContext<NoddContextValue | null>(null);
 
-export function useAlign(): {
+export function useNodd(): {
   user: CurrentUser | null;
   signIn: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   toggleOverlay: () => void;
   isVisible: boolean;
-  theme: AlignTheme;
-  setTheme: (theme: AlignTheme) => void;
+  theme: NoddTheme;
+  setTheme: (theme: NoddTheme) => void;
 } {
-  const ctx = useContext(AlignContext);
+  const ctx = useContext(NoddContext);
   if (!ctx) {
     return {
       user: null,
@@ -58,10 +58,10 @@ export function useAlign(): {
   };
 }
 
-export function useAlignContext(): AlignContextValue {
-  const ctx = useContext(AlignContext);
+export function useNoddContext(): NoddContextValue {
+  const ctx = useContext(NoddContext);
   if (!ctx) {
-    throw new Error('useAlignContext must be used within an AlignProvider');
+    throw new Error('useNoddContext must be used within an NoddProvider');
   }
   return ctx;
 }

@@ -1,8 +1,8 @@
-# Installing Align
+# Installing Nodd
 
-Add Align (Figma-like comments) to a React app. The CLI does end-to-end Supabase setup; a manual path is documented at the bottom for non-CLI environments.
+Add Nodd (Figma-like comments) to a React app. The CLI does end-to-end Supabase setup; a manual path is documented at the bottom for non-CLI environments.
 
-Align uses **your own** Supabase project as the backend — there is no Align-hosted server. Magic-link sign-in, comment data, and Row-Level Security policies all live in a Supabase project that you control.
+Nodd uses **your own** Supabase project as the backend — there is no Nodd-hosted server. Magic-link sign-in, comment data, and Row-Level Security policies all live in a Supabase project that you control.
 
 **Time:** ~2 minutes with the CLI. The only human step is generating a Supabase Personal Access Token (one click, one-time per account).
 
@@ -19,7 +19,7 @@ Align uses **your own** Supabase project as the backend — there is no Align-ho
 ## Step 1 — Install the package
 
 ```bash
-npm install @align/react
+npm install nodd
 ```
 
 Peer deps (`react`, `react-dom`) must already be present.
@@ -28,7 +28,7 @@ Peer deps (`react`, `react-dom`) must already be present.
 
 ## Step 2 — Generate a Supabase access token
 
-**One-time per Supabase account.** Open <https://supabase.com/dashboard/account/tokens>, click **Generate new token**, name it (e.g. "align-cli"), and copy the token.
+**One-time per Supabase account.** Open <https://supabase.com/dashboard/account/tokens>, click **Generate new token**, name it (e.g. "nodd-cli"), and copy the token.
 
 Export it for the next step:
 
@@ -43,21 +43,21 @@ The token is only used by the CLI — it is **not** stored on disk and not embed
 ## Step 3 — Run `init`
 
 ```bash
-npx @align/react init
+npx nodd init
 ```
 
 This will:
 
 1. Create a Supabase project (free tier, in the org you pick).
 2. Wait for it to become healthy (~1 min).
-3. Apply the Align migrations (`0001_align_init.sql`, `0002_bootstrap.sql`).
+3. Apply the Nodd migrations (`0001_nodd_init.sql`, `0002_bootstrap.sql`).
 4. Configure auth redirect URLs for `http://localhost:5173` and `http://localhost:3000`.
 5. Generate a `projectId` UUID.
 6. Detect your framework (Vite/Next/CRA) and write `.env.local` with the right env-var prefix.
-7. Save `.align/config.json` (project ref + metadata; **no secrets**).
-8. Print a ready-to-paste `<AlignProvider>` snippet.
+7. Save `.nodd/config.json` (project ref + metadata; **no secrets**).
+8. Print a ready-to-paste `<NoddProvider>` snippet.
 
-Add `.env.local` and `.align/` to `.gitignore` if your project doesn't already.
+Add `.env.local` and `.nodd/` to `.gitignore` if your project doesn't already.
 
 ---
 
@@ -66,18 +66,18 @@ Add `.env.local` and `.align/` to `.gitignore` if your project doesn't already.
 Paste the snippet `init` printed into your app root, e.g. `src/main.tsx` (Vite) or `app/layout.tsx` (Next.js):
 
 ```tsx
-import { AlignProvider } from '@align/react';
-import '@align/react/style.css';
+import { NoddProvider } from 'nodd';
+import 'nodd/style.css';
 
-<AlignProvider
-  projectId={import.meta.env.VITE_ALIGN_PROJECT_ID}
-  supabaseUrl={import.meta.env.VITE_ALIGN_SUPABASE_URL}
-  supabaseAnonKey={import.meta.env.VITE_ALIGN_SUPABASE_ANON_KEY}
+<NoddProvider
+  projectId={import.meta.env.VITE_NODD_PROJECT_ID}
+  supabaseUrl={import.meta.env.VITE_NODD_SUPABASE_URL}
+  supabaseAnonKey={import.meta.env.VITE_NODD_SUPABASE_ANON_KEY}
   bootstrapAdminEmail="you@example.com"
   openMembership
 >
   <App />
-</AlignProvider>
+</NoddProvider>
 ```
 
 (Adjust `import.meta.env.VITE_…` → `process.env.NEXT_PUBLIC_…` for Next.js, etc. — `init` prints the right form for your framework.)
@@ -93,13 +93,13 @@ import '@align/react/style.css';
 After your first deploy, register the production origin:
 
 ```bash
-npx @align/react add-origin https://myapp.vercel.app
+npx nodd add-origin https://myapp.vercel.app
 ```
 
 For preview deploys with rotating URLs (Vercel/Netlify), use a wildcard:
 
 ```bash
-npx @align/react add-origin "https://*.vercel.app"
+npx nodd add-origin "https://*.vercel.app"
 ```
 
 The CLI patches Supabase's auth redirect allowlist via the Management API. Without it, magic-link emails will redirect to `localhost` and fail.
@@ -108,7 +108,7 @@ The CLI patches Supabase's auth redirect allowlist via the Management API. Witho
 
 ## Verifying the install
 
-1. Load the app. The Align toolbar (two icon buttons) should appear bottom-right.
+1. Load the app. The Nodd toolbar (two icon buttons) should appear bottom-right.
 2. Click the menu button → enter your admin email → check inbox → click the magic link. You should land back on the app, signed in.
 3. Click `+`, then click somewhere on the page. A thread popover opens.
 4. Type a comment, send it. A pin appears at the click location.
@@ -126,9 +126,9 @@ Common errors in the browser console:
 
 | Situation | Command |
 |---|---|
-| Apply newer migrations / re-fix auth on existing project | `npx @align/react init --reconfigure` |
-| Throw away config and create a fresh project | `npx @align/react init --force` |
-| Add a new deploy origin | `npx @align/react add-origin <url>` |
+| Apply newer migrations / re-fix auth on existing project | `npx nodd init --reconfigure` |
+| Throw away config and create a fresh project | `npx nodd init --force` |
+| Add a new deploy origin | `npx nodd add-origin <url>` |
 
 ---
 
@@ -136,23 +136,23 @@ Common errors in the browser console:
 
 | Concern | Answer |
 |---|---|
-| Where does the data live? | Your Supabase project. Align maintainers never see it. |
+| Where does the data live? | Your Supabase project. Nodd maintainers never see it. |
 | Is the anon key really safe in client code? | Yes — it's the same model Supabase recommends for any web app. RLS enforces access on the server. |
-| Can I use Align with multiple prototypes? | Yes — run `init` per app; each gets its own Supabase project + `projectId`. |
+| Can I use Nodd with multiple prototypes? | Yes — run `init` per app; each gets its own Supabase project + `projectId`. |
 | How do I add teammates? | Pass `openMembership` — anyone who signs in becomes a member. For closed prototypes, insert one `project_members` row per teammate. |
-| How do I uninstall? | `npm uninstall @align/react`. Drop the migrations or leave them — tables are isolated. The host app is unaffected when the provider is unmounted. |
+| How do I uninstall? | `npm uninstall nodd`. Drop the migrations or leave them — tables are isolated. The host app is unaffected when the provider is unmounted. |
 
 ---
 
 ## Manual setup (without the CLI)
 
-Use this only if you can't run `npx @align/react init` (e.g. agent-restricted environment, shared Supabase project, or self-hosted Supabase).
+Use this only if you can't run `npx nodd init` (e.g. agent-restricted environment, shared Supabase project, or self-hosted Supabase).
 
 1. **Create a Supabase project** at <https://supabase.com/dashboard>. Copy the **Project URL** and **anon public key** from Settings → API.
-2. **Apply migrations** via the SQL editor: paste `node_modules/@align/react/supabase/migrations/0001_align_init.sql`, then `0002_bootstrap.sql`. Run each.
+2. **Apply migrations** via the SQL editor: paste `node_modules/nodd/supabase/migrations/0001_nodd_init.sql`, then `0002_bootstrap.sql`. Run each.
 3. **Configure auth** at Authentication → URL Configuration: set **Site URL** to `http://localhost:5173`, add your local + deploy origins to **Redirect URLs**.
 4. **Generate a `projectId` UUID** (any tool — `uuidgen`, `crypto.randomUUID()` in the browser console).
-5. **Wire up `<AlignProvider>`** with the four values from steps 1+4 plus `bootstrapAdminEmail` and (optionally) `openMembership`. Sign in once — the bootstrap RPC creates the project row and your membership automatically.
+5. **Wire up `<NoddProvider>`** with the four values from steps 1+4 plus `bootstrapAdminEmail` and (optionally) `openMembership`. Sign in once — the bootstrap RPC creates the project row and your membership automatically.
 6. **For each new deploy origin**, add it to the Redirect URLs allowlist in the dashboard.
 
 The CLI does all of the above with one command — prefer it whenever possible.

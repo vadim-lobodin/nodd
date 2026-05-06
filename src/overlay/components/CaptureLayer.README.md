@@ -1,12 +1,12 @@
 # CaptureLayer
 
-> Implements click-to-pin capture for Align. Renders a transparent, full-viewport interceptor that, on the next user click, hit-tests the **host** DOM (not the overlay), normalises the click into a `Pin`, and emits `pin.created` — without forwarding the click to the host.
+> Implements click-to-pin capture for Nodd. Renders a transparent, full-viewport interceptor that, on the next user click, hit-tests the **host** DOM (not the overlay), normalises the click into a `Pin`, and emits `pin.created` — without forwarding the click to the host.
 
 Related: [OverlayRenderer](../README.md) · [DOM Anchoring](../anchoring/README.md) · [Architecture Design — §6 Overlay Z-Index & Pointer-Events](../../../DESIGN_DOC.md#6-overlay-z-index--pointer-events-strategy)
 
 ## 1. Purpose
 
-When the user clicks "Add comment" in the toolbar, Align must capture the **next** click on the host page and convert it into a pin attached to the underlying host element. This is non-trivial because the Align overlay sits on top of the host DOM at `z-index: 2147483000` — naïvely calling `document.elementFromPoint(x, y)` returns the overlay itself, never the host element the user actually clicked.
+When the user clicks "Add comment" in the toolbar, Nodd must capture the **next** click on the host page and convert it into a pin attached to the underlying host element. This is non-trivial because the Nodd overlay sits on top of the host DOM at `z-index: 2147483000` — naïvely calling `document.elementFromPoint(x, y)` returns the overlay itself, never the host element the user actually clicked.
 
 `CaptureLayer` solves this with a **single-frame visibility toggle + `requestAnimationFrame` + `elementFromPoint`** trick. It also owns the visual affordances of capture mode (crosshair cursor, faint backdrop) and its cancel paths (click on empty area, `Esc`).
 
@@ -16,7 +16,7 @@ It exists as a dedicated sub-module because the algorithm is **non-obvious enoug
 
 **Complex algorithm.** The hit-test trick is the only mechanism that lets a non-shadow-DOM overlay coexist with reliable click-to-pin on the host. Getting it wrong produces three failure modes:
 
-1. **Hits the overlay** — pin gets attached to the Align portal instead of a host element.
+1. **Hits the overlay** — pin gets attached to the Nodd portal instead of a host element.
 2. **Reflow flicker** — using `display:none` instead of `visibility:hidden` triggers a relayout pass on every capture click.
 3. **Click leaks** — the original click reaches the host page, navigating away or activating buttons unexpectedly.
 
@@ -31,7 +31,7 @@ beginCapture(onResolve):
   state.isCapturing = true
   state.onResolve   = onResolve
   set portalRoot.style.cursor = 'crosshair'
-  set portalRoot.dataset.alignCapture = 'true'   // CSS hook for backdrop + pointer-events:auto
+  set portalRoot.dataset.noddCapture = 'true'   // CSS hook for backdrop + pointer-events:auto
   add document keydown listener (Esc)
   add document click listener (capture phase, once)
 
@@ -66,14 +66,14 @@ teardown():
   state.onResolve   = null
   remove keydown + click listeners
   reset portalRoot.style.cursor
-  delete portalRoot.dataset.alignCapture
+  delete portalRoot.dataset.noddCapture
 ```
 
 ### 3.1 Why each step
 
 | Step | Reason |
 |------|--------|
-| `pointer-events: auto` on portal during capture (via `[data-align-capture] [data-align-root]` CSS) | The overlay must intercept the click. Without this the click would pass through to the host and the host would react before we hit-test. |
+| `pointer-events: auto` on portal during capture (via `[data-nodd-capture] [data-nodd-root]` CSS) | The overlay must intercept the click. Without this the click would pass through to the host and the host would react before we hit-test. |
 | `addEventListener('click', ..., { capture: true, once: true })` | Capture phase guarantees we receive the event before any host handler. `once:true` auto-cleans the listener if the click resolves; otherwise `teardown()` removes it. |
 | `preventDefault()` + `stopImmediatePropagation()` | `stopImmediatePropagation` (not just `stopPropagation`) ensures any other capture-phase listeners on `document` also do not fire. |
 | `visibility: hidden` (not `display: none`) | Preserves layout — no reflow, no flicker. The browser's hit-testing uses the most recent paint, which we trigger by waiting one frame. |
@@ -146,8 +146,8 @@ No refs to live DOM elements are stored beyond the portal root, which is read fr
 
 Per the design decision (§9 below), capture mode shows:
 
-1. **Crosshair cursor** on the entire viewport via `[data-align-capture] [data-align-root] { cursor: crosshair !important; }` and on the host body too via a top-level `cursor: crosshair` on `<html>` while capturing — this avoids the cursor flickering between crosshair and default as the user moves between overlay-capture-area and host elements.
-2. **Faint backdrop** (`background: rgba(0,0,0,0.04)`) on the portal root while `[data-align-capture]` is set — signals "you're commenting" without obscuring page content. Disabled when `prefers-reduced-motion: reduce` (no fade transition).
+1. **Crosshair cursor** on the entire viewport via `[data-nodd-capture] [data-nodd-root] { cursor: crosshair !important; }` and on the host body too via a top-level `cursor: crosshair` on `<html>` while capturing — this avoids the cursor flickering between crosshair and default as the user moves between overlay-capture-area and host elements.
+2. **Faint backdrop** (`background: rgba(0,0,0,0.04)`) on the portal root while `[data-nodd-capture]` is set — signals "you're commenting" without obscuring page content. Disabled when `prefers-reduced-motion: reduce` (no fade transition).
 3. **Top toast** with text `"Click anywhere to leave a comment — press Esc to cancel"` appearing in the top-center of the viewport. Anchored to the portal root, `pointer-events: none`. Slide-in 120 ms; respects reduced motion.
 
 ## 8. File Layout

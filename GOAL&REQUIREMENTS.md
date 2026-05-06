@@ -1,9 +1,9 @@
-# Align
+# Nodd
 
 > Figma-like comments on top of live React prototypes
 
 ## Overview
-Align is a drop-in React library that lets teams pin contextual comments directly on top of live, interactive prototypes — like Figma's commenting layer, but for vibecoded or hand-coded React apps. It targets developers, designers, and stakeholders who review coded prototypes and need a way to leave spatial feedback without switching to a separate tool or taking screenshots.
+Nodd is a drop-in React library that lets teams pin contextual comments directly on top of live, interactive prototypes — like Figma's commenting layer, but for vibecoded or hand-coded React apps. It targets developers, designers, and stakeholders who review coded prototypes and need a way to leave spatial feedback without switching to a separate tool or taking screenshots.
 
 ## Problem Statement
 Developers and stakeholders reviewing vibecoded React prototypes have no way to leave feedback directly on the live UI. Instead, they screenshot the prototype, annotate the image in a separate tool, and paste it into Slack or a ticket. This workflow breaks spatial context — the comment is disconnected from the interactive element it refers to — and creates a trail of stale screenshots that don't update as the prototype evolves.
@@ -23,15 +23,15 @@ A designer finishes a vibecoded React prototype and shares the preview link with
 ## Goals
 - **Reduce** the feedback loop from "screenshot → annotate → paste in Slack" to a single click-and-comment on the live UI
 - **Enable** product teams to review prototypes asynchronously with spatially-anchored comments, removing the need for sync meetings
-- **Reduce** Align setup to under 5 minutes for any existing React project — one install, one component, done
+- **Reduce** Nodd setup to under 5 minutes for any existing React project — one install, one component, done
 
 ## Non-Goals
-- Not a design tool — Align does not provide drawing, annotation, or visual editing capabilities
+- Not a design tool — Nodd does not provide drawing, annotation, or visual editing capabilities
 - Not a project management tool — no task boards, assignments, or sprint tracking
 - Not a general-purpose collaboration platform — scoped specifically to spatial feedback on coded prototypes
 
 ## Definition of Done
-- A developer can install Align into an existing React project with a single package install and one wrapper component
+- A developer can install Nodd into an existing React project with a single package install and one wrapper component
 - Users authenticate (e.g. via a simple login or invite link) so comments are attributed to a named person
 - Any authenticated user can click on an element in the live UI and pin a text comment at that location
 - Comments persist across page reloads and are visible to all authenticated users viewing the same prototype
@@ -50,7 +50,7 @@ A designer finishes a vibecoded React prototype and shares the preview link with
 - **Highlight target element on hover** — when hovering a pin, highlight the DOM element it's attached to — *removes ambiguity about what a comment refers to*
 - **Simple auth (email or magic link)** — users sign in with email or open an invite link, no OAuth setup required — *comments must be attributed to people*
 - **User avatars & names on comments** — each comment shows who left it with name and avatar — *identity is required for accountability in team review*
-- **npm install + `<AlignProvider>` wrapper** — install via npm, wrap your app in one component, done — *5-minute setup goal demands minimal integration surface*
+- **npm install + `<NoddProvider>` wrapper** — install via npm, wrap your app in one component, done — *5-minute setup goal demands minimal integration surface*
 
 ### Out of v1
 - Real-time presence (live cursors / who's online)
@@ -60,7 +60,7 @@ A designer finishes a vibecoded React prototype and shares the preview link with
 - Self-hosted backend option
 
 ## Non-Functional Requirements
-- **Zero layout shift** — Align must never affect the host app's layout, styles, or interactivity when the overlay is hidden
+- **Zero layout shift** — Nodd must never affect the host app's layout, styles, or interactivity when the overlay is hidden
 - **Works with any React 18+ app** — must support React 18+ including Next.js, Vite, CRA — no framework-specific dependencies
 - **Sub-200ms comment load** — comments for a page must load within 200ms so the overlay feels instant
 
@@ -68,7 +68,7 @@ A designer finishes a vibecoded React prototype and shares the preview link with
 | Aspect | Choice | Rationale |
 |--------|--------|-----------|
 | Language | TypeScript | Type safety for a library consumed by other projects; better DX with autocomplete |
-| Client Library | React 18+ | Target platform — Align is a React component library |
+| Client Library | React 18+ | Target platform — Nodd is a React component library |
 | Backend / DB | Supabase (Postgres) | Auth (magic links), real-time subscriptions, and Postgres in one hosted service — fastest path to working backend with minimal ops |
 | Auth | Supabase Auth (magic link / email) | Zero-config for end users; no OAuth app setup required |
 | Package Distribution | npm | Standard distribution channel for React libraries |

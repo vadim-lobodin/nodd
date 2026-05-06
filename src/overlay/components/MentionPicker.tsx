@@ -159,7 +159,7 @@ export function MentionPicker({
 
   return (
     <div
-      className="align-mention-picker"
+      className="nodd-mention-picker"
       role="listbox"
       ref={listRef}
       style={{
@@ -174,7 +174,7 @@ export function MentionPicker({
           key={member.id}
           role="option"
           aria-selected={i === highlightedIndex}
-          className={`align-mention-item ${i === highlightedIndex ? 'align-mention-item--active' : ''}`}
+          className={`nodd-mention-item ${i === highlightedIndex ? 'nodd-mention-item--active' : ''}`}
           onMouseDown={(e) => {
             e.preventDefault();
             selectMember(member);
@@ -185,11 +185,11 @@ export function MentionPicker({
             name={member.display_name || member.email}
             avatarUrl={member.avatar_url}
             size={24}
-            className="align-mention-avatar"
+            className="nodd-mention-avatar"
           />
-          <span className="align-mention-name">{member.display_name || member.email}</span>
+          <span className="nodd-mention-name">{member.display_name || member.email}</span>
           {member.display_name && (
-            <span className="align-mention-email">{member.email}</span>
+            <span className="nodd-mention-email">{member.email}</span>
           )}
         </div>
       ))}

@@ -1,7 +1,7 @@
 import React, { useContext, useMemo, type ReactNode } from 'react';
-import { AlignStateContext } from './AlignStateContext';
+import { NoddStateContext } from './NoddStateContext';
 
-export type AlignStateProps = {
+export type NoddStateProps = {
   name: string;
   children: ReactNode;
 };
@@ -10,8 +10,8 @@ function sanitize(name: string): string {
   return name.trim().replace(/\//g, '-');
 }
 
-export function AlignState({ name, children }: AlignStateProps) {
-  const parent = useContext(AlignStateContext);
+export function NoddState({ name, children }: NoddStateProps) {
+  const parent = useContext(NoddStateContext);
   const segment = sanitize(name);
   const value = useMemo(() => {
     if (!segment) return parent;
@@ -19,11 +19,11 @@ export function AlignState({ name, children }: AlignStateProps) {
   }, [parent, segment]);
 
   return (
-    <AlignStateContext.Provider value={value}>
-      <div data-align-state={segment || undefined} style={{ display: 'contents' }}>
+    <NoddStateContext.Provider value={value}>
+      <div data-nodd-state={segment || undefined} style={{ display: 'contents' }}>
         {children}
       </div>
-    </AlignStateContext.Provider>
+    </NoddStateContext.Provider>
   );
 }
 
@@ -31,8 +31,8 @@ export function getStateStackForElement(el: Element | null): string[] {
   const stack: string[] = [];
   let cur: Element | null = el;
   while (cur) {
-    if (cur.hasAttribute('data-align-state')) {
-      const v = cur.getAttribute('data-align-state');
+    if (cur.hasAttribute('data-nodd-state')) {
+      const v = cur.getAttribute('data-nodd-state');
       if (v) stack.unshift(v);
     }
     cur = cur.parentElement;

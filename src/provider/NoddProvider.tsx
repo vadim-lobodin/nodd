@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { AlignContext, type AlignContextValue, type AlignTheme } from './AlignContext';
+import { NoddContext, type NoddContextValue, type NoddTheme } from './NoddContext';
 import { AuthClient, type CurrentUser } from '../auth';
 import { createCommentStore, type CommentStore } from '../store';
 import { OverlayRenderer } from '../overlay';
@@ -27,7 +27,7 @@ if (isBrowser() && window.location.hash) {
 }
 
 // Global singleton cache — survives HMR, Strict Mode, and module re-evaluation
-const CACHE_KEY = '__align_client_cache__' as const;
+const CACHE_KEY = '__nodd_client_cache__' as const;
 type ClientEntry = { supabase: SupabaseClient; auth: AuthClient };
 
 function getOrCreateClients(supabaseUrl: string, supabaseAnonKey: string): ClientEntry {
@@ -40,7 +40,7 @@ function getOrCreateClients(supabaseUrl: string, supabaseAnonKey: string): Clien
   if (!entry) {
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
-        storageKey: 'align-auth',
+        storageKey: 'nodd-auth',
         detectSessionInUrl: true,
         flowType: 'implicit',
         // No-op lock: Supabase's default `navigator.locks` coordination
@@ -58,15 +58,15 @@ function getOrCreateClients(supabaseUrl: string, supabaseAnonKey: string): Clien
   return entry;
 }
 
-export type AlignProviderProps = {
+export type NoddProviderProps = {
   projectId: string;
   supabaseUrl: string;
   supabaseAnonKey: string;
-  theme?: AlignTheme;
+  theme?: NoddTheme;
   /**
    * If set, when a user signs in whose email matches this value, the project
    * row (using `projectId`) and an admin `project_members` row for the user
-   * are auto-created via the `align_bootstrap_project` RPC. Removes the
+   * are auto-created via the `nodd_bootstrap_project` RPC. Removes the
    * manual SQL setup step for the project owner. Server enforces email match
    * and first-come-first-served: subsequent strangers cannot claim.
    */
@@ -78,7 +78,7 @@ export type AlignProviderProps = {
   projectName?: string;
   /**
    * If true, any authenticated user (not just the admin) is auto-added to
-   * `project_members` as `member` on first sign-in via the `align_join_project`
+   * `project_members` as `member` on first sign-in via the `nodd_join_project`
    * RPC. Use this for prototypes you want to share openly — anyone with the
    * deploy URL who can receive the magic-link email becomes a commenter.
    * Without this flag, only the bootstrap admin is auto-membered; teammates
@@ -88,7 +88,7 @@ export type AlignProviderProps = {
   children: ReactNode;
 };
 
-export function AlignProvider({
+export function NoddProvider({
   projectId,
   supabaseUrl,
   supabaseAnonKey,
@@ -97,12 +97,12 @@ export function AlignProvider({
   projectName = 'My Prototype',
   openMembership = false,
   children,
-}: AlignProviderProps) {
+}: NoddProviderProps) {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [isVisible, setIsVisible] = useState(true);
   const [urlPath, setUrlPath] = useState('/');
   const [portalEl, setPortalEl] = useState<HTMLElement | null>(null);
-  const [theme, setTheme] = useState<AlignTheme>(initialTheme);
+  const [theme, setTheme] = useState<NoddTheme>(initialTheme);
 
   // Module-level singleton — safe across Strict Mode double-render
   const { supabase, auth } = getOrCreateClients(supabaseUrl, supabaseAnonKey);
@@ -158,16 +158,16 @@ export function AlignProvider({
 
     onboardedRef.current = true;
     const call = isAdmin
-      ? supabase.rpc('align_bootstrap_project', {
+      ? supabase.rpc('nodd_bootstrap_project', {
           _project_id: projectId,
           _project_name: projectName,
           _expected_email: bootstrapAdminEmail,
         })
-      : supabase.rpc('align_join_project', { _project_id: projectId });
+      : supabase.rpc('nodd_join_project', { _project_id: projectId });
 
     void call.then(({ error }) => {
       if (error) {
-        console.warn('[align] onboard failed:', error.message);
+        console.warn('[nodd] onboard failed:', error.message);
         onboardedRef.current = false;
       }
     });
@@ -195,16 +195,16 @@ export function AlignProvider({
     if (!isBrowser()) return;
     // Pin container: position:absolute, scrolls with document
     const pinEl = document.createElement('div');
-    pinEl.id = 'align-pins';
-    pinEl.setAttribute('data-align-pin-container', '');
-    pinEl.setAttribute('data-align-root', '');
+    pinEl.id = 'nodd-pins';
+    pinEl.setAttribute('data-nodd-pin-container', '');
+    pinEl.setAttribute('data-nodd-root', '');
     document.body.appendChild(pinEl);
     setPinContainerEl(pinEl);
 
     // Overlay root: position:fixed, for toolbar/sidebar/popover/capture
     const el = document.createElement('div');
-    el.id = 'align-root';
-    el.setAttribute('data-align-root', '');
+    el.id = 'nodd-root';
+    el.setAttribute('data-nodd-root', '');
     document.body.appendChild(el);
     setPortalEl(el);
     return () => {
@@ -215,8 +215,8 @@ export function AlignProvider({
 
   // Sync theme attribute on portal elements
   useEffect(() => {
-    if (portalEl) portalEl.setAttribute('data-align-theme', resolvedTheme);
-    if (pinContainerEl) pinContainerEl.setAttribute('data-align-theme', resolvedTheme);
+    if (portalEl) portalEl.setAttribute('data-nodd-theme', resolvedTheme);
+    if (pinContainerEl) pinContainerEl.setAttribute('data-nodd-theme', resolvedTheme);
   }, [portalEl, pinContainerEl, resolvedTheme]);
 
   const toggleOverlay = useCallback(() => setIsVisible(v => !v), []);
@@ -230,7 +230,7 @@ export function AlignProvider({
 
   const store = storeRef.current;
 
-  const ctxValue: AlignContextValue | null = useMemo(() => {
+  const ctxValue: NoddContextValue | null = useMemo(() => {
     if (!store) return null;
     return {
       projectId,
@@ -254,9 +254,9 @@ export function AlignProvider({
   }
 
   return (
-    <AlignContext.Provider value={ctxValue}>
+    <NoddContext.Provider value={ctxValue}>
       {children}
       {portalEl && isVisible ? createPortal(<OverlayRenderer />, portalEl) : null}
-    </AlignContext.Provider>
+    </NoddContext.Provider>
   );
 }

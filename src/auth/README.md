@@ -1,12 +1,12 @@
 # AuthClient — Module Design
 
-> Thin wrapper around Supabase Auth that owns Align's identity surface: magic-link sign-in, sign-out, session restoration from `localStorage`, and a single observable of the current user. It is the only module that talks to `supabase.auth`; every other module in Align consumes identity exclusively through this client.
+> Thin wrapper around Supabase Auth that owns Nodd's identity surface: magic-link sign-in, sign-out, session restoration from `localStorage`, and a single observable of the current user. It is the only module that talks to `supabase.auth`; every other module in Nodd consumes identity exclusively through this client.
 
 Parent: [Architecture Design](../../DESIGN_DOC.md) · Sibling modules: [`src/provider/`](../provider/README.md), [`src/store/`](../store/README.md), [`src/overlay/`](../overlay/README.md)
 
 ## 1. Purpose
 
-Align uses **passwordless magic-link auth via Supabase** (architecture doc §4). `AuthClient` exists so the rest of the library never imports `supabase.auth` directly. It encapsulates four concerns:
+Nodd uses **passwordless magic-link auth via Supabase** (architecture doc §4). `AuthClient` exists so the rest of the library never imports `supabase.auth` directly. It encapsulates four concerns:
 
 1. Triggering a magic-link email for a given address (`signIn`).
 2. Tearing down the active session (`signOut`).
@@ -17,7 +17,7 @@ The module is intentionally tiny — it owns no UI, no routing, and no business 
 
 ## 2. Public Interface
 
-The module exports one class and one user shape. No React, no hooks — those live in `AlignProvider`.
+The module exports one class and one user shape. No React, no hooks — those live in `NoddProvider`.
 
 ```ts
 export type CurrentUser = {
@@ -69,9 +69,9 @@ await supabase.auth.signInWithOtp({
 
 | Option | Value | Reason |
 |--------|-------|--------|
-| `emailRedirectTo` | `window.location.href` (read at call time) | The user must land back on the *exact* page they were viewing when they triggered sign-in — Align is a pin-on-a-prototype tool, and bouncing the user to `/` would break the flow. Reading at call time (not at module construction) means programmatic navigations after import are reflected. |
+| `emailRedirectTo` | `window.location.href` (read at call time) | The user must land back on the *exact* page they were viewing when they triggered sign-in — Nodd is a pin-on-a-prototype tool, and bouncing the user to `/` would break the flow. Reading at call time (not at module construction) means programmatic navigations after import are reflected. |
 | `shouldCreateUser` | (default `true`) | Magic-link is the only sign-up path in v1; first-time users are auto-provisioned in `auth.users`. The `project_members` row is created out-of-band by an invite flow (architecture §11, future work). |
-| OTP token | not used | Align does not present a "type the 6-digit code" UI; the email link is the sole credential. |
+| OTP token | not used | Nodd does not present a "type the 6-digit code" UI; the email link is the sole credential. |
 
 The redirect URL must be present in the Supabase project's **Allowed Redirect URLs** list — this is a host-app deployment concern, documented in `supabase/README.md`, not enforced by this module.
 
@@ -90,14 +90,14 @@ The redirect URL must be present in the Supabase project's **Allowed Redirect UR
 
 ### SSR safety
 
-The Supabase client touches `localStorage` lazily — only when its auth methods are invoked. `AuthClient` consumers (specifically `AlignProvider`) only call `restoreSession` from inside `useEffect` (provider §4 lifecycle), so the module is SSR-safe by composition: no method on `AuthClient` is reachable during server render.
+The Supabase client touches `localStorage` lazily — only when its auth methods are invoked. `AuthClient` consumers (specifically `NoddProvider`) only call `restoreSession` from inside `useEffect` (provider §4 lifecycle), so the module is SSR-safe by composition: no method on `AuthClient` is reachable during server render.
 
 ## 5. Magic-Link Round-Trip
 
 ```mermaid
 sequenceDiagram
   participant User
-  participant App as Host App<br/>(AlignProvider)
+  participant App as Host App<br/>(NoddProvider)
   participant Auth as AuthClient
   participant SB as Supabase Auth
   participant LS as localStorage
@@ -150,7 +150,7 @@ There is **no separate `isLoading` flag** on this module. The provider treats "h
 Unauthenticated state composition (with other modules) follows architecture §4:
 
 - **Read-only pins** if the project is marked `public_read` (out of v1, listed as future work). Until then, `CommentStore` will refuse to subscribe and `OverlayRenderer` shows the sign-in prompt.
-- **No mutations** — `signIn`/`signOut` are the only calls a `null` user can make. The provider's `useAlign()` hook is unaffected; all other operations route through `OverlayRenderer`'s gated UI.
+- **No mutations** — `signIn`/`signOut` are the only calls a `null` user can make. The provider's `useNodd()` hook is unaffected; all other operations route through `OverlayRenderer`'s gated UI.
 - **No realtime channel** — `CommentStore` waits for a non-null user before opening its Supabase channel, so we do not consume Realtime quota for anonymous viewers.
 
 The provider observes `onAuthChange` and stores the result in React state; rendering "signed in" vs "signed out" UI is therefore a pure function of the latest emitted value.
@@ -169,7 +169,7 @@ src/auth/
 
 | Decision | Rationale |
 |----------|-----------|
-| Wrap Supabase Auth in a class, not export the client directly | Keeps the dependency direction clean (architecture §2) — only `AuthClient` knows about `supabase.auth`. The rest of Align can be unit-tested with a fake `AuthClient`. |
+| Wrap Supabase Auth in a class, not export the client directly | Keeps the dependency direction clean (architecture §2) — only `AuthClient` knows about `supabase.auth`. The rest of Nodd can be unit-tested with a fake `AuthClient`. |
 | `emailRedirectTo: window.location.href` | Magic-link must return the user to the exact prototype URL where they triggered sign-in; otherwise the pin context is lost. Read at call time so SPA navigations are honoured. |
 | Delegate persistence to the Supabase client's localStorage adapter | Avoids dual writes and the consistency bugs they cause. The library does not need any auth state Supabase doesn't already expose. |
 | Single `CurrentUser` shape, `null` for signed-out | Trivial to consume and trivial to test. No `Result`/`Either` ergonomics needed — magic-link errors all surface through promise rejections on `signIn`. |
@@ -188,7 +188,7 @@ src/auth/
 ## 10. Related
 
 - Architecture doc §4 (Auth Flow), §3 (Data Model — `auth.users`, `profiles`), §8 (Sub-200ms Load — profile prefetch), §9 (Design Principles).
-- [`src/provider/README.md`](../provider/README.md) — owns the `AuthClient` instance, calls `restoreSession`, subscribes to `onAuthChange`, surfaces `signIn`/`signOut` through `useAlign()`.
+- [`src/provider/README.md`](../provider/README.md) — owns the `AuthClient` instance, calls `restoreSession`, subscribes to `onAuthChange`, surfaces `signIn`/`signOut` through `useNodd()`.
 - [`src/store/README.md`](../store/README.md) — receives the resolved `CurrentUser` from the provider and stamps `author_id` on optimistic mutations.
 - [`src/overlay/README.md`](../overlay/README.md) — renders the sign-in form, the "check your inbox" state, and the avatar strip; never imports `AuthClient` directly.
 - [`supabase/README.md`](../../supabase/README.md) — owns the `profiles` view, RLS policies, and the Allowed Redirect URLs configuration that magic-link depends on.

@@ -2,18 +2,18 @@
 
 > `@`-mention autocomplete listbox attached to the reply input inside `ThreadPopover`. Tracks the caret, filters and ranks project members, and inserts a sentinel-encoded mention token that downstream renderers turn into a chip.
 
-Related: [OverlayRenderer](../README.md) · [Align — Architecture Design](../../../DESIGN_DOC.md) · [CommentStore](../../store/README.md)
+Related: [OverlayRenderer](../README.md) · [Nodd — Architecture Design](../../../DESIGN_DOC.md) · [CommentStore](../../store/README.md)
 
 ## 1. Purpose
 
-`MentionPicker` is the only place in Align where users address other people. It must:
+`MentionPicker` is the only place in Nodd where users address other people. It must:
 
 1. **Pop open exactly when the user means to mention someone** — typing `@` at a word boundary, never inside an email or mid-word.
 2. **Stay glued to the caret** as the user types, scrolls inside the textarea, or resizes the popover.
 3. **Surface the right person fast** — match-quality first, recent collaborators as a tiebreaker, with sub-50 ms keystroke-to-render.
 4. **Produce a faithful, machine-readable mention token** that survives a round-trip through Postgres and renders as a chip everywhere.
 
-It is **internal** to the `@align/react` package, used today only by `ThreadPopover` but designed for reuse by any future Align input that accepts mentions (inline edit of an existing comment, sidebar quick-reply, etc.).
+It is **internal** to the `nodd` package, used today only by `ThreadPopover` but designed for reuse by any future Nodd input that accepts mentions (inline edit of an existing comment, sidebar quick-reply, etc.).
 
 ## 2. Why this is a separate sub-module
 
@@ -76,11 +76,11 @@ The picker exposes **no imperative API**. State (open/closed, highlighted index,
 
 | Output | Guarantee |
 |--------|-----------|
-| Listbox DOM | Rendered into the same Align portal as `ThreadPopover`; ARIA `role="listbox"` with `aria-activedescendant`. `pointer-events: auto`. |
+| Listbox DOM | Rendered into the same Nodd portal as `ThreadPopover`; ARIA `role="listbox"` with `aria-activedescendant`. `pointer-events: auto`. |
 | Position | Listbox top-left = caret rect bottom-left + 4 px; flips above the caret if it would overflow the viewport. |
 | `onSelect` | Fired exactly once per user pick. The replacement string ends with a single space so the user can keep typing. |
 | `onDismiss` | Fired exactly once when the picker transitions from open → closed without a selection. |
-| Side effects | None on the host page. The picker reads `inputRef.current.getBoundingClientRect()` and (for textarea) appends/removes a single hidden mirror `<div>` under `[data-align-root]`; no host-DOM mutation. |
+| Side effects | None on the host page. The picker reads `inputRef.current.getBoundingClientRect()` and (for textarea) appends/removes a single hidden mirror `<div>` under `[data-nodd-root]`; no host-DOM mutation. |
 
 ## 5. Internal Structure
 
@@ -130,7 +130,7 @@ The picker must place the listbox at the caret. Browsers expose no direct API fo
 ### 7.1 `<textarea>` — hidden mirror
 
 ```
-1. Lazily create one <div data-align-mention-mirror> under [data-align-root].
+1. Lazily create one <div data-nodd-mention-mirror> under [data-nodd-root].
 2. Copy all computed styles that affect text layout from the textarea:
    font, letter-spacing, line-height, padding, border, box-sizing, white-space:pre-wrap,
    word-wrap:break-word, width (set to textarea client width).
@@ -280,7 +280,7 @@ Read-only renderers (comment list inside `ThreadPopover`, sidebar snippet) repla
 | **Picker is fully controlled (`value` + `caret` props)** | The host owns input state. The picker is then trivially testable with a fake input and works identically for textarea and contenteditable hosts. |
 | **`onSelect` returns a replacement, picker never mutates the input** | Keeps the picker reusable across input implementations (uncontrolled textarea, controlled textarea, contenteditable). The host applies the edit in whatever way matches its state model. |
 | **Trigger detection requires a non-query char (or BOS) before `@`** | This is what excludes mid-email `@`s (`vadim@align.dev`) and accidental triggers in URLs/handles already in the text. |
-| **Listbox in the same Align portal as `ThreadPopover`** | One CSS scope, one z-index, one outside-click handler. The picker positions itself in viewport coordinates, so portal nesting is irrelevant. |
+| **Listbox in the same Nodd portal as `ThreadPopover`** | One CSS scope, one z-index, one outside-click handler. The picker positions itself in viewport coordinates, so portal nesting is irrelevant. |
 
 ## 13. File Layout
 

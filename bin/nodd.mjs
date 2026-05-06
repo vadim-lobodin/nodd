@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Align CLI: end-to-end Supabase setup for the @align/react package.
+// Nodd CLI: end-to-end Supabase setup for the nodd package.
 //
 // Commands:
 //   init              create+configure a Supabase project, apply migrations,
-//                     write .env.local + .align/config.json, print snippet.
+//                     write .env.local + .nodd/config.json, print snippet.
 //   add-origin <url>  append a deploy URL to the auth redirect allowlist.
 //
 // Auth: reads SUPABASE_ACCESS_TOKEN env var. Generate at
@@ -25,15 +25,15 @@ import { stdin, stdout } from 'node:process';
 const API = 'https://api.supabase.com/v1';
 const PKG_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MIGRATIONS_DIR = join(PKG_DIR, 'supabase', 'migrations');
-const MIGRATION_FILES = ['0001_align_init.sql', '0002_bootstrap.sql'];
+const MIGRATION_FILES = ['0001_nodd_init.sql', '0002_bootstrap.sql'];
 const DEFAULT_REGION = 'us-east-1';
 const DEFAULT_ALLOWLIST = ['http://localhost:5173', 'http://localhost:3000'];
 
 // ---------- I/O helpers ----------
 
-const log = msg => console.log(`[align] ${msg}`);
+const log = msg => console.log(`[nodd] ${msg}`);
 const fail = msg => {
-  console.error(`[align] error: ${msg}`);
+  console.error(`[nodd] error: ${msg}`);
   process.exit(1);
 };
 
@@ -61,17 +61,17 @@ async function api(path, { method = 'GET', token, body } = {}) {
 function getToken() {
   const token = process.env.SUPABASE_ACCESS_TOKEN;
   if (token) return token;
-  console.error('[align] SUPABASE_ACCESS_TOKEN env var not set.');
-  console.error('[align] Generate a Personal Access Token at:');
-  console.error('[align]   https://supabase.com/dashboard/account/tokens');
-  console.error('[align] Then re-run:');
-  console.error('[align]   SUPABASE_ACCESS_TOKEN=<your-token> npx @align/react init');
+  console.error('[nodd] SUPABASE_ACCESS_TOKEN env var not set.');
+  console.error('[nodd] Generate a Personal Access Token at:');
+  console.error('[nodd]   https://supabase.com/dashboard/account/tokens');
+  console.error('[nodd] Then re-run:');
+  console.error('[nodd]   SUPABASE_ACCESS_TOKEN=<your-token> npx nodd init');
   process.exit(1);
 }
 
 async function ask(rl, question, defaultValue = '') {
   const suffix = defaultValue ? ` (${defaultValue})` : '';
-  const ans = (await rl.question(`[align] ${question}${suffix}: `)).trim();
+  const ans = (await rl.question(`[nodd] ${question}${suffix}: `)).trim();
   return ans || defaultValue;
 }
 
@@ -117,7 +117,7 @@ function readGitEmail() {
 async function pollHealthy(token, ref) {
   const start = Date.now();
   const timeout = 5 * 60 * 1000;
-  process.stdout.write('[align] waiting for project to provision');
+  process.stdout.write('[nodd] waiting for project to provision');
   while (Date.now() - start < timeout) {
     process.stdout.write('.');
     const proj = await api(`/projects/${ref}`, { token });
@@ -195,9 +195,9 @@ async function configureAuth(token, ref, extraOrigins = []) {
 function writeEnvLocal(cwd, prefix, projectId, ref, anonKey, force) {
   const path = join(cwd, '.env.local');
   const entries = [
-    [`${prefix}ALIGN_PROJECT_ID`, projectId],
-    [`${prefix}ALIGN_SUPABASE_URL`, `https://${ref}.supabase.co`],
-    [`${prefix}ALIGN_SUPABASE_ANON_KEY`, anonKey],
+    [`${prefix}NODD_PROJECT_ID`, projectId],
+    [`${prefix}NODD_SUPABASE_URL`, `https://${ref}.supabase.co`],
+    [`${prefix}NODD_SUPABASE_ANON_KEY`, anonKey],
   ];
   let content = existsSync(path) ? readFileSync(path, 'utf8') : '';
   for (const [k, v] of entries) {
@@ -218,13 +218,13 @@ function writeEnvLocal(cwd, prefix, projectId, ref, anonKey, force) {
 }
 
 function writeConfig(cwd, data) {
-  const dir = join(cwd, '.align');
+  const dir = join(cwd, '.nodd');
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, 'config.json'),
     JSON.stringify(data, null, 2) + '\n',
   );
-  log(`✓ wrote .align/config.json`);
+  log(`✓ wrote .nodd/config.json`);
 }
 
 // ---------- snippet ----------
@@ -248,18 +248,18 @@ function snippet({ framework, prefix, adminEmail, openMembership }) {
   const openLine = openMembership ? '      openMembership' : '';
 
   return [
-    `import { AlignProvider } from '@align/react';`,
-    `import '@align/react/style.css';`,
+    `import { NoddProvider } from 'nodd';`,
+    `import 'nodd/style.css';`,
     ``,
-    `<AlignProvider`,
-    `      projectId={${refExpr('ALIGN_PROJECT_ID')}}`,
-    `      supabaseUrl={${refExpr('ALIGN_SUPABASE_URL')}}`,
-    `      supabaseAnonKey={${refExpr('ALIGN_SUPABASE_ANON_KEY')}}`,
+    `<NoddProvider`,
+    `      projectId={${refExpr('NODD_PROJECT_ID')}}`,
+    `      supabaseUrl={${refExpr('NODD_SUPABASE_URL')}}`,
+    `      supabaseAnonKey={${refExpr('NODD_SUPABASE_ANON_KEY')}}`,
     adminLine,
     openLine,
     `>`,
     `  <App />`,
-    `</AlignProvider>`,
+    `</NoddProvider>`,
   ]
     .filter(l => l !== '')
     .join('\n');
@@ -280,12 +280,12 @@ function parseFlags(argv) {
 async function cmdInit(argv) {
   const { flags } = parseFlags(argv);
   const cwd = process.cwd();
-  const configPath = join(cwd, '.align', 'config.json');
+  const configPath = join(cwd, '.nodd', 'config.json');
   const token = getToken();
 
   // Reconfigure path: re-apply migrations + auth on existing project
   if (flags.reconfigure) {
-    if (!existsSync(configPath)) fail('no .align/config.json — run `init` first without --reconfigure');
+    if (!existsSync(configPath)) fail('no .nodd/config.json — run `init` first without --reconfigure');
     const existing = JSON.parse(readFileSync(configPath, 'utf8'));
     log(`reconfiguring project ${existing.projectRef}`);
     await applyMigrations(token, existing.projectRef);
@@ -384,18 +384,18 @@ async function cmdInit(argv) {
   console.log('');
   log('next:');
   log('  1. start your dev server, sign in with the admin email');
-  log(`  2. after deploy: SUPABASE_ACCESS_TOKEN=… npx @align/react add-origin https://yourapp.example.com`);
+  log(`  2. after deploy: SUPABASE_ACCESS_TOKEN=… npx nodd add-origin https://yourapp.example.com`);
 }
 
 async function cmdAddOrigin(argv) {
   const { positional } = parseFlags(argv);
   const url = positional[0];
-  if (!url) fail('usage: align add-origin <url>');
+  if (!url) fail('usage: nodd add-origin <url>');
 
   const cwd = process.cwd();
-  const configPath = join(cwd, '.align', 'config.json');
+  const configPath = join(cwd, '.nodd', 'config.json');
   if (!existsSync(configPath)) {
-    fail('no .align/config.json — run `npx @align/react init` first');
+    fail('no .nodd/config.json — run `npx nodd init` first');
   }
   const cfg = JSON.parse(readFileSync(configPath, 'utf8'));
   const token = getToken();
@@ -420,14 +420,14 @@ async function cmdAddOrigin(argv) {
 }
 
 function printHelp() {
-  console.log(`Align CLI
+  console.log(`Nodd CLI
 
 Usage:
-  npx @align/react init [--reconfigure] [--force]
+  npx nodd init [--reconfigure] [--force]
       Create a Supabase project, apply migrations, configure auth,
-      and write .env.local + .align/config.json.
+      and write .env.local + .nodd/config.json.
 
-  npx @align/react add-origin <url>
+  npx nodd add-origin <url>
       Append a deploy URL to the auth redirect allowlist.
 
 Auth:
@@ -455,7 +455,7 @@ try {
       printHelp();
       break;
     default:
-      console.error(`[align] unknown command: ${cmd}`);
+      console.error(`[nodd] unknown command: ${cmd}`);
       printHelp();
       process.exit(1);
   }

@@ -103,8 +103,8 @@ export function PinMarker({
     <>
       <button
         ref={buttonRef}
-        className={`align-pin align-pin--${pinState}${hovered ? ' align-pin--hovered' : ''}`}
-        data-align-pin-id={threadId}
+        className={`nodd-pin nodd-pin--${pinState}${hovered ? ' nodd-pin--hovered' : ''}`}
+        data-nodd-pin-id={threadId}
         style={{ transform: `translate(${x}px, ${y}px)` }}
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
@@ -114,17 +114,17 @@ export function PinMarker({
       />
       {showTooltip && tooltipPos && tooltipContainer && createPortal(
         <div
-          className="align-pin-tooltip"
+          className="nodd-pin-tooltip"
           style={{ position: 'fixed', left: tooltipPos.left, top: tooltipPos.top, width: TOOLTIP_WIDTH, pointerEvents: 'none' }}
         >
-          <div className="align-pin-tooltip-bubble">
+          <div className="nodd-pin-tooltip-bubble">
             {authorName && (
-              <div className="align-pin-tooltip-header">
+              <div className="nodd-pin-tooltip-header">
                 <UserAvatar name={authorName} avatarUrl={authorAvatarUrl} size={18} />
-                <span className="align-pin-tooltip-author">{authorName}</span>
+                <span className="nodd-pin-tooltip-author">{authorName}</span>
               </div>
             )}
-            {snippet && <p className="align-pin-tooltip-body">{snippet}</p>}
+            {snippet && <p className="nodd-pin-tooltip-body">{snippet}</p>}
           </div>
         </div>,
         tooltipContainer,

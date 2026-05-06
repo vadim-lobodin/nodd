@@ -1,6 +1,6 @@
 # DOM Anchoring
 
-> The algorithmic core of OverlayRenderer: how Align converts a click on a host element into a durable `Pin`, and how it later resolves that `Pin` back to a live `Element` after page reloads, markup churn, and layout reflow.
+> The algorithmic core of OverlayRenderer: how Nodd converts a click on a host element into a durable `Pin`, and how it later resolves that `Pin` back to a live `Element` after page reloads, markup churn, and layout reflow.
 
 Parent: [OverlayRenderer](../README.md) · See also: [Architecture §5](../../../DESIGN_DOC.md#5-dom-anchoring-strategy)
 
@@ -8,7 +8,7 @@ Parent: [OverlayRenderer](../README.md) · See also: [Architecture §5](../../..
 
 The `anchoring/` sub-module owns every line of code that touches *element identity*. It is intentionally pulled out of the rest of `overlay/` because:
 
-1. **It is the single hardest correctness problem in Align.** Pins must survive React rerenders, CSS-in-JS rebuilds (hashed class names), minor markup edits, and viewport resizes. Getting this wrong silently loses user comments — the worst possible failure mode for a feedback tool.
+1. **It is the single hardest correctness problem in Nodd.** Pins must survive React rerenders, CSS-in-JS rebuilds (hashed class names), minor markup edits, and viewport resizes. Getting this wrong silently loses user comments — the worst possible failure mode for a feedback tool.
 2. **It is performance-critical.** Selector resolution runs once per pin per route change, and naive implementations can spend tens of milliseconds in `querySelectorAll`. The reposition loop runs every animation frame during resize and must complete in well under one frame for *all* pins combined.
 3. **It is reusable.** Both `CaptureLayer` (pin creation) and `PinMarker` (pin rendering) depend on it; isolating it behind a stable interface keeps those components dumb.
 
@@ -48,7 +48,7 @@ For a given element, the builder picks the **first** of these that exists on the
 
 | Priority | Form | Why |
 |----------|------|-----|
-| 1 | `[data-align-id="…"]` | Reserved for hosts to opt in to permanent anchors. Highest stability — never auto-generated. |
+| 1 | `[data-nodd-id="…"]` | Reserved for hosts to opt in to permanent anchors. Highest stability — never auto-generated. |
 | 2 | `[data-testid="…"]` | Common convention; testing teams already maintain these as stable. |
 | 3 | `#id` (only if globally unique) | HTML `id` is semantically unique but in practice reused; we verify with `document.querySelectorAll('#x').length === 1` before trusting it. |
 | 4 | `[role="…"]` | ARIA roles are semantic and rarely change. Used as a discriminator alongside tag, not as a sole identifier. |
@@ -274,7 +274,7 @@ Three properties matter:
 
 ### 7.2 Route-change invalidation
 
-The `useAlignRoute` hook (in the runtime) detects `url_path` changes and triggers:
+The `useNoddRoute` hook (in the runtime) detects `url_path` changes and triggers:
 
 ```ts
 function onRouteChange(newPath) {
@@ -356,5 +356,5 @@ Tests live in `src/overlay/__tests__/anchoring/` (jsdom unit tests for selector 
 ## 13. Links
 
 - **Parent module:** [OverlayRenderer](../README.md) — see §13–14 for how this submodule is consumed.
-- **Architecture:** [Align — Architecture Design §5](../../../DESIGN_DOC.md#5-dom-anchoring-strategy) — the original 3-tier design statement.
+- **Architecture:** [Nodd — Architecture Design §5](../../../DESIGN_DOC.md#5-dom-anchoring-strategy) — the original 3-tier design statement.
 - **Schema:** [Architecture §3](../../../DESIGN_DOC.md#3-data-model) — the `Pin` jsonb shape stored in `threads.pin`.
