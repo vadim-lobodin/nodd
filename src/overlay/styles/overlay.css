@@ -1,8 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap');
 
 /* ==========================================================================
-   Nodd — glass / spatial design system
-   Dark-first glassmorphism with light-mode adaptation.
+   Nodd — spatial design system
+   Dark-first with light-mode adaptation.
    All selectors scoped under [data-nodd-root] / [data-nodd-pin-container].
    ========================================================================== */
 
@@ -29,13 +29,13 @@
   --nodd-input: 220 13% 91%;
   --nodd-ring: 243 75% 59%;
 
-  /* Glass material — light: nearly opaque so content stays readable */
-  --nodd-glass-surface: rgba(255, 255, 255, 0.78);
-  --nodd-glass-gradient: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.7) 100%);
-  --nodd-glass-border: rgba(20, 20, 30, 0.08);
-  --nodd-glass-highlight: rgba(255, 255, 255, 0.6);
-  --nodd-glass-tint: rgba(20, 20, 30, 0.02);
-  --nodd-blur: blur(20px) saturate(1.4);
+  /* Surface material — light */
+  --nodd-glass-surface: hsl(var(--nodd-card));
+  --nodd-glass-gradient: none;
+  --nodd-glass-border: hsl(var(--nodd-border));
+  --nodd-glass-highlight: transparent;
+  --nodd-glass-tint: transparent;
+  --nodd-blur: none;
 
   /* Geometry — generous radii, reference uses 24/16/8 */
   --nodd-radius-sm: 8px;
@@ -77,13 +77,13 @@
   --nodd-input: 0 0% 16%;
   --nodd-ring: 243 88% 72%;
 
-  /* Glass material — dark: white at low opacity, the reference recipe */
-  --nodd-glass-surface: rgba(18, 18, 20, 0.6);
-  --nodd-glass-gradient: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%);
-  --nodd-glass-border: rgba(255, 255, 255, 0.08);
-  --nodd-glass-highlight: rgba(255, 255, 255, 0.05);
-  --nodd-glass-tint: rgba(255, 255, 255, 0.02);
-  --nodd-blur: blur(28px) saturate(1.4);
+  /* Surface material — dark */
+  --nodd-glass-surface: hsl(var(--nodd-card));
+  --nodd-glass-gradient: none;
+  --nodd-glass-border: hsl(var(--nodd-border));
+  --nodd-glass-highlight: transparent;
+  --nodd-glass-tint: transparent;
+  --nodd-blur: none;
 
   --nodd-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
   --nodd-shadow-md: 0 8px 16px -4px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
@@ -115,12 +115,12 @@
     --nodd-input: 0 0% 16%;
     --nodd-ring: 243 88% 72%;
 
-    --nodd-glass-surface: rgba(18, 18, 20, 0.6);
-    --nodd-glass-gradient: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%);
-    --nodd-glass-border: rgba(255, 255, 255, 0.08);
-    --nodd-glass-highlight: rgba(255, 255, 255, 0.05);
-    --nodd-glass-tint: rgba(255, 255, 255, 0.02);
-    --nodd-blur: blur(28px) saturate(1.4);
+    --nodd-glass-surface: hsl(var(--nodd-card));
+    --nodd-glass-gradient: none;
+    --nodd-glass-border: hsl(var(--nodd-border));
+    --nodd-glass-highlight: transparent;
+    --nodd-glass-tint: transparent;
+    --nodd-blur: none;
 
     --nodd-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
     --nodd-shadow-md: 0 8px 16px -4px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
@@ -248,7 +248,7 @@
    Pin tooltip — small glass bubble
    ========================================================================== */
 [data-nodd-root] .nodd-pin-tooltip {
-  background: var(--nodd-glass-gradient), hsl(var(--nodd-popover) / 0.85);
+  background: hsl(var(--nodd-popover));
   color: hsl(var(--nodd-popover-foreground));
   font-family: inherit;
   border-radius: var(--nodd-radius-md);
@@ -288,7 +288,7 @@
   overflow: hidden;
 }
 [data-nodd-root] .nodd-pin-tooltip-arrow {
-  fill: hsl(var(--nodd-popover) / 0.85);
+  fill: hsl(var(--nodd-popover));
 }
 
 @keyframes nodd-fade-in {
@@ -570,7 +570,8 @@
   pointer-events: auto;
   position: fixed;
   inset: 0;
-  cursor: crosshair;
+  /* Figma-style comment-bubble cursor; hotspot at the tail tip (4, 28). */
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M9 3 H27 q4 0 4 4 V17 q0 4 -4 4 H13 L4 28 L9 21 Q5 21 5 17 V7 Q5 3 9 3 Z' fill='%2318181b' stroke='%23ffffff' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E") 4 28, crosshair;
   background: hsl(var(--nodd-foreground) / 0.04);
 }
 

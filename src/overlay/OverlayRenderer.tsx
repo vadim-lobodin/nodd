@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { Add, Menu } from '@carbon/icons-react';
 import { useNoddContext } from '../provider/NoddContext';
 import { PinMarker } from './components/PinMarker';
 import { CaptureLayer } from './components/CaptureLayer';
@@ -134,6 +133,33 @@ export function OverlayRenderer() {
       onDOMMutation: () => setDomVersion(v => v + 1),
     });
   }, [snapshot]);
+
+  // Keyboard shortcuts (Figma-style): "C" toggles comment mode, "M" toggles
+  // the comments sidebar. Ignored while typing in a field or with a modifier
+  // held, so host-app and browser shortcuts keep working.
+  useEffect(() => {
+    const isEditable = (el: EventTarget | null): boolean => {
+      if (!(el instanceof HTMLElement)) return false;
+      const tag = el.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+    };
+    const handler = (ev: KeyboardEvent) => {
+      if (!user || ev.metaKey || ev.ctrlKey || ev.altKey || isEditable(ev.target)) return;
+      const key = ev.key.toLowerCase();
+      if (key === 'c') {
+        ev.preventDefault();
+        setIsCapturing(v => {
+          if (!v) setSidebarOpen(false); // entering comment mode closes the sidebar
+          return !v;
+        });
+      } else if (key === 'm' && !isCapturing) {
+        ev.preventDefault();
+        setSidebarOpen(v => !v);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [user, isCapturing]);
 
   const handlePinOpen = useCallback((threadId: string) => {
     setOpenThreadId(prev => (prev === threadId ? null : threadId));
@@ -302,24 +328,6 @@ export function OverlayRenderer() {
 
   return (
     <Tooltip.Provider delayDuration={400}>
-      {/* Toolbar */}
-      <div className={`nodd-toolbar${sidebarOpen ? ' nodd-toolbar--shifted' : ''}`}>
-        <button
-          className={`nodd-btn nodd-btn--capture${isCapturing ? ' nodd-btn--active' : ''}`}
-          onClick={() => setIsCapturing(!isCapturing)}
-          aria-label="Add comment"
-        >
-          <Add size={20} />
-        </button>
-        <button
-          className="nodd-btn nodd-btn--sidebar"
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          aria-label="Open comments"
-        >
-          <Menu size={20} />
-        </button>
-      </div>
-
       {/* Pins render into the separate absolute-positioned container so they scroll with the page */}
       {pinContainer && createPortal(
         <>
