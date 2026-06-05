@@ -37,6 +37,16 @@ create table threads (
 );
 alter table threads enable row level security;
 
+-- Pin shape guard: the client always writes {selector, offsetX, offsetY, ...}.
+-- Reject malformed pins written directly via the Data API so the overlay's
+-- anchoring resolver never receives a non-string selector or non-numeric offset.
+alter table threads add constraint threads_pin_shape check (
+  jsonb_typeof(pin) = 'object'
+  and jsonb_typeof(pin -> 'selector') = 'string'
+  and jsonb_typeof(pin -> 'offsetX') = 'number'
+  and jsonb_typeof(pin -> 'offsetY') = 'number'
+);
+
 create table comments (
   id          uuid primary key default gen_random_uuid(),
   thread_id   uuid not null references threads(id) on delete cascade,
@@ -58,7 +68,16 @@ select
   u.email,
   coalesce(u.raw_user_meta_data ->> 'display_name', split_part(u.email, '@', 1)) as display_name,
   u.raw_user_meta_data ->> 'avatar_url' as avatar_url
-from auth.users u;
+from auth.users u
+where u.id in (
+  select pm.user_id
+  from project_members pm
+  where pm.project_id in (
+    select pm2.project_id
+    from project_members pm2
+    where pm2.user_id = auth.uid()
+  )
+);
 
 grant select on profiles to authenticated;
 
@@ -148,3 +167,24 @@ create index comments_thread_idx
 
 alter publication supabase_realtime add table threads;
 alter publication supabase_realtime add table comments;
+
+-- ============================================================
+-- Data API grants (required for Supabase projects from 2026-05-30)
+-- ============================================================
+-- anon excluded: all RLS policies require project membership.
+
+grant select, insert, update, delete
+  on public.projects
+  to authenticated, service_role;
+
+grant select, insert, update, delete
+  on public.project_members
+  to authenticated, service_role;
+
+grant select, insert, update, delete
+  on public.threads
+  to authenticated, service_role;
+
+grant select, insert, update, delete
+  on public.comments
+  to authenticated, service_role;
