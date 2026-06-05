@@ -1,0 +1,7 @@
+/* Override production overlay behavior for Storybook rendering */
+[data-nodd-root][data-nodd-story] {
+  position: relative !important;
+  inset: unset !important;
+  z-index: auto !important;
+  pointer-events: all !important;
+}

@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap');
+
 /* ==========================================================================
    Nodd — glass / spatial design system
    Dark-first glassmorphism with light-mode adaptation.
@@ -733,7 +735,7 @@
 
 /* ---------- Reply area ---------- */
 [data-nodd-root] .nodd-popover-reply {
-  margin: 8px 12px 12px;
+  margin: 12px;
   padding: 6px 6px 6px 16px;
   display: flex;
   gap: 8px;
