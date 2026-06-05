@@ -12,23 +12,37 @@ export function CaptureLayer({ onCreate, onCancel, portalRootRef }: CaptureLayer
 
   const handleClick = useCallback(
     async (ev: MouseEvent) => {
+      const portalRoot = portalRootRef.current;
+      if (!portalRoot) return;
+
+      // Clicks on Nodd's own chrome (the comment-mode panel, sidebar) must not
+      // place a pin — let the control handle its own click. Everything inside
+      // portalRoot that isn't the capture layer is overlay UI.
+      const target = ev.target as Node | null;
+      const captureLayer = portalRoot.querySelector('.nodd-capture-layer');
+      if (target && portalRoot.contains(target) && captureLayer && !captureLayer.contains(target)) {
+        return;
+      }
+
+      // Guard against re-entry during the one-frame elementFromPoint dance.
+      if (!activeRef.current) return;
+      activeRef.current = false;
+
       ev.preventDefault();
       ev.stopImmediatePropagation();
 
       const { clientX, clientY } = ev;
-      const portalRoot = portalRootRef.current;
-      if (!portalRoot) return;
 
       try {
         portalRoot.style.visibility = 'hidden';
         await new Promise<void>(r => requestAnimationFrame(() => r()));
-        const target = document.elementFromPoint(clientX, clientY);
+        const hit = document.elementFromPoint(clientX, clientY);
         portalRoot.style.visibility = '';
 
-        if (!target || target === document.body || target === document.documentElement) {
+        if (!hit || hit === document.body || hit === document.documentElement) {
           onCancel();
         } else {
-          const pin = DOMAnchor.create(target, clientX, clientY);
+          const pin = DOMAnchor.create(hit, clientX, clientY);
           onCreate(pin);
         }
       } catch {
@@ -50,7 +64,7 @@ export function CaptureLayer({ onCreate, onCancel, portalRootRef }: CaptureLayer
   );
 
   useEffect(() => {
-    document.addEventListener('click', handleClick, { capture: true, once: true });
+    document.addEventListener('click', handleClick, { capture: true });
     document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('click', handleClick, true);

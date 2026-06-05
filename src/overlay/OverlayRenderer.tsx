@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import * as Tooltip from '@radix-ui/react-tooltip';
+import { Add, Menu } from '@carbon/icons-react';
 import { useNoddContext } from '../provider/NoddContext';
 import { PinMarker } from './components/PinMarker';
 import { CaptureLayer } from './components/CaptureLayer';
@@ -328,6 +329,27 @@ export function OverlayRenderer() {
 
   return (
     <Tooltip.Provider delayDuration={400}>
+      {/* Panel — only visible while in comment mode (entered via "C"). The
+          capture button is active (click to exit); the menu opens the sidebar. */}
+      {isCapturing && (
+        <div className="nodd-toolbar">
+          <button
+            className="nodd-btn nodd-btn--capture nodd-btn--active"
+            onClick={() => setIsCapturing(false)}
+            aria-label="Exit comment mode"
+          >
+            <Add size={20} />
+          </button>
+          <button
+            className="nodd-btn nodd-btn--sidebar"
+            onClick={() => { setIsCapturing(false); setSidebarOpen(true); }}
+            aria-label="Open comments"
+          >
+            <Menu size={20} />
+          </button>
+        </div>
+      )}
+
       {/* Pins render into the separate absolute-positioned container so they scroll with the page */}
       {pinContainer && createPortal(
         <>
