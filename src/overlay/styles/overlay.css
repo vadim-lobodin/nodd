@@ -563,6 +563,76 @@
   border-color: hsl(var(--nodd-foreground) / 0.14);
 }
 
+/* --delete (icon button) */
+[data-nodd-root] .nodd-btn--delete {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 999px;
+  background: transparent;
+  border-color: transparent;
+  color: hsl(var(--nodd-muted-foreground));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+[data-nodd-root] .nodd-btn--delete:hover {
+  background: hsl(var(--nodd-destructive) / 0.12);
+  color: hsl(var(--nodd-destructive));
+  border-color: transparent;
+  transform: none;
+}
+
+/* --danger (filled destructive action) */
+[data-nodd-root] .nodd-btn--danger {
+  padding: 4px 12px;
+  background: hsl(var(--nodd-destructive));
+  color: hsl(var(--nodd-destructive-foreground));
+  border-color: hsl(var(--nodd-destructive));
+}
+[data-nodd-root] .nodd-btn--danger:hover {
+  background: hsl(var(--nodd-destructive) / 0.9);
+  border-color: hsl(var(--nodd-destructive) / 0.9);
+  color: hsl(var(--nodd-destructive-foreground));
+}
+
+/* Inline delete confirmation (popover comments + sidebar items) */
+[data-nodd-root] .nodd-comment-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 6px 18px 2px;
+  padding: 8px 10px;
+  border-radius: var(--nodd-radius-md, 8px);
+  background: hsl(var(--nodd-destructive) / 0.08);
+  border: 1px solid hsl(var(--nodd-destructive) / 0.2);
+}
+[data-nodd-root] .nodd-comment-confirm-text {
+  font-size: 12px;
+  color: hsl(var(--nodd-foreground));
+}
+[data-nodd-root] .nodd-comment-confirm-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+[data-nodd-root] .nodd-comment-confirm .nodd-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+/* Sidebar item delete — revealed on row hover/focus to keep the list calm */
+[data-nodd-root] .nodd-sidebar-item-delete {
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+[data-nodd-root] .nodd-sidebar-item:hover .nodd-sidebar-item-delete,
+[data-nodd-root] .nodd-sidebar-item:focus-within .nodd-sidebar-item-delete {
+  opacity: 1;
+}
+
 /* ==========================================================================
    Capture layer
    ========================================================================== */
@@ -998,7 +1068,6 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: hsl(var(--nodd-muted-foreground));
-  margin-left: auto;
 }
 
 [data-nodd-root] .nodd-sidebar-item-snippet {

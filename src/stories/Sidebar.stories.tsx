@@ -40,7 +40,7 @@ function SidebarStory({ threads = THREADS }: { threads?: ThreadSummary[] }) {
   const [container, setContainer] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
-    setContainer(document.querySelector('[data-nodd-story]'));
+    setContainer(document.querySelector<HTMLElement>('[data-nodd-story]'));
   }, []);
 
   return (

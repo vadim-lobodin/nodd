@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { Add, Menu } from '@carbon/icons-react';
+import { Menu } from '@carbon/icons-react';
 import { useNoddContext } from '../provider/NoddContext';
 import { PinMarker } from './components/PinMarker';
 import { CaptureLayer } from './components/CaptureLayer';
@@ -46,11 +46,13 @@ export function OverlayRenderer() {
 
   // Push host layout when the sidebar is open, instead of overlaying.
   // Uses inline style to avoid leaking unscoped CSS into the host (see CLAUDE.md).
+  // Must clear the sidebar's full footprint: right gap (16) + width (300) +
+  // a left breathing gap (16) = 332px, otherwise it overlaps host content.
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const body = document.body;
     const prevMargin = body.style.marginRight;
-    body.style.marginRight = sidebarOpen ? 'min(300px, 90vw)' : prevMargin || '';
+    body.style.marginRight = sidebarOpen ? 'min(332px, 90vw)' : prevMargin || '';
     return () => {
       body.style.marginRight = prevMargin;
     };
@@ -220,6 +222,22 @@ export function OverlayRenderer() {
     }
   }, [store, openThreadId, snapshot]);
 
+  const handleDeleteComment = useCallback(async (commentId: string) => {
+    if (!store || !openThreadId) return;
+    const thread = snapshot?.threads.find(t => t.id === openThreadId);
+    // Deleting the root comment removes the whole thread (store handles this);
+    // close the popover since there's nothing left to show.
+    const isRoot = thread?.comments[0]?.id === commentId;
+    if (isRoot) setOpenThreadId(null);
+    await store.deleteComment({ threadId: openThreadId, commentId });
+  }, [store, openThreadId, snapshot]);
+
+  const handleDeleteThread = useCallback(async (threadId: string) => {
+    if (!store) return;
+    if (openThreadId === threadId) setOpenThreadId(null);
+    await store.deleteThread(threadId);
+  }, [store, openThreadId]);
+
   const members = store?.getMembers();
   const memberList = members?.list ?? [];
 
@@ -242,6 +260,7 @@ export function OverlayRenderer() {
         breadcrumb: t.stateKey ? stack.join(' · ') : undefined,
         stateStack: stack,
         canActivate: stack.length > 0 && stack.every(s => hasActivatorOrTrigger(s)),
+        canDelete: t.createdBy === user?.id,
       };
       if (stateMatch.get(t.id) ?? true) onPage.push(summary);
       else other.push(summary);
@@ -329,17 +348,10 @@ export function OverlayRenderer() {
 
   return (
     <Tooltip.Provider delayDuration={400}>
-      {/* Panel — only visible while in comment mode (entered via "C"). The
-          capture button is active (click to exit); the menu opens the sidebar. */}
+      {/* Panel — only visible while in comment mode (entered via "C"). The menu
+          opens the sidebar; exit comment mode via Esc or pressing "C" again. */}
       {isCapturing && (
         <div className="nodd-toolbar">
-          <button
-            className="nodd-btn nodd-btn--capture nodd-btn--active"
-            onClick={() => setIsCapturing(false)}
-            aria-label="Exit comment mode"
-          >
-            <Add size={20} />
-          </button>
           <button
             className="nodd-btn nodd-btn--sidebar"
             onClick={() => { setIsCapturing(false); setSidebarOpen(true); }}
@@ -399,6 +411,7 @@ export function OverlayRenderer() {
           members={memberList}
           onSubmitReply={handleReply}
           onToggleResolved={handleResolve}
+          onDeleteComment={handleDeleteComment}
           onClose={() => setOpenThreadId(null)}
         />,
         pinContainer,
@@ -416,6 +429,7 @@ export function OverlayRenderer() {
           members={memberList}
           onSubmitReply={handleNewThreadSubmit}
           onToggleResolved={async () => {}}
+          onDeleteComment={async () => {}}
           onClose={() => setPendingPin(null)}
         />,
         pinContainer,
@@ -428,6 +442,7 @@ export function OverlayRenderer() {
         threadsOpen={onPageSummaries}
         threadsOtherState={otherStateSummaries}
         onItemActivate={handleItemActivate}
+        onItemDelete={handleDeleteThread}
         userName={user.displayName ?? user.email.split('@')[0]}
         onSignOut={() => void signOut()}
         fetchResolved={async () => {
@@ -444,6 +459,7 @@ export function OverlayRenderer() {
               replyCount: Math.max(0, t.comments.length - 1),
               resolved: true,
               unread: false,
+              canDelete: t.createdBy === user?.id,
             };
           });
         }}

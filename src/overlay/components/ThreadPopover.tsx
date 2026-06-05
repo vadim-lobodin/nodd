@@ -3,7 +3,7 @@ import * as ScrollArea from '@radix-ui/react-scroll-area';
 import * as Separator from '@radix-ui/react-separator';
 import { MentionPicker, encodeMention, decodeMentions, type ProjectMember, type MentionReplacement } from './MentionPicker';
 import { UserAvatar } from './UserAvatar';
-import { ArrowUp, Checkmark, Close, Renew } from '@carbon/icons-react';
+import { ArrowUp, Checkmark, Close, Renew, TrashCan } from '@carbon/icons-react';
 import type { MemberProfile } from '../../store/types';
 
 export type ThreadComment = {
@@ -27,6 +27,7 @@ export type ThreadPopoverProps = {
   members: MemberProfile[];
   onSubmitReply: (body: string, mentions: string[]) => Promise<void>;
   onToggleResolved: () => Promise<void>;
+  onDeleteComment: (commentId: string) => Promise<void>;
   onClose: () => void;
 };
 
@@ -83,6 +84,7 @@ export function ThreadPopover({
   members,
   onSubmitReply,
   onToggleResolved,
+  onDeleteComment,
   onClose,
 }: ThreadPopoverProps) {
   const [draft, setDraft] = useState('');
@@ -96,6 +98,11 @@ export function ThreadPopover({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const keyboardHandlerRef = useRef<((e: KeyboardEvent) => boolean) | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [popoverHeight, setPopoverHeight] = useState(0);
+  // Re-clamp on scroll/resize: the popover lives in the page-absolute pin
+  // container, so its viewport bounds shift as the document scrolls.
+  const [, forceTick] = useState(0);
 
   const memberMap = new Map(members.map(m => [m.userId, m]));
   const pickerMembers: ProjectMember[] = members.map(m => ({
@@ -106,15 +113,53 @@ export function ThreadPopover({
   }));
 
   // Position — anchorX/Y are page-absolute (popover lives in the absolute
-  // pin container so it scrolls with the document). Clamp to keep within
-  // the current viewport.
-  const popoverX = anchorX + GAP + 28; // offset from pin
-  const popoverY = anchorY;
+  // pin container so it scrolls with the document). Clamp on BOTH axes so the
+  // whole popover stays inside the current viewport, flipping to the pin's
+  // left side when there's no room on the right.
   const scrollX = typeof window !== 'undefined' ? window.scrollX : 0;
   const scrollY = typeof window !== 'undefined' ? window.scrollY : 0;
   const innerW = typeof window !== 'undefined' ? window.innerWidth : 0;
-  const clampedX = Math.min(popoverX, scrollX + innerW - POPOVER_WIDTH - MARGIN);
-  const clampedY = Math.max(scrollY + MARGIN, popoverY);
+  const innerH = typeof window !== 'undefined' ? window.innerHeight : 0;
+
+  const PIN_OFFSET = GAP + 28; // clear the pin marker
+  const rightEdge = scrollX + innerW - POPOVER_WIDTH - MARGIN;
+  const preferredX = anchorX + PIN_OFFSET;
+  // If the preferred (right-of-pin) placement overflows, try flipping to the
+  // left of the pin before falling back to a hard clamp against the edge.
+  const flippedX = anchorX - POPOVER_WIDTH - GAP;
+  const popoverX =
+    preferredX <= rightEdge ? preferredX : flippedX >= scrollX + MARGIN ? flippedX : rightEdge;
+  const clampedX = Math.max(scrollX + MARGIN, Math.min(popoverX, rightEdge));
+
+  // Measured height keeps the bottom edge inside the viewport; fall back to the
+  // CSS cap (min(60vh, 480px)) before the first measurement.
+  const maxHeight = Math.min(innerH * 0.6, 480);
+  const effectiveHeight = popoverHeight || maxHeight;
+  const bottomEdge = scrollY + innerH - effectiveHeight - MARGIN;
+  const clampedY = Math.max(scrollY + MARGIN, Math.min(anchorY, bottomEdge));
+
+  // Measure the popover so the bottom edge can be clamped inside the viewport.
+  // The ResizeObserver re-measures as the comment list grows, keeping the
+  // reply box on-screen.
+  useEffect(() => {
+    const el = popoverRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setPopoverHeight(el.offsetHeight));
+    ro.observe(el);
+    setPopoverHeight(el.offsetHeight);
+    return () => ro.disconnect();
+  }, []);
+
+  // Re-clamp when the viewport bounds shift under us.
+  useEffect(() => {
+    const onChange = () => forceTick(t => t + 1);
+    window.addEventListener('scroll', onChange, { passive: true });
+    window.addEventListener('resize', onChange);
+    return () => {
+      window.removeEventListener('scroll', onChange);
+      window.removeEventListener('resize', onChange);
+    };
+  }, []);
 
   // Outside click
   useEffect(() => {
@@ -217,6 +262,7 @@ export function ThreadPopover({
         <ScrollArea.Viewport className="nodd-popover-comments">
           {comments.map((comment, ci) => {
             const member = memberMap.get(comment.authorId);
+            const canDelete = comment.authorId === currentUserId && !comment.pending;
             return (
               <div key={comment.id} className={`nodd-comment${comment.pending ? ' nodd-comment--pending' : ''}`}>
                 <div className="nodd-comment-header">
@@ -227,25 +273,63 @@ export function ThreadPopover({
                   />
                   <span className="nodd-comment-author">{member?.displayName ?? member?.email ?? 'Unknown'}</span>
                   <span className="nodd-comment-time">{formatTime(comment.createdAt)}</span>
-                  {ci === 0 && (
+                  {(ci === 0 || canDelete) && (
                     <div className="nodd-popover-actions">
-                      <button
-                        className="nodd-btn nodd-btn--resolve"
-                        onClick={onToggleResolved}
-                        aria-label={resolved ? 'Reopen' : 'Resolve'}
-                        title={resolved ? 'Reopen' : 'Resolve'}
-                      >
-                        {resolved ? <Renew size={16} /> : <Checkmark size={16} />}
-                      </button>
-                      <button className="nodd-btn nodd-btn--close" onClick={onClose} aria-label="Close">
-                        <Close size={16} />
-                      </button>
+                      {canDelete && (
+                        <button
+                          className="nodd-btn nodd-btn--delete"
+                          onClick={() => setConfirmDeleteId(comment.id)}
+                          aria-label="Delete"
+                          title={ci === 0 ? 'Delete thread' : 'Delete comment'}
+                        >
+                          <TrashCan size={16} />
+                        </button>
+                      )}
+                      {ci === 0 && (
+                        <>
+                          <button
+                            className="nodd-btn nodd-btn--resolve"
+                            onClick={onToggleResolved}
+                            aria-label={resolved ? 'Reopen' : 'Resolve'}
+                            title={resolved ? 'Reopen' : 'Resolve'}
+                          >
+                            {resolved ? <Renew size={16} /> : <Checkmark size={16} />}
+                          </button>
+                          <button className="nodd-btn nodd-btn--close" onClick={onClose} aria-label="Close">
+                            <Close size={16} />
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
                 <div className="nodd-comment-body">
                   {renderBodyWithMentions(comment.body, memberMap)}
                 </div>
+                {confirmDeleteId === comment.id && (
+                  <div className="nodd-comment-confirm" role="alertdialog" aria-label="Confirm delete">
+                    <span className="nodd-comment-confirm-text">
+                      {ci === 0 ? 'Delete this whole thread?' : 'Delete this comment?'}
+                    </span>
+                    <div className="nodd-comment-confirm-actions">
+                      <button
+                        className="nodd-btn nodd-btn--ghost"
+                        onClick={() => setConfirmDeleteId(null)}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="nodd-btn nodd-btn--danger"
+                        onClick={() => {
+                          setConfirmDeleteId(null);
+                          void onDeleteComment(comment.id);
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

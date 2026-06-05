@@ -4,7 +4,7 @@ import * as Tabs from '@radix-ui/react-tabs';
 import * as ScrollArea from '@radix-ui/react-scroll-area';
 import * as Separator from '@radix-ui/react-separator';
 import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
-import { Logout, Close } from '@carbon/icons-react';
+import { Logout, Close, TrashCan } from '@carbon/icons-react';
 import { UserAvatar } from './UserAvatar';
 import type { MemberProfile } from '../../store/types';
 
@@ -22,6 +22,8 @@ export type ThreadSummary = {
   canActivate?: boolean;
   /** Stack used to activate; passed back to onItemActivate. */
   stateStack?: readonly string[];
+  /** True when the current user authored the thread and may delete it. */
+  canDelete?: boolean;
 };
 
 export type SidebarProps = {
@@ -33,6 +35,7 @@ export type SidebarProps = {
   onItemOpen: (threadId: string) => void;
   onItemHover: (threadId: string | null) => void;
   onItemActivate?: (threadId: string) => void;
+  onItemDelete?: (threadId: string) => Promise<void> | void;
   container?: HTMLElement | null;
   userName?: string;
   onSignOut?: () => void;
@@ -47,6 +50,7 @@ export function Sidebar({
   onItemOpen,
   onItemHover,
   onItemActivate,
+  onItemDelete,
   container,
   userName,
   onSignOut,
@@ -131,6 +135,7 @@ export function Sidebar({
                       formatTime={formatTime}
                       onItemOpen={onItemOpen}
                       onItemHover={onItemHover}
+                      onItemDelete={onItemDelete}
                     />
                     {groupedOther.map(([breadcrumb, group]) => (
                       <SidebarSection
@@ -142,6 +147,7 @@ export function Sidebar({
                         onItemOpen={onItemOpen}
                         onItemHover={onItemHover}
                         onItemActivate={onItemActivate}
+                        onItemDelete={onItemDelete}
                         muted
                       />
                     ))}
@@ -161,6 +167,7 @@ export function Sidebar({
                   formatTime={formatTime}
                   onItemOpen={onItemOpen}
                   onItemHover={onItemHover}
+                  onItemDelete={onItemDelete}
                 />
               )}
             </Tabs.Content>
@@ -178,6 +185,7 @@ function SidebarList({
   formatTime,
   onItemOpen,
   onItemHover,
+  onItemDelete,
 }: {
   items: ThreadSummary[];
   loading: boolean;
@@ -185,6 +193,7 @@ function SidebarList({
   formatTime: (iso: string) => string;
   onItemOpen: (threadId: string) => void;
   onItemHover: (threadId: string | null) => void;
+  onItemDelete?: (threadId: string) => Promise<void> | void;
 }) {
   return (
     <ScrollArea.Root className="nodd-sidebar-list-scroll">
@@ -196,7 +205,7 @@ function SidebarList({
           <div className="nodd-sidebar-empty">{emptyMessage}</div>
         )}
         {items.map(item => (
-          <SidebarItem key={item.id} item={item} formatTime={formatTime} onItemOpen={onItemOpen} onItemHover={onItemHover} />
+          <SidebarItem key={item.id} item={item} formatTime={formatTime} onItemOpen={onItemOpen} onItemHover={onItemHover} onItemDelete={onItemDelete} />
         ))}
       </ScrollArea.Viewport>
       <ScrollArea.Scrollbar className="nodd-scrollbar" orientation="vertical">
@@ -214,6 +223,7 @@ function SidebarSection({
   onItemOpen,
   onItemHover,
   onItemActivate,
+  onItemDelete,
   muted,
 }: {
   heading: string;
@@ -223,6 +233,7 @@ function SidebarSection({
   onItemOpen: (threadId: string) => void;
   onItemHover: (threadId: string | null) => void;
   onItemActivate?: (threadId: string) => void;
+  onItemDelete?: (threadId: string) => Promise<void> | void;
   muted?: boolean;
 }) {
   if (items.length === 0 && !emptyMessage) return null;
@@ -240,6 +251,7 @@ function SidebarSection({
             onItemOpen={onItemOpen}
             onItemHover={onItemHover}
             onItemActivate={onItemActivate}
+            onItemDelete={onItemDelete}
           />
         ))
       )}
@@ -253,17 +265,21 @@ function SidebarItem({
   onItemOpen,
   onItemHover,
   onItemActivate,
+  onItemDelete,
 }: {
   item: ThreadSummary;
   formatTime: (iso: string) => string;
   onItemOpen: (threadId: string) => void;
   onItemHover: (threadId: string | null) => void;
   onItemActivate?: (threadId: string) => void;
+  onItemDelete?: (threadId: string) => Promise<void> | void;
 }) {
+  const [confirming, setConfirming] = useState(false);
   const handleOpen = () => {
     if (onItemActivate && item.canActivate) onItemActivate(item.id);
     else onItemOpen(item.id);
   };
+  const showDelete = !!onItemDelete && item.canDelete;
   return (
     <div
       className={`nodd-sidebar-item${item.unread ? ' nodd-sidebar-item--unread' : ''}`}
@@ -283,11 +299,42 @@ function SidebarItem({
         />
         <span className="nodd-sidebar-item-author">{item.authorName}</span>
         <span className="nodd-sidebar-item-time">{formatTime(item.createdAt)}</span>
+        {showDelete && (
+          <button
+            className="nodd-btn nodd-btn--delete nodd-sidebar-item-delete"
+            onClick={e => { e.stopPropagation(); setConfirming(true); }}
+            aria-label="Delete comment"
+            title="Delete comment"
+          >
+            <TrashCan size={16} />
+          </button>
+        )}
       </div>
       <div className="nodd-sidebar-item-snippet">{item.snippet}</div>
       {item.replyCount > 0 && (
         <div className="nodd-sidebar-item-footer">
           <span className="nodd-sidebar-item-replies">{item.replyCount} {item.replyCount === 1 ? 'reply' : 'replies'}</span>
+        </div>
+      )}
+      {confirming && (
+        <div
+          className="nodd-comment-confirm"
+          role="alertdialog"
+          aria-label="Confirm delete"
+          onClick={e => e.stopPropagation()}
+        >
+          <span className="nodd-comment-confirm-text">Delete this comment?</span>
+          <div className="nodd-comment-confirm-actions">
+            <button className="nodd-btn nodd-btn--ghost" onClick={() => setConfirming(false)}>
+              Cancel
+            </button>
+            <button
+              className="nodd-btn nodd-btn--danger"
+              onClick={() => { setConfirming(false); void onItemDelete?.(item.id); }}
+            >
+              Delete
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -1,10 +1,11 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { ThreadPopover, type ThreadComment } from '../overlay/components/ThreadPopover';
+import type { MemberProfile } from '../store/types';
 
-const MEMBERS = [
-  { userId: 'u1', displayName: 'Alice Chen', email: 'alice@example.com', avatarUrl: undefined },
-  { userId: 'u2', displayName: 'Bob Smith', email: 'bob@example.com', avatarUrl: undefined },
+const MEMBERS: MemberProfile[] = [
+  { userId: 'u1', displayName: 'Alice Chen', email: 'alice@example.com', avatarUrl: null, role: 'member' },
+  { userId: 'u2', displayName: 'Bob Smith', email: 'bob@example.com', avatarUrl: null, role: 'member' },
 ];
 
 const BASE_COMMENT: ThreadComment = {
@@ -46,6 +47,7 @@ function PopoverWrapper({
         members={MEMBERS}
         onSubmitReply={async () => {}}
         onToggleResolved={async () => {}}
+        onDeleteComment={async () => {}}
         onClose={() => {}}
       />
     </div>

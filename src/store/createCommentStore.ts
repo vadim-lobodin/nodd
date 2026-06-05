@@ -12,7 +12,7 @@ import { readCache, writeCache } from './cache';
 import { fetchPageThreads, fetchResolvedThreads } from './query';
 import { fetchMembers } from './members';
 import { createRealtimeChannel } from './realtime';
-import { insertThread, insertComment, updateThreadResolved } from './mutations';
+import { insertThread, insertComment, updateThreadResolved, deleteThread, deleteComment } from './mutations';
 
 export type CommentStore = {
   subscribe(urlPath: string, listener: (snapshot: PageSnapshot) => void): () => void;
@@ -20,6 +20,8 @@ export type CommentStore = {
   replyToThread(input: { threadId: ThreadId; body: string; mentions?: UserId[] }): Promise<CommentId>;
   resolveThread(threadId: ThreadId): Promise<void>;
   reopenThread(threadId: ThreadId): Promise<void>;
+  deleteThread(threadId: ThreadId): Promise<void>;
+  deleteComment(input: { threadId: ThreadId; commentId: CommentId }): Promise<void>;
   getMembers(): MemberCache | null;
   fetchResolved(urlPath: string): Promise<Thread[]>;
   dispose(): void;
@@ -381,6 +383,73 @@ export function createCommentStore(deps: {
           resolvedAt: new Date().toISOString(),
         }));
         if (urlPath) notify(urlPath);
+      }
+    },
+
+    async deleteThread(threadId) {
+      const userId = getCurrentUserId();
+      if (!userId) throw new Error('Not authenticated');
+      const urlPath = state.threadIndex.get(threadId);
+      // Snapshot for rollback before the optimistic removal.
+      const removed = urlPath
+        ? state.byPath.get(urlPath)?.threads.find(t => t.id === threadId) ?? null
+        : null;
+
+      removeThread(state, threadId);
+      if (urlPath) notify(urlPath);
+
+      // Optimistic-only for temp threads not yet persisted server-side.
+      if (threadId.startsWith('temp-')) return;
+
+      try {
+        await deleteThread(supabase, threadId);
+      } catch (err) {
+        if (removed) {
+          addThreadToPage(state, removed);
+          if (urlPath) notify(urlPath);
+        }
+        throw err;
+      }
+    },
+
+    async deleteComment(input) {
+      const userId = getCurrentUserId();
+      if (!userId) throw new Error('Not authenticated');
+      const { threadId, commentId } = input;
+      const urlPath = state.threadIndex.get(threadId);
+      const thread = urlPath
+        ? state.byPath.get(urlPath)?.threads.find(t => t.id === threadId) ?? null
+        : null;
+
+      // The root comment is the thread — deleting it deletes the whole thread.
+      if (thread && thread.comments[0]?.id === commentId) {
+        await store.deleteThread(threadId);
+        return;
+      }
+
+      const removed = thread?.comments.find(c => c.id === commentId) ?? null;
+      updateThread(state, threadId, t => ({
+        ...t,
+        comments: t.comments.filter(c => c.id !== commentId),
+      }));
+      if (urlPath) notify(urlPath);
+
+      if (commentId.startsWith('temp-')) return;
+
+      try {
+        await deleteComment(supabase, commentId);
+      } catch (err) {
+        // Restore the comment at its original position.
+        if (removed && thread) {
+          const index = thread.comments.findIndex(c => c.id === commentId);
+          updateThread(state, threadId, t => {
+            const comments = t.comments.slice();
+            comments.splice(Math.max(0, index), 0, removed);
+            return { ...t, comments };
+          });
+          if (urlPath) notify(urlPath);
+        }
+        throw err;
       }
     },
 

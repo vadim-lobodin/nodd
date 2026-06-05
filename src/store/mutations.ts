@@ -67,6 +67,23 @@ export async function insertComment(
   return data.id;
 }
 
+export async function deleteThread(
+  supabase: SupabaseClient,
+  threadId: string,
+): Promise<void> {
+  // Comments cascade-delete via the threads FK (on delete cascade).
+  const { error } = await supabase.from('threads').delete().eq('id', threadId);
+  if (error) throw error;
+}
+
+export async function deleteComment(
+  supabase: SupabaseClient,
+  commentId: string,
+): Promise<void> {
+  const { error } = await supabase.from('comments').delete().eq('id', commentId);
+  if (error) throw error;
+}
+
 export async function updateThreadResolved(
   supabase: SupabaseClient,
   threadId: string,
