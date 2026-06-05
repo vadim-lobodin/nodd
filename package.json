@@ -1,6 +1,6 @@
 {
   "name": "nodd",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Figma-like comments on top of live React prototypes",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -31,14 +31,16 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
   },
   "peerDependencies": {
     "react": ">=18",
     "react-dom": ">=18"
   },
   "dependencies": {
-    "@carbon/icons-react": "11.79.0",
+    "@carbon/icons-react": "11.82.0",
     "@radix-ui/react-avatar": "1.1.11",
     "@radix-ui/react-dialog": "1.1.15",
     "@radix-ui/react-popover": "1.1.15",
@@ -48,17 +50,21 @@
     "@radix-ui/react-toggle": "1.1.10",
     "@radix-ui/react-tooltip": "1.2.8",
     "@radix-ui/react-visually-hidden": "1.2.4",
-    "@supabase/supabase-js": "^2",
+    "@supabase/supabase-js": "2.107.0",
     "boring-avatars": "2.0.4",
-    "idb-keyval": "^6"
+    "idb-keyval": "6.2.5"
   },
   "devDependencies": {
-    "@types/react": "^18",
+    "@storybook/react": "10.4.2",
+    "@storybook/react-vite": "10.4.2",
+    "@types/react": "18.3.30",
     "@types/react-dom": "^18",
     "react": "^18",
     "react-dom": "^18",
+    "storybook": "10.4.2",
     "tsup": "^8",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vite": "8.0.16"
   },
   "license": "MIT"
 }
