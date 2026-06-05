@@ -12,14 +12,18 @@ function installHistoryPatch(): void {
   originalPushState = history.pushState.bind(history);
   originalReplaceState = history.replaceState.bind(history);
 
+  // Dispatch is deferred so subscribers' setState calls don't run inside React's
+  // commit phase — Next's app-router calls history.pushState during commit,
+  // and React 19 throws "useInsertionEffect must not schedule updates" if a
+  // state update is triggered synchronously from there.
   history.pushState = function (...args: Parameters<typeof history.pushState>) {
     originalPushState!(...args);
-    window.dispatchEvent(new CustomEvent('nodd:locationchange'));
+    queueMicrotask(() => window.dispatchEvent(new CustomEvent('nodd:locationchange')));
   };
 
   history.replaceState = function (...args: Parameters<typeof history.replaceState>) {
     originalReplaceState!(...args);
-    window.dispatchEvent(new CustomEvent('nodd:locationchange'));
+    queueMicrotask(() => window.dispatchEvent(new CustomEvent('nodd:locationchange')));
   };
 }
 

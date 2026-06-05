@@ -29,6 +29,32 @@ const MIGRATION_FILES = ['0001_nodd_init.sql', '0002_bootstrap.sql'];
 const DEFAULT_REGION = 'us-east-1';
 const DEFAULT_ALLOWLIST = ['http://localhost:5173', 'http://localhost:3000'];
 
+// Pick the closest Supabase region from the host's IANA timezone.
+// Continent prefix is enough — finer granularity isn't worth the maintenance.
+function detectRegion() {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    const continent = tz.split('/')[0];
+    switch (continent) {
+      case 'Europe':
+      case 'Africa':
+        return 'eu-central-1';
+      case 'Asia':
+      case 'Indian':
+        return 'ap-southeast-1';
+      case 'Australia':
+      case 'Pacific':
+        return 'ap-southeast-2';
+      case 'America':
+      case 'Atlantic':
+      default:
+        return 'us-east-1';
+    }
+  } catch {
+    return DEFAULT_REGION;
+  }
+}
+
 // ---------- I/O helpers ----------
 
 const log = msg => console.log(`[nodd] ${msg}`);
@@ -70,8 +96,11 @@ function getToken() {
 }
 
 async function ask(rl, question, defaultValue = '') {
-  const suffix = defaultValue ? ` (${defaultValue})` : '';
-  const ans = (await rl.question(`[nodd] ${question}${suffix}: `)).trim();
+  // Pre-fill the readline buffer with the default so the user sees the value
+  // already typed in and can press Enter, or edit it inline.
+  const p = rl.question(`[nodd] ${question}: `);
+  if (defaultValue) rl.write(defaultValue);
+  const ans = (await p).trim();
   return ans || defaultValue;
 }
 
@@ -270,9 +299,20 @@ function snippet({ framework, prefix, adminEmail, openMembership }) {
 function parseFlags(argv) {
   const flags = {};
   const positional = [];
-  for (const arg of argv) {
-    if (arg.startsWith('--')) flags[arg.slice(2)] = true;
-    else positional.push(arg);
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg.startsWith('--')) {
+      const key = arg.slice(2);
+      const next = argv[i + 1];
+      if (next !== undefined && !next.startsWith('--')) {
+        flags[key] = next;
+        i++;
+      } else {
+        flags[key] = true;
+      }
+    } else {
+      positional.push(arg);
+    }
   }
   return { flags, positional };
 }
@@ -302,12 +342,22 @@ async function cmdInit(argv) {
     return;
   }
 
-  // Pick org
-  const orgs = await api('/organizations', { token });
-  if (!orgs?.length) fail('no Supabase organizations found for this token');
+  // Pick org — auto-create if the account has none (fresh signup or all deleted).
+  let orgs = await api('/organizations', { token });
   let org;
   const rl = createInterface({ input: stdin, output: stdout });
-  if (orgs.length === 1) {
+  if (!orgs?.length) {
+    log('no Supabase organizations on this account — one is required to host the project.');
+    const orgName = await ask(rl, 'create new organization?', 'Personal');
+    org = await api('/organizations', {
+      method: 'POST',
+      token,
+      body: { name: orgName },
+    });
+    if (!org?.id) fail(`could not create organization: ${JSON.stringify(org)}`);
+    log(`✓ created organization: ${org.name}`);
+    orgs = [org];
+  } else if (orgs.length === 1) {
     org = orgs[0];
     log(`organization: ${org.name}`);
   } else {
@@ -319,13 +369,15 @@ async function cmdInit(argv) {
     org = orgs[idx];
   }
 
-  // Project params
+  // Project params — name & region are silent (flags override); only ask what matters.
   const pkg = readPkgJson(cwd);
-  const defaultName = (pkg?.name || basename(cwd))
-    .replace(/^@.+\//, '')
-    .replace(/[^a-z0-9-]/gi, '-');
-  const name = await ask(rl, 'project name?', defaultName);
-  const region = await ask(rl, 'region?', DEFAULT_REGION);
+  const name =
+    (typeof flags.name === 'string' && flags.name) ||
+    (pkg?.name || basename(cwd)).replace(/^@.+\//, '').replace(/[^a-z0-9-]/gi, '-');
+  const region =
+    (typeof flags.region === 'string' && flags.region) || detectRegion();
+  log(`project name: ${name}`);
+  log(`region: ${region}`);
   const adminEmail = await ask(rl, 'admin email (becomes project admin)?', readGitEmail());
   const openAns = await ask(rl, 'open membership — anyone signed in can comment? [Y/n]', 'Y');
   const openMembership = !openAns.toLowerCase().startsWith('n');
@@ -423,9 +475,10 @@ function printHelp() {
   console.log(`Nodd CLI
 
 Usage:
-  npx nodd init [--reconfigure] [--force]
+  npx nodd init [--name <x>] [--region <x>] [--reconfigure] [--force]
       Create a Supabase project, apply migrations, configure auth,
       and write .env.local + .nodd/config.json.
+      Name defaults to package.json#name; region is auto-picked from your timezone.
 
   npx nodd add-origin <url>
       Append a deploy URL to the auth redirect allowlist.

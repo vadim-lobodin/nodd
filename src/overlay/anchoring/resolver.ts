@@ -44,35 +44,11 @@ export function resolvePin(pin: { selector: string; fingerprint: string }): Reso
       }
     }
   } catch {
-    // Invalid selector — fall through to Tier 2
+    // Invalid selector — treat as orphan
   }
 
-  // Tier 2 — Fuzzy fingerprint match
-  try {
-    const lastSegment = pin.selector.split('>').pop()?.trim() ?? '';
-    const tagMatch = lastSegment.match(/^([a-z][a-z0-9]*)/i);
-    const tagName = tagMatch?.[1] ?? 'div';
-    const candidates = document.querySelectorAll(tagName);
-
-    let bestEl: Element | null = null;
-    let bestDist = Infinity;
-
-    for (const candidate of candidates) {
-      const fp = computeFingerprintSync(candidate);
-      const dist = levenshtein(fp, pin.fingerprint);
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestEl = candidate;
-      }
-    }
-
-    if (bestEl && bestDist <= FUZZY_FINGERPRINT_THRESHOLD) {
-      return { element: bestEl, tier: 2 };
-    }
-  } catch {
-    // Fall through to Tier 3
-  }
-
-  // Tier 3 — Orphan
+  // Tier 2 fuzzy matching is intentionally disabled: when the original element
+  // is not in the current UI state, fuzzy match picks a random same-tag element
+  // and the pin renders in the wrong place. Orphans belong in the sidebar only.
   return null;
 }
