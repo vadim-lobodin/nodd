@@ -24,6 +24,12 @@ export function setPageThreads(
   loading: boolean,
   error: StoreError | null,
 ): PageSnapshot {
+  // Drop stale index entries for this path before repopulating, so threads
+  // removed since the last fetch don't linger in threadIndex (which would
+  // leak memory and misroute later realtime lookups).
+  for (const [id, p] of state.threadIndex) {
+    if (p === urlPath) state.threadIndex.delete(id);
+  }
   const page: PageSnapshot = { urlPath, threads, loading, error };
   state.byPath.set(urlPath, page);
   for (const t of threads) {
@@ -34,6 +40,10 @@ export function setPageThreads(
 
 export function addThreadToPage(state: StoreState, thread: Thread): PageSnapshot {
   const page = getOrCreatePage(state, thread.urlPath);
+  // Idempotent: a Realtime echo of our own insert (or a redelivered event)
+  // must not append a second copy. recentlyWritten suppresses this within its
+  // TTL; this guard covers echoes that arrive after the TTL expires.
+  if (page.threads.some(t => t.id === thread.id)) return page;
   const threads = [...page.threads, thread];
   const updated = { ...page, threads };
   state.byPath.set(thread.urlPath, updated);
@@ -73,6 +83,13 @@ export function addCommentToThread(
   threadId: ThreadId,
   comment: Comment,
 ): PageSnapshot | null {
+  const urlPath = state.threadIndex.get(threadId);
+  if (!urlPath) return null;
+  const page = state.byPath.get(urlPath);
+  const existing = page?.threads.find(t => t.id === threadId);
+  // Idempotent: skip if this comment id is already present (Realtime echo of
+  // our own write arriving after the recentlyWritten TTL).
+  if (existing?.comments.some(c => c.id === comment.id)) return null;
   return updateThread(state, threadId, t => ({
     ...t,
     comments: [...t.comments, comment],

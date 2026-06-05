@@ -721,6 +721,16 @@
   border-radius: var(--nodd-radius-sm);
 }
 
+/* ---------- Reply error ---------- */
+[data-nodd-root] .nodd-popover-error {
+  margin: 0 12px 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: hsl(var(--nodd-destructive, 0 72% 51%));
+  background: hsl(var(--nodd-destructive, 0 72% 51%) / 0.1);
+  border-radius: var(--nodd-radius-sm);
+}
+
 /* ---------- Reply area ---------- */
 [data-nodd-root] .nodd-popover-reply {
   margin: 8px 12px 12px;

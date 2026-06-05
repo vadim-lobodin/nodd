@@ -41,10 +41,25 @@ export function createCommentStore(deps: {
   let memberCache: MemberCache | null = null;
   let disposed = false;
 
-  // Prefetch members
-  fetchMembers(supabase, projectId)
-    .then(cache => { memberCache = cache; })
-    .catch(() => { /* non-fatal */ });
+  // Prefetch members, retrying transient failures. Without a retry a single
+  // failed fetch would leave every author rendered as "Unknown" for the whole
+  // session. notifyAll() on success re-renders subscribed pages so names that
+  // arrive after the first paint fill in.
+  let memberFetchAttempts = 0;
+  function loadMembers() {
+    fetchMembers(supabase, projectId)
+      .then(cache => {
+        if (disposed) return;
+        memberCache = cache;
+        notifyAll();
+      })
+      .catch(() => {
+        if (disposed || memberFetchAttempts >= 3) return;
+        memberFetchAttempts++;
+        setTimeout(loadMembers, 1000 * memberFetchAttempts);
+      });
+  }
+  loadMembers();
 
   function notify(urlPath: UrlPath) {
     const page = state.byPath.get(urlPath);
@@ -63,6 +78,7 @@ export function createCommentStore(deps: {
   // Realtime
   const channel = createRealtimeChannel(supabase, projectId, {
     onThreadChange(payload) {
+      if (disposed) return;
       const urlPath = (payload.new?.url_path ?? payload.old?.url_path) as string;
       if (!state.byPath.has(urlPath)) return;
 
@@ -101,6 +117,7 @@ export function createCommentStore(deps: {
       }
     },
     onCommentChange(payload) {
+      if (disposed) return;
       if (payload.eventType === 'INSERT') {
         if (recentlyWritten.has(payload.new.id)) return;
         const threadId = payload.new.thread_id;
@@ -140,6 +157,7 @@ export function createCommentStore(deps: {
       }
     },
     onError() {
+      if (disposed) return;
       for (const [urlPath, page] of state.byPath) {
         state.byPath.set(urlPath, {
           ...page,

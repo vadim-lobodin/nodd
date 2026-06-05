@@ -88,6 +88,7 @@ export function ThreadPopover({
   const [draft, setDraft] = useState('');
   const [draftMentions, setDraftMentions] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(false);
   const [mentionPickerOpen, setMentionPickerOpen] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
   const [mentionFrom, setMentionFrom] = useState(0);
@@ -168,10 +169,15 @@ export function ThreadPopover({
   const handleSubmit = useCallback(async () => {
     if (!draft.trim() || submitting) return;
     setSubmitting(true);
+    setSubmitError(false);
     try {
       await onSubmitReply(draft, draftMentions);
       setDraft('');
       setDraftMentions([]);
+    } catch {
+      // The store rolled back the optimistic comment. Keep the draft so the
+      // user can retry instead of silently losing what they typed.
+      setSubmitError(true);
     } finally {
       setSubmitting(false);
     }
@@ -250,6 +256,12 @@ export function ThreadPopover({
       </ScrollArea.Root>
       )}
 
+      {submitError && (
+        <div className="nodd-popover-error" role="alert">
+          Couldn’t send — check your connection and try again.
+        </div>
+      )}
+
       <div className="nodd-popover-reply">
         <textarea
           ref={textareaRef}
@@ -257,7 +269,7 @@ export function ThreadPopover({
           className="nodd-reply-input"
           placeholder={comments.length === 0 ? 'Add a comment' : 'Reply...'}
           value={draft}
-          onChange={e => { setDraft(e.target.value); handleTextareaInput(); }}
+          onChange={e => { setDraft(e.target.value); setSubmitError(false); handleTextareaInput(); }}
           onKeyDown={handleKeyDown}
           onClick={handleTextareaInput}
           rows={1}

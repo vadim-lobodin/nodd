@@ -77,13 +77,16 @@ export async function fetchResolvedThreads(
   projectId: string,
   urlPath: string,
 ): Promise<Thread[]> {
+  // Newest-resolved first, bounded — a page can accumulate unbounded resolved
+  // threads over its lifetime and the sidebar only shows a recent slice.
   const { data, error } = await supabase
     .from('threads')
     .select('*, comments(*)')
     .eq('project_id', projectId)
     .eq('url_path', urlPath)
     .eq('resolved', true)
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: false })
+    .limit(200);
 
   if (error) throw error;
   return (data as RawThread[]).map(mapThread);

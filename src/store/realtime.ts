@@ -1,8 +1,14 @@
 import { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 
+export type RowPayload = {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  new: Record<string, any>;
+  old: Record<string, any>;
+};
+
 export type DeltaHandler = {
-  onThreadChange: (payload: any) => void;
-  onCommentChange: (payload: any) => void;
+  onThreadChange: (payload: RowPayload) => void;
+  onCommentChange: (payload: RowPayload) => void;
   onError: () => void;
 };
 
