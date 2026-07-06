@@ -1152,6 +1152,33 @@
   opacity: 1;
 }
 
+/* ==========================================================================
+   Variants panel — reuses the sidebar shell; one card per variant with a
+   segmented pill control built from the sidebar tab styling.
+   ========================================================================== */
+[data-nodd-root] .nodd-variant-card {
+  padding: 12px calc(var(--nodd-sidebar-pad-x) - var(--nodd-sidebar-card-gutter));
+  margin: 4px 0;
+}
+
+[data-nodd-root] .nodd-variant-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: hsl(var(--nodd-foreground));
+  margin-bottom: 8px;
+}
+
+[data-nodd-root] .nodd-variant-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+[data-nodd-root] .nodd-variant-option {
+  flex: 1 1 auto;
+}
+
 [data-nodd-root] .nodd-sidebar-item-footer {
   display: flex;
   justify-content: space-between;

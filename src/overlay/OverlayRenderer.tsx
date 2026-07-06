@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { Menu } from '@carbon/icons-react';
+import { Chat, Layers } from '@carbon/icons-react';
 import { useNoddContext } from '../provider/NoddContext';
 import { PinMarker } from './components/PinMarker';
 import { CaptureLayer } from './components/CaptureLayer';
 import { ThreadPopover } from './components/ThreadPopover';
 import { Sidebar, type ThreadSummary } from './components/Sidebar';
+import { VariantsPanel } from './components/VariantsPanel';
 import { DOMAnchor, type Pin } from './anchoring/DOMAnchor';
 import { startReanchorLoop } from './anchoring/reanchorLoop';
 import { getStateStackForElement, isStateMatch, stackToKey, keyToStack, hasActivatorOrTrigger, activateState, subscribeActivators } from '../provider/state';
@@ -19,11 +20,12 @@ function resolveSystemTheme(): 'light' | 'dark' {
 
 export function OverlayRenderer() {
   const ctx = useNoddContext();
-  const { user, urlPath, store, signIn, signOut, theme, pinContainer } = ctx;
+  const { user, urlPath, store, variants, signIn, signOut, theme, pinContainer } = ctx;
   const [snapshot, setSnapshot] = useState<PageSnapshot | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [variantsOpen, setVariantsOpen] = useState(false);
   const [pinPositions, setPinPositions] = useState<Map<string, { x: number; y: number }>>(new Map());
   const pinPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const portalRootRef = useRef<HTMLElement | null>(null);
@@ -46,19 +48,21 @@ export function OverlayRenderer() {
     }
   }, [effectiveTheme]);
 
-  // Push host layout when the sidebar is open, instead of overlaying.
-  // Uses inline style to avoid leaking unscoped CSS into the host (see CLAUDE.md).
-  // Must clear the sidebar's full footprint: right gap (16) + width (300) +
-  // a left breathing gap (16) = 332px, otherwise it overlaps host content.
+  // Push host layout when either right-side panel is open, instead of
+  // overlaying. Uses inline style to avoid leaking unscoped CSS into the host
+  // (see CLAUDE.md). Must clear the panel's full footprint: right gap (16) +
+  // width (300) + a left breathing gap (16) = 332px, otherwise it overlaps
+  // host content. The two panels are mutually exclusive so they share the gap.
+  const panelOpen = sidebarOpen || variantsOpen;
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const body = document.body;
     const prevMargin = body.style.marginRight;
-    body.style.marginRight = sidebarOpen ? 'min(332px, 90vw)' : prevMargin || '';
+    body.style.marginRight = panelOpen ? 'min(332px, 90vw)' : prevMargin || '';
     return () => {
       body.style.marginRight = prevMargin;
     };
-  }, [sidebarOpen]);
+  }, [panelOpen]);
 
   // Listen for system theme changes when theme='system'
   useEffect(() => {
@@ -90,6 +94,12 @@ export function OverlayRenderer() {
   useEffect(() => {
     return subscribeActivators(() => setActivatorVersion(v => v + 1));
   }, []);
+
+  // Re-render when the variant registry changes so the toolbar's Variants
+  // button appears the moment the first variant is declared in the host tree.
+  const [, forceVariants] = useState(0);
+  useEffect(() => variants.subscribe(() => forceVariants(v => v + 1)), [variants]);
+  const hasVariants = variants.getDefinitions().length > 0;
 
   const resolveAllPins = useCallback(() => {
     if (!snapshot) return;
@@ -154,12 +164,21 @@ export function OverlayRenderer() {
       if (key === 'c') {
         ev.preventDefault();
         setIsCapturing(v => {
-          if (!v) setSidebarOpen(false); // entering comment mode closes the sidebar
+          if (!v) { setSidebarOpen(false); setVariantsOpen(false); } // comment mode closes both panels
           return !v;
         });
       } else if (key === 'm' && !isCapturing) {
         ev.preventDefault();
-        setSidebarOpen(v => !v);
+        setSidebarOpen(v => {
+          if (!v) setVariantsOpen(false); // panels are mutually exclusive
+          return !v;
+        });
+      } else if (key === 'v' && !isCapturing) {
+        ev.preventDefault();
+        setVariantsOpen(v => {
+          if (!v) setSidebarOpen(false); // panels are mutually exclusive
+          return !v;
+        });
       }
     };
     document.addEventListener('keydown', handler);
@@ -403,12 +422,21 @@ export function OverlayRenderer() {
           opens the sidebar; exit comment mode via Esc or pressing "C" again. */}
       {isCapturing && (
         <div className="nodd-toolbar">
+          {hasVariants && (
+            <button
+              className="nodd-btn nodd-btn--sidebar nodd-btn--variants"
+              onClick={() => { setIsCapturing(false); setSidebarOpen(false); setVariantsOpen(true); }}
+              aria-label="Variants"
+            >
+              <Layers size={20} />
+            </button>
+          )}
           <button
             className="nodd-btn nodd-btn--sidebar"
-            onClick={() => { setIsCapturing(false); setSidebarOpen(true); }}
+            onClick={() => { setIsCapturing(false); setVariantsOpen(false); setSidebarOpen(true); }}
             aria-label="Open comments"
           >
-            <Menu size={20} />
+            <Chat size={20} />
           </button>
         </div>
       )}
@@ -516,6 +544,14 @@ export function OverlayRenderer() {
         }}
         onItemOpen={handlePinOpen}
         onItemHover={() => {}}
+        container={portalRootRef.current}
+      />
+
+      {/* Variants panel — shares the right-side region with the sidebar */}
+      <VariantsPanel
+        open={variantsOpen}
+        onClose={() => setVariantsOpen(false)}
+        registry={variants}
         container={portalRootRef.current}
       />
     </Tooltip.Provider>

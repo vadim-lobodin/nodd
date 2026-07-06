@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'react';
 import type { AuthClient, CurrentUser } from '../auth';
 import type { CommentStore } from '../store';
+import type { VariantRegistry } from './variants';
 
 export type NoddTheme = 'light' | 'dark' | 'system';
 
@@ -17,6 +18,7 @@ export type NoddContextValue = {
   urlPath: string;
   auth: AuthClient;
   store: CommentStore;
+  variants: VariantRegistry;
   pinContainer: HTMLElement | null;
 };
 

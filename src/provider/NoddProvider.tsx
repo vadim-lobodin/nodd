@@ -4,6 +4,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { NoddContext, type NoddContextValue, type NoddTheme } from './NoddContext';
 import { AuthClient, type CurrentUser } from '../auth';
 import { createCommentStore, type CommentStore } from '../store';
+import { createVariantRegistry, type VariantRegistry } from './variants';
 import { OverlayRenderer } from '../overlay';
 import { subscribeToRouteChanges } from './useRouteChange';
 import { isBrowser } from './ssr';
@@ -107,8 +108,12 @@ export function NoddProvider({
   // Module-level singleton — safe across Strict Mode double-render
   const { supabase, auth } = getOrCreateClients(supabaseUrl, supabaseAnonKey);
 
-  // Store is created in useEffect to avoid realtime subscription during render
+  // Store is created in useEffect to avoid realtime subscription during render.
+  // The variant registry rides the same lifecycle so both are Strict-Mode-safe
+  // (recreated on remount, disposed on unmount) and gated by the same
+  // `storeReady` flag in ctxValue.
   const storeRef = useRef<CommentStore | null>(null);
+  const variantsRef = useRef<VariantRegistry | null>(null);
   const [storeReady, setStoreReady] = useState(false);
 
   useEffect(() => {
@@ -118,11 +123,18 @@ export function NoddProvider({
         projectId,
         getCurrentUserId: () => auth.currentUser?.id ?? null,
       });
-      setStoreReady(true);
     }
+    if (!variantsRef.current) {
+      variantsRef.current = createVariantRegistry({ projectId });
+    }
+    // Load persisted selections from localStorage in an effect (SSR-safe).
+    variantsRef.current.hydrate();
+    setStoreReady(true);
     return () => {
       storeRef.current?.dispose();
       storeRef.current = null;
+      variantsRef.current?.dispose();
+      variantsRef.current = null;
       setStoreReady(false);
     };
   }, [supabase, projectId, auth]);
@@ -229,9 +241,10 @@ export function NoddProvider({
   const signOut = useCallback(() => auth.signOut(), [auth]);
 
   const store = storeRef.current;
+  const variants = variantsRef.current;
 
   const ctxValue: NoddContextValue | null = useMemo(() => {
-    if (!store) return null;
+    if (!store || !variants) return null;
     return {
       projectId,
       user,
@@ -245,9 +258,10 @@ export function NoddProvider({
       urlPath,
       auth,
       store,
+      variants,
       pinContainer: pinContainerEl,
     };
-  }, [projectId, user, signIn, signOut, isVisible, toggleOverlay, theme, urlPath, auth, store, storeReady, pinContainerEl]);
+  }, [projectId, user, signIn, signOut, isVisible, toggleOverlay, theme, urlPath, auth, store, variants, storeReady, pinContainerEl]);
 
   if (!ctxValue) {
     return <>{children}</>;

@@ -34,10 +34,10 @@ const { user, signIn, signOut, toggleOverlay, isVisible, ... } = useNodd();
 
 | Module | Role |
 |---|---|
-| `src/provider/` | `NoddProvider` boots singletons, owns runtime state (user, urlPath, visibility, theme), creates two body-attached portals, exposes `NoddContext`. |
+| `src/provider/` | `NoddProvider` boots singletons, owns runtime state (user, urlPath, visibility, theme), creates two body-attached portals, exposes `NoddContext`. Contains `state/` (`<NoddState>` + activator registry) and `variants/` (`useVariant`/`<Variant>` + per-viewer variant registry). |
 | `src/auth/` | `AuthClient` wraps Supabase magic-link sign-in + session restore. |
 | `src/store/` | `CommentStore` — page-scoped fetch, IndexedDB cache, optimistic CRUD with temp IDs, Realtime subscription. Files are split by concern (`query`, `mutations`, `realtime`, `cache`, `state`, `members`). |
-| `src/overlay/` | React UI rendered via portal: `OverlayRenderer`, `Sidebar`, `ThreadPopover`, `PinMarker`, `CaptureLayer`, `MentionPicker`, plus `anchoring/` (selector + fingerprint + resolver + ResizeObserver re-anchor loop). |
+| `src/overlay/` | React UI rendered via portal: `OverlayRenderer`, `Sidebar`, `VariantsPanel`, `ThreadPopover`, `PinMarker`, `CaptureLayer`, `MentionPicker`, plus `anchoring/` (selector + fingerprint + resolver + ResizeObserver re-anchor loop). |
 | `supabase/` | SQL migrations, RLS policies, indexes. Bundled in the npm package via `package.json` `files` so consumers can apply them after `npm i`. |
 
 Each module has its own `README.md` with detailed design notes; consult them before deeper changes.
