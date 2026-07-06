@@ -63,6 +63,22 @@ export function removeThread(state: StoreState, threadId: ThreadId): PageSnapsho
   return updated;
 }
 
+export function findThreadByCommentId(
+  state: StoreState,
+  commentId: string,
+): { threadId: ThreadId; urlPath: UrlPath } | null {
+  // Realtime DELETE payloads carry only the row's primary key, so the owning
+  // thread_id is not available — locate the thread by scanning local pages.
+  for (const [urlPath, page] of state.byPath) {
+    for (const thread of page.threads) {
+      if (thread.comments.some(c => c.id === commentId)) {
+        return { threadId: thread.id, urlPath };
+      }
+    }
+  }
+  return null;
+}
+
 export function updateThread(
   state: StoreState,
   threadId: ThreadId,

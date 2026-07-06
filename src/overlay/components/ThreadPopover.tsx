@@ -278,7 +278,11 @@ export function ThreadPopover({
                       {canDelete && (
                         <button
                           className="nodd-btn nodd-btn--delete"
-                          onClick={() => setConfirmDeleteId(comment.id)}
+                          // Deleting the root comment (whole thread) fires
+                          // directly; deleting a reply asks for confirmation.
+                          onClick={() =>
+                            ci === 0 ? void onDeleteComment(comment.id) : setConfirmDeleteId(comment.id)
+                          }
                           aria-label="Delete"
                           title={ci === 0 ? 'Delete thread' : 'Delete comment'}
                         >
@@ -308,9 +312,7 @@ export function ThreadPopover({
                 </div>
                 {confirmDeleteId === comment.id && (
                   <div className="nodd-comment-confirm" role="alertdialog" aria-label="Confirm delete">
-                    <span className="nodd-comment-confirm-text">
-                      {ci === 0 ? 'Delete this whole thread?' : 'Delete this comment?'}
-                    </span>
+                    <span className="nodd-comment-confirm-text">Delete this comment?</span>
                     <div className="nodd-comment-confirm-actions">
                       <button
                         className="nodd-btn nodd-btn--ghost"

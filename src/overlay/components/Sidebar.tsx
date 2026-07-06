@@ -274,7 +274,6 @@ function SidebarItem({
   onItemActivate?: (threadId: string) => void;
   onItemDelete?: (threadId: string) => Promise<void> | void;
 }) {
-  const [confirming, setConfirming] = useState(false);
   const handleOpen = () => {
     if (onItemActivate && item.canActivate) onItemActivate(item.id);
     else onItemOpen(item.id);
@@ -302,9 +301,9 @@ function SidebarItem({
         {showDelete && (
           <button
             className="nodd-btn nodd-btn--delete nodd-sidebar-item-delete"
-            onClick={e => { e.stopPropagation(); setConfirming(true); }}
-            aria-label="Delete comment"
-            title="Delete comment"
+            onClick={e => { e.stopPropagation(); void onItemDelete?.(item.id); }}
+            aria-label="Delete thread"
+            title="Delete thread"
           >
             <TrashCan size={16} />
           </button>
@@ -314,27 +313,6 @@ function SidebarItem({
       {item.replyCount > 0 && (
         <div className="nodd-sidebar-item-footer">
           <span className="nodd-sidebar-item-replies">{item.replyCount} {item.replyCount === 1 ? 'reply' : 'replies'}</span>
-        </div>
-      )}
-      {confirming && (
-        <div
-          className="nodd-comment-confirm"
-          role="alertdialog"
-          aria-label="Confirm delete"
-          onClick={e => e.stopPropagation()}
-        >
-          <span className="nodd-comment-confirm-text">Delete this comment?</span>
-          <div className="nodd-comment-confirm-actions">
-            <button className="nodd-btn nodd-btn--ghost" onClick={() => setConfirming(false)}>
-              Cancel
-            </button>
-            <button
-              className="nodd-btn nodd-btn--danger"
-              onClick={() => { setConfirming(false); void onItemDelete?.(item.id); }}
-            >
-              Delete
-            </button>
-          </div>
         </div>
       )}
     </div>

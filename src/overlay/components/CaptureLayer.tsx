@@ -15,14 +15,15 @@ export function CaptureLayer({ onCreate, onCancel, portalRootRef }: CaptureLayer
       const portalRoot = portalRootRef.current;
       if (!portalRoot) return;
 
-      // Clicks on Nodd's own chrome (the comment-mode panel, sidebar) must not
-      // place a pin — let the control handle its own click. Everything inside
-      // portalRoot that isn't the capture layer is overlay UI.
-      const target = ev.target as Node | null;
-      const captureLayer = portalRoot.querySelector('.nodd-capture-layer');
-      if (target && portalRoot.contains(target) && captureLayer && !captureLayer.contains(target)) {
-        return;
-      }
+      // Clicks on any Nodd chrome (the comment-mode panel, sidebar, existing
+      // pins, an open popover) must not place a pin — let the control handle
+      // its own click. Both portals carry a data-nodd-* attribute; anything
+      // inside them that isn't the capture layer itself is overlay UI.
+      const target = ev.target instanceof Element ? ev.target : null;
+      const onChrome =
+        target?.closest('[data-nodd-root], [data-nodd-pin-container]') &&
+        !target?.closest('.nodd-capture-layer');
+      if (onChrome) return;
 
       // Guard against re-entry during the one-frame elementFromPoint dance.
       if (!activeRef.current) return;
@@ -32,12 +33,17 @@ export function CaptureLayer({ onCreate, onCancel, portalRootRef }: CaptureLayer
       ev.stopImmediatePropagation();
 
       const { clientX, clientY } = ev;
+      // Hide both portals so elementFromPoint returns the host element under
+      // the cursor, never Nodd's own pins/popover in the pin container.
+      const pinContainer = document.querySelector<HTMLElement>('[data-nodd-pin-container]');
 
       try {
         portalRoot.style.visibility = 'hidden';
+        if (pinContainer) pinContainer.style.visibility = 'hidden';
         await new Promise<void>(r => requestAnimationFrame(() => r()));
         const hit = document.elementFromPoint(clientX, clientY);
         portalRoot.style.visibility = '';
+        if (pinContainer) pinContainer.style.visibility = '';
 
         if (!hit || hit === document.body || hit === document.documentElement) {
           onCancel();
@@ -46,7 +52,8 @@ export function CaptureLayer({ onCreate, onCancel, portalRootRef }: CaptureLayer
           onCreate(pin);
         }
       } catch {
-        if (portalRoot) portalRoot.style.visibility = '';
+        portalRoot.style.visibility = '';
+        if (pinContainer) pinContainer.style.visibility = '';
         onCancel();
       }
     },

@@ -7,6 +7,7 @@ import {
   createInitialState, getOrCreatePage, setPageThreads,
   addThreadToPage, updateThread, addCommentToThread,
   replaceThreadId, replaceCommentId, removeThread,
+  findThreadByCommentId,
 } from './state';
 import { readCache, writeCache } from './cache';
 import { fetchPageThreads, fetchResolvedThreads } from './query';
@@ -81,6 +82,19 @@ export function createCommentStore(deps: {
   const channel = createRealtimeChannel(supabase, projectId, {
     onThreadChange(payload) {
       if (disposed) return;
+
+      // DELETE payloads carry only the primary key (no REPLICA IDENTITY FULL
+      // guarantee for url_path), so resolve the page from the local index.
+      if (payload.eventType === 'DELETE') {
+        const id = payload.old?.id;
+        if (!id || recentlyWritten.has(id)) return;
+        const path = state.threadIndex.get(id);
+        if (!path) return;
+        removeThread(state, id);
+        notify(path);
+        return;
+      }
+
       const urlPath = (payload.new?.url_path ?? payload.old?.url_path) as string;
       if (!state.byPath.has(urlPath)) return;
 
@@ -112,9 +126,6 @@ export function createCommentStore(deps: {
         if (payload.new.resolved) {
           removeThread(state, payload.new.id);
         }
-        notify(urlPath);
-      } else if (payload.eventType === 'DELETE') {
-        removeThread(state, payload.old.id);
         notify(urlPath);
       }
     },
@@ -148,14 +159,17 @@ export function createCommentStore(deps: {
         }));
         notify(urlPath);
       } else if (payload.eventType === 'DELETE') {
-        const threadId = payload.old.thread_id;
-        const urlPath = state.threadIndex.get(threadId);
-        if (!urlPath) return;
-        updateThread(state, threadId, t => ({
+        // DELETE payloads carry only the comment's primary key, so thread_id is
+        // not available — locate the owning thread by scanning local state.
+        const id = payload.old?.id;
+        if (!id || recentlyWritten.has(id)) return;
+        const found = findThreadByCommentId(state, id);
+        if (!found) return;
+        updateThread(state, found.threadId, t => ({
           ...t,
-          comments: t.comments.filter(c => c.id !== payload.old.id),
+          comments: t.comments.filter(c => c.id !== id),
         }));
-        notify(urlPath);
+        notify(found.urlPath);
       }
     },
     onError() {
@@ -401,6 +415,11 @@ export function createCommentStore(deps: {
       // Optimistic-only for temp threads not yet persisted server-side.
       if (threadId.startsWith('temp-')) return;
 
+      // Suppress the Realtime DELETE echo of our own write (row + cascade-
+      // deleted comments), per the store sync contract in CLAUDE.md.
+      markRecentlyWritten(threadId);
+      for (const c of removed?.comments ?? []) markRecentlyWritten(c.id);
+
       try {
         await deleteThread(supabase, threadId);
       } catch (err) {
@@ -435,6 +454,9 @@ export function createCommentStore(deps: {
       if (urlPath) notify(urlPath);
 
       if (commentId.startsWith('temp-')) return;
+
+      // Suppress the Realtime DELETE echo of our own write (see CLAUDE.md).
+      markRecentlyWritten(commentId);
 
       try {
         await deleteComment(supabase, commentId);

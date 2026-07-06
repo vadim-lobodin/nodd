@@ -624,7 +624,6 @@
 
 /* Sidebar item delete — revealed on row hover/focus to keep the list calm */
 [data-nodd-root] .nodd-sidebar-item-delete {
-  margin-left: auto;
   opacity: 0;
   transition: opacity 120ms ease;
 }
@@ -1068,6 +1067,9 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: hsl(var(--nodd-muted-foreground));
+  /* Right-align the timestamp; the delete button (own threads only) follows it,
+     so rows without a delete button keep the same alignment. */
+  margin-left: auto;
 }
 
 [data-nodd-root] .nodd-sidebar-item-snippet {
@@ -1234,6 +1236,13 @@
 [data-nodd-root] .nodd-auth-sent p {
   margin: 0 0 12px;
   font-size: 13px;
+}
+
+[data-nodd-root] .nodd-auth-error {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #e5484d;
 }
 
 /* ==========================================================================

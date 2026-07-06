@@ -25,7 +25,7 @@ import { stdin, stdout } from 'node:process';
 const API = 'https://api.supabase.com/v1';
 const PKG_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MIGRATIONS_DIR = join(PKG_DIR, 'supabase', 'migrations');
-const MIGRATION_FILES = ['0001_nodd_init.sql', '0002_bootstrap.sql'];
+const MIGRATION_FILES = ['0001_nodd_init.sql', '0002_bootstrap.sql', '0003_realtime_delete_identity.sql'];
 const DEFAULT_REGION = 'us-east-1';
 const DEFAULT_ALLOWLIST = ['http://localhost:5173', 'http://localhost:3000'];
 
@@ -296,6 +296,11 @@ function snippet({ framework, prefix, adminEmail, openMembership }) {
 
 // ---------- commands ----------
 
+// Flags that take a value (`--name foo`); everything else is a boolean switch.
+// Without this, a boolean flag would greedily swallow the following positional
+// (e.g. `add-origin --force https://app.com` would eat the URL).
+const VALUED_FLAGS = new Set(['name', 'region']);
+
 function parseFlags(argv) {
   const flags = {};
   const positional = [];
@@ -304,7 +309,7 @@ function parseFlags(argv) {
     if (arg.startsWith('--')) {
       const key = arg.slice(2);
       const next = argv[i + 1];
-      if (next !== undefined && !next.startsWith('--')) {
+      if (VALUED_FLAGS.has(key) && next !== undefined && !next.startsWith('--')) {
         flags[key] = next;
         i++;
       } else {

@@ -30,6 +30,8 @@ export function OverlayRenderer() {
   const anchorCache = useRef<Map<string, Element>>(new Map());
   const [authEmail, setAuthEmail] = useState('');
   const [authSent, setAuthSent] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authSending, setAuthSending] = useState(false);
   const [onboardName, setOnboardName] = useState('');
 
   // Resolve effective theme
@@ -228,14 +230,27 @@ export function OverlayRenderer() {
     // Deleting the root comment removes the whole thread (store handles this);
     // close the popover since there's nothing left to show.
     const isRoot = thread?.comments[0]?.id === commentId;
+    const threadId = openThreadId;
     if (isRoot) setOpenThreadId(null);
-    await store.deleteComment({ threadId: openThreadId, commentId });
+    try {
+      await store.deleteComment({ threadId, commentId });
+    } catch {
+      // The store rolls the comment/thread back into state on failure; reopen
+      // the popover so the restored content is visible instead of vanishing.
+      if (isRoot) setOpenThreadId(threadId);
+    }
   }, [store, openThreadId, snapshot]);
 
   const handleDeleteThread = useCallback(async (threadId: string) => {
     if (!store) return;
-    if (openThreadId === threadId) setOpenThreadId(null);
-    await store.deleteThread(threadId);
+    const wasOpen = openThreadId === threadId;
+    if (wasOpen) setOpenThreadId(null);
+    try {
+      await store.deleteThread(threadId);
+    } catch {
+      // Store rolls the thread back; reopen it so it isn't silently lost.
+      if (wasOpen) setOpenThreadId(threadId);
+    }
   }, [store, openThreadId]);
 
   const members = store?.getMembers();
@@ -280,10 +295,20 @@ export function OverlayRenderer() {
   }, [snapshot]);
 
   const handleSignIn = useCallback(async () => {
-    if (!authEmail.trim()) return;
-    await signIn(authEmail);
-    setAuthSent(true);
-  }, [authEmail, signIn]);
+    if (!authEmail.trim() || authSending) return;
+    setAuthError(null);
+    setAuthSending(true);
+    try {
+      await signIn(authEmail);
+      setAuthSent(true);
+    } catch (err) {
+      setAuthError(
+        err instanceof Error ? err.message : 'Could not send the magic link. Please try again.',
+      );
+    } finally {
+      setAuthSending(false);
+    }
+  }, [authEmail, authSending, signIn]);
 
   const handleSetName = useCallback(async () => {
     const name = onboardName.trim();
@@ -308,12 +333,17 @@ export function OverlayRenderer() {
               type="email"
               placeholder="you@example.com"
               value={authEmail}
-              onChange={e => setAuthEmail(e.target.value)}
+              onChange={e => { setAuthEmail(e.target.value); setAuthError(null); }}
               onKeyDown={e => e.key === 'Enter' && handleSignIn()}
             />
-            <button className="nodd-btn nodd-btn--primary" onClick={handleSignIn}>
-              Send magic link
+            <button
+              className="nodd-btn nodd-btn--primary"
+              onClick={handleSignIn}
+              disabled={authSending}
+            >
+              {authSending ? 'Sending…' : 'Send magic link'}
             </button>
+            {authError && <p className="nodd-auth-error" role="alert">{authError}</p>}
           </div>
         )}
       </div>
