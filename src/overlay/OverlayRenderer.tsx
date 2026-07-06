@@ -170,6 +170,27 @@ export function OverlayRenderer() {
     setOpenThreadId(prev => (prev === threadId ? null : threadId));
   }, []);
 
+  // When a thread opens (e.g. picked from the sidebar) scroll its anchor into
+  // view if it's off-screen, so the pin and popover are actually visible.
+  // A directly-clicked pin is already on-screen, so the guard makes this a no-op.
+  const scrollThreadIntoView = useCallback((threadId: string) => {
+    const el = anchorCache.current.get(threadId);
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const fullyVisible =
+      rect.top >= 0 &&
+      rect.left >= 0 &&
+      rect.bottom <= window.innerHeight &&
+      rect.right <= window.innerWidth;
+    if (!fullyVisible) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (openThreadId) scrollThreadIntoView(openThreadId);
+  }, [openThreadId, scrollThreadIntoView]);
+
   const handlePinHover = useCallback((_threadId: string | null) => {}, []);
 
   const handleCaptureCreate = useCallback(
