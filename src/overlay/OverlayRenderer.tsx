@@ -159,15 +159,25 @@ export function OverlayRenderer() {
       return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
     };
     const handler = (ev: KeyboardEvent) => {
-      if (!user || ev.metaKey || ev.ctrlKey || ev.altKey || isEditable(ev.target)) return;
+      if (ev.metaKey || ev.ctrlKey || ev.altKey || isEditable(ev.target)) return;
       const key = ev.key.toLowerCase();
+      if (key === 'escape') {
+        if (isCapturing) { ev.preventDefault(); setIsCapturing(false); }
+        return;
+      }
+      // "C" works even when signed out — it surfaces the centered sign-in
+      // prompt (the overlay is otherwise hidden by default for guests).
       if (key === 'c') {
         ev.preventDefault();
         setIsCapturing(v => {
           if (!v) { setSidebarOpen(false); setVariantsOpen(false); } // comment mode closes both panels
           return !v;
         });
-      } else if (key === 'm' && !isCapturing) {
+        return;
+      }
+      // The sidebar / variants panels require an authenticated viewer.
+      if (!user) return;
+      if (key === 'm' && !isCapturing) {
         ev.preventDefault();
         setSidebarOpen(v => {
           if (!v) setVariantsOpen(false); // panels are mutually exclusive
@@ -356,58 +366,66 @@ export function OverlayRenderer() {
     await ctx.auth.setDisplayName(name);
   }, [onboardName, ctx.auth]);
 
-  // Auth gate — email only
+  // Auth gate — email only. Hidden by default; the centered prompt only
+  // appears once the viewer tries to comment (presses "C" → isCapturing).
   if (!user) {
+    if (!isCapturing) return null;
     return (
-      <div className="nodd-auth-gate">
-        {authSent ? (
-          <div className="nodd-auth-sent">
-            <p>Check your email for a sign-in link.</p>
-            <button className="nodd-btn" onClick={() => setAuthSent(false)}>Try again</button>
-          </div>
-        ) : (
-          <div className="nodd-auth-form">
-            <p>Sign in to leave comments</p>
-            <input
-              className="nodd-auth-input"
-              type="email"
-              placeholder="you@example.com"
-              value={authEmail}
-              onChange={e => { setAuthEmail(e.target.value); setAuthError(null); }}
-              onKeyDown={e => e.key === 'Enter' && handleSignIn()}
-            />
-            <button
-              className="nodd-btn nodd-btn--primary"
-              onClick={handleSignIn}
-              disabled={authSending}
-            >
-              {authSending ? 'Sending…' : 'Send magic link'}
-            </button>
-            {authError && <p className="nodd-auth-error" role="alert">{authError}</p>}
-          </div>
-        )}
+      <div className="nodd-auth-backdrop" onClick={() => setIsCapturing(false)}>
+        <div className="nodd-auth-gate nodd-auth-gate--center" onClick={e => e.stopPropagation()}>
+          {authSent ? (
+            <div className="nodd-auth-sent">
+              <p>Check your email for a sign-in link.</p>
+              <button className="nodd-btn" onClick={() => setAuthSent(false)}>Try again</button>
+            </div>
+          ) : (
+            <div className="nodd-auth-form">
+              <h2 className="nodd-auth-title">Log in to leave comments</h2>
+              <input
+                className="nodd-auth-input"
+                type="email"
+                placeholder="you@example.com"
+                value={authEmail}
+                onChange={e => { setAuthEmail(e.target.value); setAuthError(null); }}
+                onKeyDown={e => e.key === 'Enter' && handleSignIn()}
+                autoFocus
+              />
+              <button
+                className="nodd-btn nodd-btn--primary"
+                onClick={handleSignIn}
+                disabled={authSending}
+              >
+                {authSending ? 'Sending…' : 'Send magic link'}
+              </button>
+              {authError && <p className="nodd-auth-error" role="alert">{authError}</p>}
+            </div>
+          )}
+        </div>
       </div>
     );
   }
 
-  // First-time name prompt
+  // First-time name prompt — also centered, and only while trying to comment.
   if (ctx.auth.needsDisplayName) {
+    if (!isCapturing) return null;
     return (
-      <div className="nodd-auth-gate">
-        <div className="nodd-auth-form">
-          <p>Welcome! What should we call you?</p>
-          <input
-            className="nodd-auth-input"
-            type="text"
-            placeholder="Your name"
-            value={onboardName}
-            onChange={e => setOnboardName(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSetName()}
-            autoFocus
-          />
-          <button className="nodd-btn nodd-btn--primary" onClick={handleSetName}>
-            Continue
-          </button>
+      <div className="nodd-auth-backdrop" onClick={() => setIsCapturing(false)}>
+        <div className="nodd-auth-gate nodd-auth-gate--center" onClick={e => e.stopPropagation()}>
+          <div className="nodd-auth-form">
+            <h2 className="nodd-auth-title">Welcome! What should we call you?</h2>
+            <input
+              className="nodd-auth-input"
+              type="text"
+              placeholder="Your name"
+              value={onboardName}
+              onChange={e => setOnboardName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSetName()}
+              autoFocus
+            />
+            <button className="nodd-btn nodd-btn--primary" onClick={handleSetName}>
+              Continue
+            </button>
+          </div>
         </div>
       </div>
     );
