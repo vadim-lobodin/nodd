@@ -12,7 +12,7 @@ The backend is **your own** [Supabase](https://supabase.com) project — there i
 ## Install
 
 ```bash
-npm install nodd
+npm install @vadim_lobodin/nodd
 ```
 
 `react` and `react-dom` (18+) are peer dependencies. See **[INSTALL.md](./INSTALL.md)** for the full 2-minute setup — the `npx nodd init` CLI provisions the Supabase project, applies migrations, and prints a ready-to-paste snippet.
@@ -20,8 +20,8 @@ npm install nodd
 ## Quick start
 
 ```tsx
-import { NoddProvider } from 'nodd';
-import 'nodd/style.css';
+import { NoddProvider } from '@vadim_lobodin/nodd';
+import '@vadim_lobodin/nodd/style.css';
 
 <NoddProvider
   projectId={import.meta.env.VITE_NODD_PROJECT_ID}
@@ -48,7 +48,7 @@ A small toolbar appears bottom-right. Press **C** to enter comment mode and clic
 Declare variants in code two ways:
 
 ```tsx
-import { useVariant, Variant } from 'nodd';
+import { useVariant, Variant } from '@vadim_lobodin/nodd';
 
 // Hook — feature-flag style. Returns the active option (default: first).
 // Safe without <NoddProvider>: returns options[0], never throws.
@@ -71,7 +71,7 @@ Reviewers switch variants from the **Variants panel** (toolbar button or press *
 The public surface is intentionally tiny:
 
 ```ts
-import { NoddProvider, useNodd, useVariant, Variant } from 'nodd';
+import { NoddProvider, useNodd, useVariant, Variant } from '@vadim_lobodin/nodd';
 
 const { user, signIn, signOut, toggleOverlay, isVisible } = useNodd();
 ```

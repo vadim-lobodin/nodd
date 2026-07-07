@@ -238,8 +238,8 @@ nodd/
 
 Consumer integration is two lines:
 ```tsx
-import { NoddProvider } from 'nodd';
-import 'nodd/style.css';
+import { NoddProvider } from '@vadim_lobodin/nodd';
+import '@vadim_lobodin/nodd/style.css';
 ```
 
 ## 8. Sub-200ms Comment Load Strategy

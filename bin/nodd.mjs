@@ -288,8 +288,8 @@ function snippet({ framework, prefix, adminEmail, openMembership }) {
   const openLine = openMembership ? '      openMembership' : '';
 
   return [
-    `import { NoddProvider } from 'nodd';`,
-    `import 'nodd/style.css';`,
+    `import { NoddProvider } from '@vadim_lobodin/nodd';`,
+    `import '@vadim_lobodin/nodd/style.css';`,
     ``,
     `<NoddProvider`,
     `      projectId={${refExpr('NODD_PROJECT_ID')}}`,

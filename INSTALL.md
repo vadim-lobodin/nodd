@@ -19,7 +19,7 @@ Nodd uses **your own** Supabase project as the backend — there is no Nodd-host
 ## Step 1 — Install the package
 
 ```bash
-npm install nodd
+npm install @vadim_lobodin/nodd
 ```
 
 Peer deps (`react`, `react-dom`) must already be present.
@@ -66,8 +66,8 @@ Add `.env.local` and `.nodd/` to `.gitignore` if your project doesn't already.
 Paste the snippet `init` printed into your app root, e.g. `src/main.tsx` (Vite) or `app/layout.tsx` (Next.js):
 
 ```tsx
-import { NoddProvider } from 'nodd';
-import 'nodd/style.css';
+import { NoddProvider } from '@vadim_lobodin/nodd';
+import '@vadim_lobodin/nodd/style.css';
 
 <NoddProvider
   projectId={import.meta.env.VITE_NODD_PROJECT_ID}
@@ -141,7 +141,7 @@ Common errors in the browser console:
 | Is the anon key really safe in client code? | Yes — it's the same model Supabase recommends for any web app. RLS enforces access on the server. |
 | Can I use Nodd with multiple prototypes? | Yes — run `init` per app; each gets its own Supabase project + `projectId`. |
 | How do I add teammates? | Pass `openMembership` — anyone who signs in becomes a member. For closed prototypes, insert one `project_members` row per teammate. |
-| How do I uninstall? | `npm uninstall nodd`. Drop the migrations or leave them — tables are isolated. The host app is unaffected when the provider is unmounted. |
+| How do I uninstall? | `npm uninstall @vadim_lobodin/nodd`. Drop the migrations or leave them — tables are isolated. The host app is unaffected when the provider is unmounted. |
 
 ---
 
@@ -150,7 +150,7 @@ Common errors in the browser console:
 Use this only if you can't run `npx nodd init` (e.g. agent-restricted environment, shared Supabase project, or self-hosted Supabase).
 
 1. **Create a Supabase project** at <https://supabase.com/dashboard>. Copy the **Project URL** and **anon public key** from Settings → API.
-2. **Apply migrations** via the SQL editor: paste `node_modules/nodd/supabase/migrations/0001_nodd_init.sql`, then `0002_bootstrap.sql`. Run each.
+2. **Apply migrations** via the SQL editor: paste `node_modules/@vadim_lobodin/nodd/supabase/migrations/0001_nodd_init.sql`, then `0002_bootstrap.sql`. Run each.
 3. **Configure auth** at Authentication → URL Configuration: set **Site URL** to `http://localhost:5173`, add your local + deploy origins to **Redirect URLs**.
 4. **Generate a `projectId` UUID** (any tool — `uuidgen`, `crypto.randomUUID()` in the browser console).
 5. **Wire up `<NoddProvider>`** with the four values from steps 1+4 plus `bootstrapAdminEmail` and (optionally) `openMembership`. Sign in once — the bootstrap RPC creates the project row and your membership automatically.
