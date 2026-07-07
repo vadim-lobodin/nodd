@@ -1,6 +1,6 @@
 # Installing Nodd
 
-Add Nodd (Figma-like comments) to a React app. The CLI does end-to-end Supabase setup; a manual path is documented at the bottom for non-CLI environments.
+Add Nodd (Figma-like spatial comments and state variants) to a React app. The CLI does end-to-end Supabase setup; a manual path is documented at the bottom for non-CLI environments.
 
 Nodd uses **your own** Supabase project as the backend — there is no Nodd-hosted server. Magic-link sign-in, comment data, and Row-Level Security policies all live in a Supabase project that you control.
 
@@ -108,12 +108,13 @@ The CLI patches Supabase's auth redirect allowlist via the Management API. Witho
 
 ## Verifying the install
 
-1. Load the app. The Nodd toolbar (two icon buttons) should appear bottom-right.
-2. Click the menu button → enter your admin email → check inbox → click the magic link. You should land back on the app, signed in.
-3. Click `+`, then click somewhere on the page. A thread popover opens.
+1. Load the app. The Nodd toolbar should appear bottom-right.
+2. Open the comments panel → enter your admin email → check inbox → click the magic link. You should land back on the app, signed in.
+3. Press `C` to enter comment mode, then click somewhere on the page. A thread popover opens.
 4. Type a comment, send it. A pin appears at the click location.
 5. Reload — pin and comment persist.
 6. (Multi-user) Open the app in another browser, sign in with a different email. With `openMembership` on, that user is auto-added and can immediately comment.
+7. (If your app declares variants) Press `V` to open the variants panel and switch between declared options. Comments left on a `<Variant>` follow the option they were placed on.
 
 Common errors in the browser console:
 

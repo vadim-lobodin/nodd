@@ -79,7 +79,18 @@ async function api(path, { method = 'GET', token, body } = {}) {
       const j = JSON.parse(text);
       detail = j.message || j.error || JSON.stringify(j);
     } catch {}
-    throw new Error(`Supabase API ${method} ${path} → ${res.status}: ${detail}`);
+    let hint = '';
+    if (res.status === 401 || res.status === 403) {
+      hint =
+        '\n  → Your SUPABASE_ACCESS_TOKEN is missing, expired, or lacks scope. ' +
+        'Generate a fresh Personal Access Token at https://supabase.com/dashboard/account/tokens';
+    } else if (res.status === 429) {
+      hint = '\n  → Rate limited by the Supabase Management API. Wait a minute and re-run.';
+    }
+    const err = new Error(`Supabase API ${method} ${path} → ${res.status}: ${detail}${hint}`);
+    err.status = res.status;
+    err.detail = detail;
+    throw err;
   }
   return text ? JSON.parse(text) : null;
 }
@@ -391,17 +402,39 @@ async function cmdInit(argv) {
   // Create project
   log(`creating Supabase project "${name}" in ${region}... (this takes ~1 min)`);
   const dbPass = randomBytes(24).toString('base64url');
-  const created = await api('/projects', {
-    method: 'POST',
-    token,
-    body: {
-      name,
-      organization_id: org.id,
-      db_pass: dbPass,
-      region,
-      plan: 'free',
-    },
-  });
+  let created;
+  try {
+    created = await api('/projects', {
+      method: 'POST',
+      token,
+      body: {
+        name,
+        organization_id: org.id,
+        db_pass: dbPass,
+        region,
+        plan: 'free',
+      },
+    });
+  } catch (e) {
+    // The most common real-world failure: the chosen org is already at its
+    // free-tier project limit (Supabase caps free projects per org).
+    const msg = String(e.detail || e.message || '').toLowerCase();
+    const limitHit =
+      e.status === 402 ||
+      /free|limit|quota|exceed|maximum|payment|upgrade/.test(msg);
+    if (limitHit) {
+      fail(
+        `couldn't create a free project in "${org.name}".\n` +
+          `  → This org has likely reached its free-project limit. Either:\n` +
+          `      • delete an unused project in that org, or\n` +
+          `      • re-run and pick a different org, or\n` +
+          `      • create the project manually and use "npx nodd init --reconfigure"\n` +
+          `        (see the "Manual setup" section of INSTALL.md).\n` +
+          `  Original error: ${e.detail || e.message}`
+      );
+    }
+    throw e;
+  }
   const ref = created.id || created.ref;
   if (!ref) fail(`unexpected /projects response: ${JSON.stringify(created)}`);
   log(`✓ project created: ${ref}.supabase.co`);
