@@ -175,18 +175,22 @@ export function OverlayRenderer() {
         });
         return;
       }
-      // The sidebar / variants panels require an authenticated viewer.
+      // Variants are a client-side, per-viewer feature — independent of auth
+      // and comment mode — so "V" works for signed-out viewers too.
+      if (key === 'v' && !isCapturing) {
+        ev.preventDefault();
+        setVariantsOpen(v => {
+          if (!v) setSidebarOpen(false); // panels are mutually exclusive
+          return !v;
+        });
+        return;
+      }
+      // The comments sidebar requires an authenticated viewer.
       if (!user) return;
       if (key === 'm' && !isCapturing) {
         ev.preventDefault();
         setSidebarOpen(v => {
           if (!v) setVariantsOpen(false); // panels are mutually exclusive
-          return !v;
-        });
-      } else if (key === 'v' && !isCapturing) {
-        ev.preventDefault();
-        setVariantsOpen(v => {
-          if (!v) setSidebarOpen(false); // panels are mutually exclusive
           return !v;
         });
       }
@@ -366,11 +370,45 @@ export function OverlayRenderer() {
     await ctx.auth.setDisplayName(name);
   }, [onboardName, ctx.auth]);
 
+  // Variants chrome (toolbar button + panel) is independent of auth and comment
+  // mode — a signed-out viewer with the overlay on can still switch variants.
+  // Reused across the auth-gated early returns and the full authed render.
+  const variantsButton = hasVariants ? (
+    <button
+      className="nodd-btn nodd-btn--sidebar nodd-btn--variants"
+      onClick={() => { setIsCapturing(false); setSidebarOpen(false); setVariantsOpen(true); }}
+      aria-label="Variants"
+    >
+      <Layers size={20} />
+    </button>
+  ) : null;
+
+  const variantsPanel = (
+    <VariantsPanel
+      open={variantsOpen}
+      onClose={() => setVariantsOpen(false)}
+      registry={variants}
+      container={portalRootRef.current}
+    />
+  );
+
+  // Toolbar shown outside comment mode when variants exist — the persistent
+  // affordance to open the panel without signing in or entering comment mode.
+  const variantsChrome = hasVariants ? (
+    <>
+      {!isCapturing && <div className="nodd-toolbar">{variantsButton}</div>}
+      {variantsPanel}
+    </>
+  ) : null;
+
   // Auth gate — email only. Hidden by default; the centered prompt only
   // appears once the viewer tries to comment (presses "C" → isCapturing).
+  // Variants chrome still renders behind it so signed-out viewers can switch.
   if (!user) {
-    if (!isCapturing) return null;
     return (
+      <>
+        {variantsChrome}
+        {isCapturing && (
       <div className="nodd-auth-backdrop" onClick={() => setIsCapturing(false)}>
         <div className="nodd-auth-gate nodd-auth-gate--center" onClick={e => e.stopPropagation()}>
           {authSent ? (
@@ -402,13 +440,18 @@ export function OverlayRenderer() {
           )}
         </div>
       </div>
+        )}
+      </>
     );
   }
 
   // First-time name prompt — also centered, and only while trying to comment.
+  // Variants chrome stays available here too.
   if (ctx.auth.needsDisplayName) {
-    if (!isCapturing) return null;
     return (
+      <>
+        {variantsChrome}
+        {isCapturing && (
       <div className="nodd-auth-backdrop" onClick={() => setIsCapturing(false)}>
         <div className="nodd-auth-gate nodd-auth-gate--center" onClick={e => e.stopPropagation()}>
           <div className="nodd-auth-form">
@@ -428,6 +471,8 @@ export function OverlayRenderer() {
           </div>
         </div>
       </div>
+        )}
+      </>
     );
   }
 
@@ -436,26 +481,21 @@ export function OverlayRenderer() {
 
   return (
     <Tooltip.Provider delayDuration={400}>
-      {/* Panel — only visible while in comment mode (entered via "C"). The menu
-          opens the sidebar; exit comment mode via Esc or pressing "C" again. */}
-      {isCapturing && (
+      {/* Toolbar. The Variants button is persistent whenever variants exist
+          (independent of comment mode); the Comments button only appears in
+          comment mode (entered via "C"). Exit comment mode via Esc or "C". */}
+      {(isCapturing || hasVariants) && (
         <div className="nodd-toolbar">
-          {hasVariants && (
+          {variantsButton}
+          {isCapturing && (
             <button
-              className="nodd-btn nodd-btn--sidebar nodd-btn--variants"
-              onClick={() => { setIsCapturing(false); setSidebarOpen(false); setVariantsOpen(true); }}
-              aria-label="Variants"
+              className="nodd-btn nodd-btn--sidebar"
+              onClick={() => { setIsCapturing(false); setVariantsOpen(false); setSidebarOpen(true); }}
+              aria-label="Open comments"
             >
-              <Layers size={20} />
+              <Chat size={20} />
             </button>
           )}
-          <button
-            className="nodd-btn nodd-btn--sidebar"
-            onClick={() => { setIsCapturing(false); setVariantsOpen(false); setSidebarOpen(true); }}
-            aria-label="Open comments"
-          >
-            <Chat size={20} />
-          </button>
         </div>
       )}
 
@@ -566,12 +606,7 @@ export function OverlayRenderer() {
       />
 
       {/* Variants panel — shares the right-side region with the sidebar */}
-      <VariantsPanel
-        open={variantsOpen}
-        onClose={() => setVariantsOpen(false)}
-        registry={variants}
-        container={portalRootRef.current}
-      />
+      {variantsPanel}
     </Tooltip.Provider>
   );
 }
