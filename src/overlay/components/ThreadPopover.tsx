@@ -4,6 +4,7 @@ import * as Separator from '@radix-ui/react-separator';
 import { MentionPicker, encodeMention, decodeMentions, type ProjectMember, type MentionReplacement } from './MentionPicker';
 import { UserAvatar } from './UserAvatar';
 import { ArrowUp, Checkmark, Close, Renew, TrashCan } from '@carbon/icons-react';
+import { formatRelativeTime } from '../relativeTime';
 import type { MemberProfile } from '../../store/types';
 
 export type ThreadComment = {
@@ -244,10 +245,7 @@ export function ThreadPopover({
     [mentionPickerOpen, handleSubmit],
   );
 
-  const formatTime = (iso: string) => {
-    const d = new Date(iso);
-    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-  };
+  const formatTime = (iso: string) => formatRelativeTime(iso);
 
   return (
     <div

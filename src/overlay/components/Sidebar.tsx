@@ -7,6 +7,7 @@ import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
 import { Close, TrashCan } from '@carbon/icons-react';
 import { UserAvatar } from './UserAvatar';
 import { PanelSettingsMenu } from './PanelSettingsMenu';
+import { formatRelativeTime } from '../relativeTime';
 import type { MemberProfile } from '../../store/types';
 
 export type ThreadSummary = {
@@ -83,10 +84,7 @@ export function Sidebar({
   const items = activeTab === 'open' ? threadsOpen : (resolvedItems ?? []);
   const groupedOther = groupByBreadcrumb(threadsOtherState);
 
-  const formatTime = (iso: string) => {
-    const d = new Date(iso);
-    return d.toLocaleString(undefined, { month: 'short', day: 'numeric' });
-  };
+  const formatTime = (iso: string) => formatRelativeTime(iso);
 
   return (
     <Dialog.Root open={open} onOpenChange={o => { if (!o) onClose(); }} modal={false}>
