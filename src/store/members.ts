@@ -32,3 +32,40 @@ export async function fetchMembers(
 
   return { byId, list, fetchedAt: Date.now() };
 }
+
+/**
+ * Member profiles for a logged-out (or non-member) viewer of a project with
+ * `allow_public_reads` enabled. Backed by the `nodd_public_members` RPC, which
+ * is email-free and project-scoped — so anon readers get author names/avatars
+ * without the `profiles` view (which exposes emails) being opened to anon.
+ * Returns an empty cache when the project is not public-reads.
+ */
+export async function fetchPublicMembers(
+  supabase: SupabaseClient,
+  projectId: string,
+): Promise<MemberCache> {
+  const { data, error } = await supabase.rpc('nodd_public_members', {
+    _project_id: projectId,
+  });
+
+  if (error) throw error;
+
+  const byId = new Map<UserId, MemberProfile>();
+  const list: MemberProfile[] = [];
+
+  for (const row of data ?? []) {
+    const member: MemberProfile = {
+      userId: (row as any).user_id,
+      role: 'member',
+      email: '',
+      displayName: (row as any).display_name ?? null,
+      avatarUrl: (row as any).avatar_url ?? null,
+    };
+    byId.set(member.userId, member);
+    list.push(member);
+  }
+
+  list.sort((a, b) => (a.displayName ?? '').localeCompare(b.displayName ?? ''));
+
+  return { byId, list, fetchedAt: Date.now() };
+}

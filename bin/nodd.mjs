@@ -25,7 +25,7 @@ import { stdin, stdout } from 'node:process';
 const API = 'https://api.supabase.com/v1';
 const PKG_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MIGRATIONS_DIR = join(PKG_DIR, 'supabase', 'migrations');
-const MIGRATION_FILES = ['0001_nodd_init.sql', '0002_bootstrap.sql', '0003_realtime_delete_identity.sql'];
+const MIGRATION_FILES = ['0001_nodd_init.sql', '0002_bootstrap.sql', '0003_realtime_delete_identity.sql', '0004_public_reads.sql'];
 const DEFAULT_REGION = 'us-east-1';
 const DEFAULT_ALLOWLIST = ['http://localhost:5173', 'http://localhost:3000'];
 
@@ -269,7 +269,7 @@ function writeConfig(cwd, data) {
 
 // ---------- snippet ----------
 
-function snippet({ framework, prefix, adminEmail, openMembership }) {
+function snippet({ framework, prefix, adminEmail, openMembership, allowPublicReads }) {
   let refExpr;
   if (framework === 'next' || framework === 'cra') {
     refExpr = key => `process.env.${prefix}${key}!`;
@@ -286,6 +286,7 @@ function snippet({ framework, prefix, adminEmail, openMembership }) {
     ? `      bootstrapAdminEmail="${adminEmail}"`
     : `      // bootstrapAdminEmail="you@example.com"`;
   const openLine = openMembership ? '      openMembership' : '';
+  const publicLine = allowPublicReads ? '      allowPublicReads' : '';
 
   return [
     `import { NoddProvider } from '@vadim_lobodin/nodd';`,
@@ -297,6 +298,7 @@ function snippet({ framework, prefix, adminEmail, openMembership }) {
     `      supabaseAnonKey={${refExpr('NODD_SUPABASE_ANON_KEY')}}`,
     adminLine,
     openLine,
+    publicLine,
     `>`,
     `  <App />`,
     `</NoddProvider>`,
@@ -397,6 +399,8 @@ async function cmdInit(argv) {
   const adminEmail = await ask(rl, 'admin email (becomes project admin)?', readGitEmail());
   const openAns = await ask(rl, 'open membership — anyone signed in can comment? [Y/n]', 'Y');
   const openMembership = !openAns.toLowerCase().startsWith('n');
+  const publicAns = await ask(rl, 'allow logged-out visitors to read comments? [y/N]', 'N');
+  const allowPublicReads = publicAns.toLowerCase().startsWith('y');
   rl.close();
 
   // Create project
@@ -461,6 +465,7 @@ async function cmdInit(argv) {
     region,
     adminEmail,
     openMembership,
+    allowPublicReads,
     framework,
     createdAt: new Date().toISOString(),
   });
@@ -470,7 +475,7 @@ async function cmdInit(argv) {
   console.log('');
   log('add this to your app root:');
   console.log('');
-  console.log(snippet({ framework, prefix, adminEmail, openMembership }));
+  console.log(snippet({ framework, prefix, adminEmail, openMembership, allowPublicReads }));
   console.log('');
   log('next:');
   log('  1. start your dev server, sign in with the admin email');

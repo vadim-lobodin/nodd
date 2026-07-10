@@ -29,6 +29,8 @@ export type ThreadPopoverProps = {
   onToggleResolved: () => Promise<void>;
   onDeleteComment: (commentId: string) => Promise<void>;
   onClose: () => void;
+  /** Read-only viewer (logged out): no composer, resolve, or delete. */
+  readOnly?: boolean;
 };
 
 const GAP = 8;
@@ -86,6 +88,7 @@ export function ThreadPopover({
   onToggleResolved,
   onDeleteComment,
   onClose,
+  readOnly = false,
 }: ThreadPopoverProps) {
   const [draft, setDraft] = useState('');
   const [draftMentions, setDraftMentions] = useState<string[]>([]);
@@ -262,7 +265,7 @@ export function ThreadPopover({
         <ScrollArea.Viewport className="nodd-popover-comments">
           {comments.map((comment, ci) => {
             const member = memberMap.get(comment.authorId);
-            const canDelete = comment.authorId === currentUserId && !comment.pending;
+            const canDelete = !readOnly && comment.authorId === currentUserId && !comment.pending;
             return (
               <div key={comment.id} className={`nodd-comment${comment.pending ? ' nodd-comment--pending' : ''}`}>
                 <div className="nodd-comment-header">
@@ -291,14 +294,16 @@ export function ThreadPopover({
                       )}
                       {ci === 0 && (
                         <>
-                          <button
-                            className="nodd-btn nodd-btn--resolve"
-                            onClick={onToggleResolved}
-                            aria-label={resolved ? 'Reopen' : 'Resolve'}
-                            title={resolved ? 'Reopen' : 'Resolve'}
-                          >
-                            {resolved ? <Renew size={16} /> : <Checkmark size={16} />}
-                          </button>
+                          {!readOnly && (
+                            <button
+                              className="nodd-btn nodd-btn--resolve"
+                              onClick={onToggleResolved}
+                              aria-label={resolved ? 'Reopen' : 'Resolve'}
+                              title={resolved ? 'Reopen' : 'Resolve'}
+                            >
+                              {resolved ? <Renew size={16} /> : <Checkmark size={16} />}
+                            </button>
+                          )}
                           <button className="nodd-btn nodd-btn--close" onClick={onClose} aria-label="Close">
                             <Close size={16} />
                           </button>
@@ -342,12 +347,13 @@ export function ThreadPopover({
       </ScrollArea.Root>
       )}
 
-      {submitError && (
+      {!readOnly && submitError && (
         <div className="nodd-popover-error" role="alert">
           Couldn’t send — check your connection and try again.
         </div>
       )}
 
+      {!readOnly && (
       <div className="nodd-popover-reply">
         <textarea
           ref={textareaRef}
@@ -369,19 +375,22 @@ export function ThreadPopover({
           <ArrowUp size={16} />
         </button>
       </div>
+      )}
 
-      <MentionPicker
-        open={mentionPickerOpen}
-        query={mentionQuery}
-        caretRect={caretRect}
-        members={pickerMembers}
-        recentCollaboratorIds={[]}
-        onSelect={handleMentionSelect}
-        onCancel={() => setMentionPickerOpen(false)}
-        onKeyboardRef={handler => { keyboardHandlerRef.current = handler; }}
-        triggerFrom={mentionFrom}
-        triggerTo={textareaRef.current?.selectionStart ?? mentionFrom}
-      />
+      {!readOnly && (
+        <MentionPicker
+          open={mentionPickerOpen}
+          query={mentionQuery}
+          caretRect={caretRect}
+          members={pickerMembers}
+          recentCollaboratorIds={[]}
+          onSelect={handleMentionSelect}
+          onCancel={() => setMentionPickerOpen(false)}
+          onKeyboardRef={handler => { keyboardHandlerRef.current = handler; }}
+          triggerFrom={mentionFrom}
+          triggerTo={textareaRef.current?.selectionStart ?? mentionFrom}
+        />
+      )}
     </div>
   );
 }

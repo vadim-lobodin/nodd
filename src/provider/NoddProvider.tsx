@@ -86,8 +86,42 @@ export type NoddProviderProps = {
    * must be added via SQL or an invite UI.
    */
   openMembership?: boolean;
+  /**
+   * If true, logged-out visitors can *read* (but not write) this project's
+   * comments. Only takes effect through the `bootstrapAdminEmail` flow: the
+   * value is written to `projects.allow_public_reads` when the admin bootstraps
+   * (or re-signs-in), which gates the anon SELECT policies added in migration
+   * `0004_public_reads.sql`. Without bootstrap, set the column via SQL instead.
+   * Off by default — comments stay members-only.
+   */
+  allowPublicReads?: boolean;
   children: ReactNode;
 };
+
+// Session-scoped "hide" flag. Distinct from the transient `toggleOverlay`
+// state: it survives reloads within the same tab (sessionStorage) so a viewer
+// who dismisses the overlay isn't nagged on every navigation, but a fresh tab
+// starts visible again.
+function hiddenStorageKey(projectId: string): string {
+  return `nodd:hidden:${projectId}`;
+}
+function readSessionHidden(projectId: string): boolean {
+  if (!isBrowser()) return false;
+  try {
+    return window.sessionStorage.getItem(hiddenStorageKey(projectId)) === '1';
+  } catch {
+    return false;
+  }
+}
+function writeSessionHidden(projectId: string, hidden: boolean): void {
+  if (!isBrowser()) return;
+  try {
+    if (hidden) window.sessionStorage.setItem(hiddenStorageKey(projectId), '1');
+    else window.sessionStorage.removeItem(hiddenStorageKey(projectId));
+  } catch {
+    // private-mode / quota — hide stays in-memory for this render only
+  }
+}
 
 export function NoddProvider({
   projectId,
@@ -97,10 +131,12 @@ export function NoddProvider({
   bootstrapAdminEmail,
   projectName = 'My Prototype',
   openMembership = false,
+  allowPublicReads = false,
   children,
 }: NoddProviderProps) {
   const [user, setUser] = useState<CurrentUser | null>(null);
-  const [isVisible, setIsVisible] = useState(true);
+  // Start hidden if this tab's session was dismissed via "Hide for this session".
+  const [isVisible, setIsVisible] = useState(() => !readSessionHidden(projectId));
   const [urlPath, setUrlPath] = useState('/');
   const [portalEl, setPortalEl] = useState<HTMLElement | null>(null);
   const [theme, setTheme] = useState<NoddTheme>(initialTheme);
@@ -174,6 +210,7 @@ export function NoddProvider({
           _project_id: projectId,
           _project_name: projectName,
           _expected_email: bootstrapAdminEmail,
+          _allow_public_reads: allowPublicReads,
         })
       : supabase.rpc('nodd_join_project', { _project_id: projectId });
 
@@ -183,7 +220,7 @@ export function NoddProvider({
         onboardedRef.current = false;
       }
     });
-  }, [user, bootstrapAdminEmail, openMembership, projectId, projectName, supabase]);
+  }, [user, bootstrapAdminEmail, openMembership, allowPublicReads, projectId, projectName, supabase]);
 
   // Resolve system theme
   const resolvedTheme = useMemo(() => {
@@ -231,7 +268,27 @@ export function NoddProvider({
     if (pinContainerEl) pinContainerEl.setAttribute('data-nodd-theme', resolvedTheme);
   }, [portalEl, pinContainerEl, resolvedTheme]);
 
-  const toggleOverlay = useCallback(() => setIsVisible(v => !v), []);
+  // Showing the overlay (toggle-on or explicit) also clears any session-hide,
+  // so the host's own launcher brings it back after "Hide for this session".
+  const setVisible = useCallback((v: boolean) => {
+    writeSessionHidden(projectId, false);
+    setIsVisible(v);
+  }, [projectId]);
+
+  const toggleOverlay = useCallback(() => {
+    setIsVisible(v => {
+      const next = !v;
+      writeSessionHidden(projectId, false);
+      return next;
+    });
+  }, [projectId]);
+
+  // Dismiss for the rest of this tab's session — persisted so reloads/navigation
+  // don't re-show it, until the host re-shows or the tab closes.
+  const hideForSession = useCallback(() => {
+    writeSessionHidden(projectId, true);
+    setIsVisible(false);
+  }, [projectId]);
 
   const signIn = useCallback(
     (email: string) => auth.signIn(email),
@@ -252,7 +309,8 @@ export function NoddProvider({
       signOut,
       isVisible,
       toggleOverlay,
-      setVisible: setIsVisible,
+      setVisible,
+      hideForSession,
       theme,
       setTheme,
       urlPath,
@@ -261,7 +319,7 @@ export function NoddProvider({
       variants,
       pinContainer: pinContainerEl,
     };
-  }, [projectId, user, signIn, signOut, isVisible, toggleOverlay, theme, urlPath, auth, store, variants, storeReady, pinContainerEl]);
+  }, [projectId, user, signIn, signOut, isVisible, toggleOverlay, setVisible, hideForSession, theme, urlPath, auth, store, variants, storeReady, pinContainerEl]);
 
   if (!ctxValue) {
     return <>{children}</>;

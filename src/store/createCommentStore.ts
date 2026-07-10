@@ -11,7 +11,7 @@ import {
 } from './state';
 import { readCache, writeCache } from './cache';
 import { fetchPageThreads, fetchResolvedThreads } from './query';
-import { fetchMembers } from './members';
+import { fetchMembers, fetchPublicMembers } from './members';
 import { createRealtimeChannel } from './realtime';
 import { insertThread, insertComment, updateThreadResolved, deleteThread, deleteComment } from './mutations';
 
@@ -48,13 +48,41 @@ export function createCommentStore(deps: {
   // failed fetch would leave every author rendered as "Unknown" for the whole
   // session. notifyAll() on success re-renders subscribed pages so names that
   // arrive after the first paint fill in.
+  //
+  // The authenticated member query returns [] under RLS for a logged-out (or
+  // non-member) viewer, so we fall back to the email-free public-members RPC —
+  // which only yields rows when the project has `allow_public_reads` on. This
+  // also covers the window before auth resolves at store-creation time: the
+  // empty result triggers a retry, and once signed in the rich fetch wins.
+  async function loadMembersOnce(): Promise<MemberCache | null> {
+    try {
+      const cache = await fetchMembers(supabase, projectId);
+      if (cache.list.length > 0) return cache;
+    } catch {
+      // fall through to the public-members attempt
+    }
+    try {
+      const pub = await fetchPublicMembers(supabase, projectId);
+      if (pub.list.length > 0) return pub;
+    } catch {
+      // project isn't public-reads (or RPC unavailable) — no names available
+    }
+    return null;
+  }
+
   let memberFetchAttempts = 0;
   function loadMembers() {
-    fetchMembers(supabase, projectId)
+    loadMembersOnce()
       .then(cache => {
         if (disposed) return;
-        memberCache = cache;
-        notifyAll();
+        if (cache) {
+          memberCache = cache;
+          notifyAll();
+          return;
+        }
+        if (memberFetchAttempts >= 3) return;
+        memberFetchAttempts++;
+        setTimeout(loadMembers, 1000 * memberFetchAttempts);
       })
       .catch(() => {
         if (disposed || memberFetchAttempts >= 3) return;

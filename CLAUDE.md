@@ -67,7 +67,7 @@ Magic link via `supabase.auth.signInWithOtp({ email })` with `emailRedirectTo: w
 
 ### RLS contract (every new query must respect this)
 
-- All Nodd-owned tables have RLS enabled; `is_project_member(project_id)` (SECURITY DEFINER, defined in the baseline `0001_nodd_init.sql`) gates every read. Reuse it — don't reimplement membership checks per policy.
+- All Nodd-owned tables have RLS enabled; `is_project_member(project_id)` (SECURITY DEFINER, defined in the baseline `0001_nodd_init.sql`) gates every member read. Reuse it — don't reimplement membership checks per policy. The one relaxation: `0004_public_reads.sql` adds permissive anon/authenticated SELECT policies on `threads`/`comments` gated by `is_public_project(project_id)` (the `projects.allow_public_reads` flag). This is **read-only** — writes still require membership. Logged-out author names come from the email-free `nodd_public_members` RPC, never the `profiles` view (which is not granted to anon).
 - `threads.created_by` and `comments.author_id` must equal `auth.uid()` on insert. Comment edits are author-only.
 - `0001_nodd_init.sql` is the v1 baseline — applied as one file by fresh consumers. Treat it as frozen post-release; any schema change ships as a new numbered file (`0002_*.sql`, `0003_*.sql`, …). Forward-only: never rewrite an existing migration.
 

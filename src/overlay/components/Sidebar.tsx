@@ -4,8 +4,9 @@ import * as Tabs from '@radix-ui/react-tabs';
 import * as ScrollArea from '@radix-ui/react-scroll-area';
 import * as Separator from '@radix-ui/react-separator';
 import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
-import { Logout, Close, TrashCan } from '@carbon/icons-react';
+import { Close, TrashCan } from '@carbon/icons-react';
 import { UserAvatar } from './UserAvatar';
+import { PanelSettingsMenu } from './PanelSettingsMenu';
 import type { MemberProfile } from '../../store/types';
 
 export type ThreadSummary = {
@@ -38,7 +39,10 @@ export type SidebarProps = {
   onItemDelete?: (threadId: string) => Promise<void> | void;
   container?: HTMLElement | null;
   userName?: string;
+  /** Provided when signed in — surfaces the "Exit" item in the settings menu. */
   onSignOut?: () => void;
+  /** Dismiss the overlay for this tab session (settings menu). */
+  onHideForSession: () => void;
 };
 
 export function Sidebar({
@@ -54,6 +58,7 @@ export function Sidebar({
   container,
   userName,
   onSignOut,
+  onHideForSession,
 }: SidebarProps) {
   const [activeTab, setActiveTab] = useState<'open' | 'resolved'>('open');
   const [resolvedItems, setResolvedItems] = useState<ThreadSummary[] | null>(null);
@@ -96,16 +101,11 @@ export function Sidebar({
           <div className="nodd-sidebar-header">
             <Dialog.Title className="nodd-sidebar-title">Comments</Dialog.Title>
             <div className="nodd-sidebar-header-actions">
-              {onSignOut && (
-                <button
-                  className="nodd-btn nodd-btn--close"
-                  onClick={onSignOut}
-                  aria-label={userName ? `Sign out ${userName}` : 'Sign out'}
-                  title={userName ? `Sign out ${userName}` : 'Sign out'}
-                >
-                  <Logout size={16} />
-                </button>
-              )}
+              <PanelSettingsMenu
+                onHideForSession={onHideForSession}
+                onSignOut={onSignOut}
+                container={container}
+              />
               <Dialog.Close asChild>
                 <button className="nodd-btn nodd-btn--close" aria-label="Close sidebar">
                   <Close size={16} />

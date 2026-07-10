@@ -20,7 +20,10 @@ function resolveSystemTheme(): 'light' | 'dark' {
 
 export function OverlayRenderer() {
   const ctx = useNoddContext();
-  const { user, urlPath, store, variants, signIn, signOut, theme, pinContainer } = ctx;
+  const { user, urlPath, store, variants, signIn, signOut, hideForSession, theme, pinContainer } = ctx;
+  // A viewer who can create/edit comments: signed in with a display name set.
+  // Everyone else (logged out, or mid-onboarding) gets read-only comments.
+  const canComment = !!user && !ctx.auth.needsDisplayName;
   const [snapshot, setSnapshot] = useState<PageSnapshot | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
@@ -78,10 +81,12 @@ export function OverlayRenderer() {
     return () => mq.removeEventListener('change', handler);
   }, [theme]);
 
-  // Subscribe to store — only after auth has resolved, otherwise the fetch
-  // fires anonymously and RLS returns an empty page that never re-fetches.
+  // Subscribe to the page's threads. Re-subscribes when `user` changes so the
+  // fetch re-runs after sign-in: a logged-out fetch returns the public-reads
+  // rows (empty unless the project opted in), then the authed fetch replaces
+  // them with the member view. `user` in deps is what makes that re-fetch fire.
   useEffect(() => {
-    if (!store || !user) return;
+    if (!store) return;
     return store.subscribe(urlPath, setSnapshot);
   }, [store, urlPath, user]);
 
@@ -185,7 +190,9 @@ export function OverlayRenderer() {
         });
         return;
       }
-      // The comments sidebar requires an authenticated viewer.
+      // The comments sidebar is a signed-in convenience. Logged-out viewers
+      // read by clicking the visible pins (read-only popover); the universal
+      // entry to *commenting* is "C", which surfaces the sign-in prompt.
       if (!user) return;
       if (key === 'm' && !isCapturing) {
         ev.preventDefault();
@@ -389,29 +396,21 @@ export function OverlayRenderer() {
       onClose={() => setVariantsOpen(false)}
       registry={variants}
       container={portalRootRef.current}
+      onHideForSession={hideForSession}
+      onSignOut={user ? () => void signOut() : undefined}
     />
   );
 
-  // Toolbar shown outside comment mode when variants exist — the persistent
-  // affordance to open the panel without signing in or entering comment mode.
-  const variantsChrome = hasVariants ? (
-    <>
-      {!isCapturing && <div className="nodd-toolbar">{variantsButton}</div>}
-      {variantsPanel}
-    </>
-  ) : null;
-
-  // Auth gate — email only. Hidden by default; the centered prompt only
-  // appears once the viewer tries to comment (presses "C" → isCapturing).
-  // Variants chrome still renders behind it so signed-out viewers can switch.
-  if (!user) {
-    return (
-      <>
-        {variantsChrome}
-        {isCapturing && (
-      <div className="nodd-auth-backdrop" onClick={() => setIsCapturing(false)}>
-        <div className="nodd-auth-gate nodd-auth-gate--center" onClick={e => e.stopPropagation()}>
-          {authSent ? (
+  // The overlay now renders for everyone (see subscribe effect): commenters get
+  // the full flow; logged-out / mid-onboarding viewers get read-only comments by
+  // clicking the visible pins. The sign-in / name prompt is a modal surfaced only
+  // when a read-only viewer tries to comment (presses "C" → isCapturing), not an
+  // early return that would hide pins and the variants panel.
+  const authGate = !canComment && isCapturing ? (
+    <div className="nodd-auth-backdrop" onClick={() => setIsCapturing(false)}>
+      <div className="nodd-auth-gate nodd-auth-gate--center" onClick={e => e.stopPropagation()}>
+        {!user ? (
+          authSent ? (
             <div className="nodd-auth-sent">
               <p>Check your email for a sign-in link.</p>
               <button className="nodd-btn" onClick={() => setAuthSent(false)}>Try again</button>
@@ -437,23 +436,8 @@ export function OverlayRenderer() {
               </button>
               {authError && <p className="nodd-auth-error" role="alert">{authError}</p>}
             </div>
-          )}
-        </div>
-      </div>
-        )}
-      </>
-    );
-  }
-
-  // First-time name prompt — also centered, and only while trying to comment.
-  // Variants chrome stays available here too.
-  if (ctx.auth.needsDisplayName) {
-    return (
-      <>
-        {variantsChrome}
-        {isCapturing && (
-      <div className="nodd-auth-backdrop" onClick={() => setIsCapturing(false)}>
-        <div className="nodd-auth-gate nodd-auth-gate--center" onClick={e => e.stopPropagation()}>
+          )
+        ) : (
           <div className="nodd-auth-form">
             <h2 className="nodd-auth-title">Welcome! What should we call you?</h2>
             <input
@@ -469,12 +453,10 @@ export function OverlayRenderer() {
               Continue
             </button>
           </div>
-        </div>
-      </div>
         )}
-      </>
-    );
-  }
+      </div>
+    </div>
+  ) : null;
 
   const openThread = openThreadId ? snapshot?.threads.find(t => t.id === openThreadId) : null;
   const openPos = openThreadId ? (pinPositionsRef.current.get(openThreadId) ?? pinPositions.get(openThreadId)) : null;
@@ -526,8 +508,8 @@ export function OverlayRenderer() {
         pinContainer,
       )}
 
-      {/* Capture layer */}
-      {isCapturing && (
+      {/* Capture layer — only commenters can place pins */}
+      {canComment && isCapturing && (
         <CaptureLayer
           onCreate={handleCaptureCreate}
           onCancel={() => setIsCapturing(false)}
@@ -535,33 +517,35 @@ export function OverlayRenderer() {
         />
       )}
 
-      {/* Thread popover — portals into the absolute pin container so it
-          scrolls with the page, anchored to the pin */}
+      {/* Thread popover — read-only (no composer/resolve/delete) for viewers
+          who can't comment. Portals into the absolute pin container so it
+          scrolls with the page, anchored to the pin. */}
       {pinContainer && openThread && openPos && createPortal(
         <ThreadPopover
           threadId={openThread.id}
           anchorX={openPos.x}
           anchorY={openPos.y}
           comments={openThread.comments}
-          currentUserId={user.id}
+          currentUserId={user?.id ?? ''}
           resolved={openThread.resolved}
           members={memberList}
           onSubmitReply={handleReply}
           onToggleResolved={handleResolve}
           onDeleteComment={handleDeleteComment}
           onClose={() => setOpenThreadId(null)}
+          readOnly={!canComment}
         />,
         pinContainer,
       )}
 
-      {/* New thread popover */}
-      {pinContainer && pendingPin && createPortal(
+      {/* New thread popover — commenters only */}
+      {canComment && pinContainer && pendingPin && createPortal(
         <ThreadPopover
           threadId="new"
           anchorX={pendingPin.x}
           anchorY={pendingPin.y}
           comments={[]}
-          currentUserId={user.id}
+          currentUserId={user?.id ?? ''}
           resolved={false}
           members={memberList}
           onSubmitReply={handleNewThreadSubmit}
@@ -572,16 +556,17 @@ export function OverlayRenderer() {
         pinContainer,
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar — read-only when the viewer can't comment (no delete/sign-out) */}
       <Sidebar
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         threadsOpen={onPageSummaries}
         threadsOtherState={otherStateSummaries}
         onItemActivate={handleItemActivate}
-        onItemDelete={handleDeleteThread}
-        userName={user.displayName ?? user.email.split('@')[0]}
-        onSignOut={() => void signOut()}
+        onItemDelete={canComment ? handleDeleteThread : undefined}
+        userName={user ? (user.displayName ?? user.email.split('@')[0]) : undefined}
+        onSignOut={user ? () => void signOut() : undefined}
+        onHideForSession={hideForSession}
         fetchResolved={async () => {
           if (!store) return [];
           const resolved = await store.fetchResolved(urlPath);
@@ -607,6 +592,10 @@ export function OverlayRenderer() {
 
       {/* Variants panel — shares the right-side region with the sidebar */}
       {variantsPanel}
+
+      {/* Sign-in / name prompt — surfaced only when a read-only viewer tries to
+          comment (presses "C"). Renders over pins + panels, not instead of them. */}
+      {authGate}
     </Tooltip.Provider>
   );
 }

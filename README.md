@@ -29,6 +29,7 @@ import '@vadim_lobodin/nodd/style.css';
   supabaseAnonKey={import.meta.env.VITE_NODD_SUPABASE_ANON_KEY}
   bootstrapAdminEmail="you@example.com"
   openMembership
+  allowPublicReads   // optional: let logged-out visitors read comments (opt-in)
 >
   <App />
 </NoddProvider>
@@ -42,6 +43,14 @@ A small toolbar appears bottom-right. Press **C** to enter comment mode and clic
 - Threads sync in real time across viewers via Supabase Realtime.
 - Pins re-anchor to their element on resize and route changes; unresolvable pins fall back to the sidebar.
 - Mentions, resolve/delete, and read-only pins for signed-out viewers.
+
+**Logged-out reading is opt-in.** By default comments are members-only. Set `allowPublicReads` on `<NoddProvider>` (applied through the `bootstrapAdminEmail` flow), answer *yes* to the CLI `init` prompt, or flip it later with SQL:
+
+```sql
+update projects set allow_public_reads = true where id = '<your-project-id>';
+```
+
+When enabled, anyone who can load the page sees pins and threads read-only — no sign-in. Writing (new threads, replies, resolve, delete) always requires signing in. Mutations stay members-only regardless of this flag.
 
 ## State variants
 
@@ -73,7 +82,7 @@ The public surface is intentionally tiny:
 ```ts
 import { NoddProvider, useNodd, useVariant, Variant } from '@vadim_lobodin/nodd';
 
-const { user, signIn, signOut, toggleOverlay, isVisible } = useNodd();
+const { user, signIn, signOut, toggleOverlay, hideForSession, isVisible } = useNodd();
 ```
 
 ## How it works

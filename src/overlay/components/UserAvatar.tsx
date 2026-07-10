@@ -31,7 +31,7 @@ export function UserAvatar({ name, avatarUrl, size = 24, className }: UserAvatar
       <BoringAvatar
         size={size}
         name={name}
-        variant="beam"
+        variant="marble"
         colors={PALETTE}
       />
     </span>

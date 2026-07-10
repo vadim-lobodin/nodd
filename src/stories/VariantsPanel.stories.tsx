@@ -42,6 +42,7 @@ function VariantsPanelStory({ withVariants = true }: { withVariants?: boolean })
         onClose={() => setOpen(false)}
         registry={registry}
         container={container}
+        onHideForSession={() => {}}
       />
     </div>
   );

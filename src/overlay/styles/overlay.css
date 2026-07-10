@@ -1313,6 +1313,60 @@
 }
 
 /* ==========================================================================
+   Settings menu (panel header gear → dropdown)
+   ========================================================================== */
+[data-nodd-root] .nodd-menu {
+  pointer-events: auto;
+  min-width: 200px;
+  padding: 6px;
+  background: var(--nodd-glass-gradient), var(--nodd-glass-surface);
+  backdrop-filter: var(--nodd-blur);
+  -webkit-backdrop-filter: var(--nodd-blur);
+  color: hsl(var(--nodd-popover-foreground));
+  border: 1px solid var(--nodd-glass-border);
+  border-radius: var(--nodd-radius-md);
+  box-shadow: var(--nodd-shadow-lg), var(--nodd-shadow-inset);
+  animation: nodd-fade-in 120ms cubic-bezier(0.2, 0, 0, 1);
+  z-index: 2147483002;
+}
+
+[data-nodd-root] .nodd-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--nodd-radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: hsl(var(--nodd-foreground));
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+[data-nodd-root] .nodd-menu-item[data-highlighted],
+[data-nodd-root] .nodd-menu-item:hover {
+  background: hsl(var(--nodd-foreground) / 0.06);
+}
+
+[data-nodd-root] .nodd-menu-item--danger {
+  color: hsl(var(--nodd-destructive));
+}
+[data-nodd-root] .nodd-menu-item--danger[data-highlighted],
+[data-nodd-root] .nodd-menu-item--danger:hover {
+  background: hsl(var(--nodd-destructive) / 0.12);
+  color: hsl(var(--nodd-destructive));
+}
+
+[data-nodd-root] .nodd-menu-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--nodd-glass-border);
+}
+
+/* ==========================================================================
    Radix overrides
    ========================================================================== */
 [data-nodd-root] [data-radix-popper-content-wrapper] {

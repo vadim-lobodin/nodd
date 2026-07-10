@@ -55,6 +55,7 @@ function SidebarStory({ threads = THREADS }: { threads?: ThreadSummary[] }) {
         onItemHover={() => {}}
         userName="Alice Chen"
         onSignOut={() => {}}
+        onHideForSession={() => {}}
         container={container}
       />
     </div>

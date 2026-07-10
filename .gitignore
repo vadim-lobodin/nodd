@@ -15,3 +15,6 @@ dist/
 
 # Supabase CLI temp state (machine-local, should not be tracked)
 supabase/.temp/
+
+# Storybook build output
+storybook-static/
