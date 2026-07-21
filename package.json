@@ -1,6 +1,6 @@
 {
   "name": "@vadim_lobodin/nodd",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Figma-like spatial comments and state variants for live React prototypes",
   "keywords": [
     "react",
@@ -39,7 +39,7 @@
     "./style.css": "./dist/style.css"
   },
   "bin": {
-    "nodd": "./bin/nodd.mjs"
+    "nodd": "bin/nodd.mjs"
   },
   "engines": {
     "node": ">=18"
