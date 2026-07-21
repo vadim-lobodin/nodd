@@ -10,7 +10,7 @@ import {
   findThreadByCommentId,
 } from './state';
 import { readCache, writeCache } from './cache';
-import { fetchPageThreads, fetchResolvedThreads } from './query';
+import { fetchPageThreads, fetchResolvedThreads, fetchPrototypeThreads } from './query';
 import { fetchMembers, fetchPublicMembers } from './members';
 import { createRealtimeChannel } from './realtime';
 import { insertThread, insertComment, updateThreadResolved, deleteThread, deleteComment } from './mutations';
@@ -25,6 +25,7 @@ export type CommentStore = {
   deleteComment(input: { threadId: ThreadId; commentId: CommentId }): Promise<void>;
   getMembers(): MemberCache | null;
   fetchResolved(urlPath: string): Promise<Thread[]>;
+  fetchPrototypeThreads(prototypeId: string, opts?: { resolved?: boolean }): Promise<Thread[]>;
   dispose(): void;
 };
 
@@ -601,6 +602,10 @@ export function createCommentStore(deps: {
 
     async fetchResolved(urlPath) {
       return fetchResolvedThreads(supabase, projectId, urlPath);
+    },
+
+    async fetchPrototypeThreads(prototypeId, opts) {
+      return fetchPrototypeThreads(supabase, projectId, prototypeId, opts);
     },
 
     dispose() {

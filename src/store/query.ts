@@ -74,6 +74,30 @@ export async function fetchPageThreads(
   return (data as RawThread[]).map(mapThread);
 }
 
+export async function fetchPrototypeThreads(
+  supabase: SupabaseClient,
+  projectId: string,
+  prototypeId: string,
+  opts?: { resolved?: boolean },
+): Promise<Thread[]> {
+  // Every screen of one prototype in a single query. The open view is served by
+  // the partial index threads_project_prototype_idx. Fetch-on-open rather than a
+  // live subscription — the current screen stays live via the normal page
+  // channel; the inbox is a bounded snapshot the viewer explicitly requests.
+  const resolved = opts?.resolved ?? false;
+  const { data, error } = await supabase
+    .from('threads')
+    .select('*, comments(*)')
+    .eq('project_id', projectId)
+    .eq('prototype_id', prototypeId)
+    .eq('resolved', resolved)
+    .order('created_at', { ascending: false })
+    .limit(200);
+
+  if (error) throw error;
+  return (data as RawThread[]).map(mapThread);
+}
+
 export async function fetchResolvedThreads(
   supabase: SupabaseClient,
   projectId: string,

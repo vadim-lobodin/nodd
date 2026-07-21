@@ -20,6 +20,9 @@ export type ThreadSummary = {
   resolved: boolean;
   unread: boolean;
   breadcrumb?: string;
+  /** Screen the thread lives on. Set for prototype-inbox items to enable
+   *  cross-screen navigation (2c); the current screen opens it in place. */
+  urlPath?: string;
   /** When set, an activator chain is available — sidebar shows a Show me button. */
   canActivate?: boolean;
   /** Stack used to activate; passed back to onItemActivate. */
@@ -34,7 +37,7 @@ export type SidebarProps = {
   threadsOpen: ThreadSummary[];
   threadsOtherState?: ThreadSummary[];
   fetchResolved: () => Promise<ThreadSummary[]>;
-  onItemOpen: (threadId: string) => void;
+  onItemOpen: (threadId: string, urlPath?: string) => void;
   onItemHover: (threadId: string | null) => void;
   onItemActivate?: (threadId: string) => void;
   onItemDelete?: (threadId: string) => Promise<void> | void;
@@ -44,7 +47,17 @@ export type SidebarProps = {
   onSignOut?: () => void;
   /** Dismiss the overlay for this tab session (settings menu). */
   onHideForSession: () => void;
+  /**
+   * Label of the active prototype scope. When set, the sidebar shows a
+   * "This screen | This prototype" toggle backed by fetchPrototypeThreads.
+   */
+  prototypeLabel?: string;
+  /** Loads the per-prototype inbox (all screens). Required for the toggle. */
+  fetchPrototypeThreads?: (opts: { resolved: boolean }) => Promise<ThreadSummary[]>;
 };
+
+type ScopeView = 'screen' | 'prototype';
+type LoadState = { status: 'idle' | 'loading' | 'error'; items: ThreadSummary[] };
 
 export function Sidebar({
   open,
@@ -60,29 +73,68 @@ export function Sidebar({
   userName,
   onSignOut,
   onHideForSession,
+  prototypeLabel,
+  fetchPrototypeThreads,
 }: SidebarProps) {
   const [activeTab, setActiveTab] = useState<'open' | 'resolved'>('open');
   const [resolvedItems, setResolvedItems] = useState<ThreadSummary[] | null>(null);
   const [resolvedStatus, setResolvedStatus] = useState<'idle' | 'loading' | 'error'>('idle');
 
+  const scopeEnabled = !!prototypeLabel && !!fetchPrototypeThreads;
+  const [scope, setScope] = useState<ScopeView>('screen');
+  const [protoOpen, setProtoOpen] = useState<LoadState>({ status: 'idle', items: [] });
+  const [protoResolved, setProtoResolved] = useState<LoadState>({ status: 'idle', items: [] });
+
+  // The prototype inbox is fetch-on-open (not a live subscription), so load the
+  // relevant slice whenever the viewer switches into prototype scope or between
+  // its tabs. A per-slice epoch guards against an out-of-order response landing
+  // after the viewer has moved on. Screen scope keeps using the live props.
+  const protoEpoch = useRef(0);
+  useEffect(() => {
+    if (!scopeEnabled || scope !== 'prototype') return;
+    const resolved = activeTab === 'resolved';
+    const setSlice = resolved ? setProtoResolved : setProtoOpen;
+    const epoch = ++protoEpoch.current;
+    setSlice(s => ({ status: 'loading', items: s.items }));
+    void (async () => {
+      try {
+        const items = await fetchPrototypeThreads!({ resolved });
+        if (protoEpoch.current === epoch) setSlice({ status: 'idle', items });
+      } catch {
+        if (protoEpoch.current === epoch) setSlice(s => ({ status: 'error', items: s.items }));
+      }
+    })();
+  }, [scopeEnabled, scope, activeTab, fetchPrototypeThreads]);
+
+  // A scope no longer available (e.g. viewer left the prototype) must not strand
+  // the sidebar on an empty prototype view.
+  useEffect(() => {
+    if (!scopeEnabled && scope !== 'screen') setScope('screen');
+  }, [scopeEnabled, scope]);
+
   const handleTabChange = useCallback(async (value: string) => {
     if (value === 'resolved') {
       setActiveTab('resolved');
-      setResolvedStatus('loading');
-      try {
-        const items = await fetchResolved();
-        setResolvedItems(items);
-        setResolvedStatus('idle');
-      } catch {
-        setResolvedStatus('error');
+      // Screen-scope resolved is loaded here; prototype-scope resolved is loaded
+      // by the effect above (keyed on scope + tab).
+      if (scope === 'screen') {
+        setResolvedStatus('loading');
+        try {
+          const items = await fetchResolved();
+          setResolvedItems(items);
+          setResolvedStatus('idle');
+        } catch {
+          setResolvedStatus('error');
+        }
       }
     } else {
       setActiveTab('open');
     }
-  }, [fetchResolved]);
+  }, [fetchResolved, scope]);
 
-  const items = activeTab === 'open' ? threadsOpen : (resolvedItems ?? []);
+  const isProto = scopeEnabled && scope === 'prototype';
   const groupedOther = groupByBreadcrumb(threadsOtherState);
+  const openCount = isProto ? protoOpen.items.length : threadsOpen.length;
 
   const formatTime = (iso: string) => formatRelativeTime(iso);
 
@@ -112,10 +164,32 @@ export function Sidebar({
             </div>
           </div>
 
+          {scopeEnabled && (
+            <div className="nodd-sidebar-scope" role="tablist" aria-label="Comment scope">
+              <button
+                className={`nodd-sidebar-scope-btn${scope === 'screen' ? ' nodd-sidebar-scope-btn--active' : ''}`}
+                role="tab"
+                aria-selected={scope === 'screen'}
+                onClick={() => setScope('screen')}
+              >
+                This screen
+              </button>
+              <button
+                className={`nodd-sidebar-scope-btn${scope === 'prototype' ? ' nodd-sidebar-scope-btn--active' : ''}`}
+                role="tab"
+                aria-selected={scope === 'prototype'}
+                onClick={() => setScope('prototype')}
+                title={prototypeLabel}
+              >
+                This prototype
+              </button>
+            </div>
+          )}
+
           <Tabs.Root value={activeTab} onValueChange={handleTabChange}>
             <Tabs.List className="nodd-sidebar-tabs">
               <Tabs.Trigger value="open" className="nodd-sidebar-tab">
-                Open ({threadsOpen.length})
+                Open ({openCount})
               </Tabs.Trigger>
               <Tabs.Trigger value="resolved" className="nodd-sidebar-tab">
                 Resolved
@@ -123,7 +197,16 @@ export function Sidebar({
             </Tabs.List>
 
             <Tabs.Content value="open" className="nodd-sidebar-tab-content" forceMount>
-              {activeTab === 'open' && (
+              {activeTab === 'open' && (isProto ? (
+                <PrototypeList
+                  state={protoOpen}
+                  emptyMessage="No open comments in this prototype yet."
+                  formatTime={formatTime}
+                  onItemOpen={onItemOpen}
+                  onItemHover={onItemHover}
+                  onItemDelete={onItemDelete}
+                />
+              ) : (
                 <ScrollArea.Root className="nodd-sidebar-list-scroll">
                   <ScrollArea.Viewport className="nodd-sidebar-list">
                     <SidebarSection
@@ -154,12 +237,21 @@ export function Sidebar({
                     <ScrollArea.Thumb className="nodd-scrollbar-thumb" />
                   </ScrollArea.Scrollbar>
                 </ScrollArea.Root>
-              )}
+              ))}
             </Tabs.Content>
             <Tabs.Content value="resolved" className="nodd-sidebar-tab-content" forceMount>
-              {activeTab === 'resolved' && (
+              {activeTab === 'resolved' && (isProto ? (
+                <PrototypeList
+                  state={protoResolved}
+                  emptyMessage="Nothing resolved in this prototype yet."
+                  formatTime={formatTime}
+                  onItemOpen={onItemOpen}
+                  onItemHover={onItemHover}
+                  onItemDelete={onItemDelete}
+                />
+              ) : (
                 <SidebarList
-                  items={items}
+                  items={resolvedItems ?? []}
                   loading={resolvedStatus === 'loading'}
                   emptyMessage="Nothing here yet."
                   formatTime={formatTime}
@@ -167,12 +259,63 @@ export function Sidebar({
                   onItemHover={onItemHover}
                   onItemDelete={onItemDelete}
                 />
-              )}
+              ))}
             </Tabs.Content>
           </Tabs.Root>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  );
+}
+
+function PrototypeList({
+  state,
+  emptyMessage,
+  formatTime,
+  onItemOpen,
+  onItemHover,
+  onItemDelete,
+}: {
+  state: LoadState;
+  emptyMessage: string;
+  formatTime: (iso: string) => string;
+  onItemOpen: (threadId: string, urlPath?: string) => void;
+  onItemHover: (threadId: string | null) => void;
+  onItemDelete?: (threadId: string) => Promise<void> | void;
+}) {
+  // Group the whole prototype's threads by screen so the viewer can triage the
+  // prototype end-to-end without visiting each screen. Keep showing the previous
+  // items while a refetch is in flight to avoid a flash of empty state.
+  const grouped = groupByBreadcrumb(state.items);
+  return (
+    <ScrollArea.Root className="nodd-sidebar-list-scroll">
+      <ScrollArea.Viewport className="nodd-sidebar-list">
+        {state.status === 'error' && state.items.length === 0 && (
+          <div className="nodd-sidebar-empty">Couldn’t load the inbox. Try reopening it.</div>
+        )}
+        {state.status === 'loading' && state.items.length === 0 && (
+          <div className="nodd-sidebar-loading">Loading...</div>
+        )}
+        {state.status !== 'loading' && state.items.length === 0 && (
+          <div className="nodd-sidebar-empty">{emptyMessage}</div>
+        )}
+        {grouped.map(([breadcrumb, group]) => (
+          <SidebarSection
+            key={breadcrumb || '_'}
+            heading={breadcrumb || 'This screen'}
+            items={group}
+            emptyMessage=""
+            formatTime={formatTime}
+            onItemOpen={onItemOpen}
+            onItemHover={onItemHover}
+            onItemDelete={onItemDelete}
+          />
+        ))}
+      </ScrollArea.Viewport>
+      <ScrollArea.Scrollbar className="nodd-scrollbar" orientation="vertical">
+        <ScrollArea.Thumb className="nodd-scrollbar-thumb" />
+      </ScrollArea.Scrollbar>
+    </ScrollArea.Root>
   );
 }
 
@@ -189,7 +332,7 @@ function SidebarList({
   loading: boolean;
   emptyMessage: string;
   formatTime: (iso: string) => string;
-  onItemOpen: (threadId: string) => void;
+  onItemOpen: (threadId: string, urlPath?: string) => void;
   onItemHover: (threadId: string | null) => void;
   onItemDelete?: (threadId: string) => Promise<void> | void;
 }) {
@@ -228,7 +371,7 @@ function SidebarSection({
   items: ThreadSummary[];
   emptyMessage: string;
   formatTime: (iso: string) => string;
-  onItemOpen: (threadId: string) => void;
+  onItemOpen: (threadId: string, urlPath?: string) => void;
   onItemHover: (threadId: string | null) => void;
   onItemActivate?: (threadId: string) => void;
   onItemDelete?: (threadId: string) => Promise<void> | void;
@@ -267,14 +410,14 @@ function SidebarItem({
 }: {
   item: ThreadSummary;
   formatTime: (iso: string) => string;
-  onItemOpen: (threadId: string) => void;
+  onItemOpen: (threadId: string, urlPath?: string) => void;
   onItemHover: (threadId: string | null) => void;
   onItemActivate?: (threadId: string) => void;
   onItemDelete?: (threadId: string) => Promise<void> | void;
 }) {
   const handleOpen = () => {
     if (onItemActivate && item.canActivate) onItemActivate(item.id);
-    else onItemOpen(item.id);
+    else onItemOpen(item.id, item.urlPath);
   };
   const showDelete = !!onItemDelete && item.canDelete;
   return (

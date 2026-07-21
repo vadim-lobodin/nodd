@@ -208,6 +208,16 @@ export function OverlayRenderer() {
     setOpenThreadId(prev => (prev === threadId ? null : threadId));
   }, []);
 
+  // Sidebar inbox item: threads from other screens of the prototype carry their
+  // own urlPath. Same-screen items open in place; cross-screen navigation is
+  // wired in 2c. Until then a cross-screen click is a no-op rather than opening
+  // a thread whose pin isn't on this page.
+  const handleInboxItemOpen = useCallback((threadId: string, itemUrlPath?: string) => {
+    if (!itemUrlPath || itemUrlPath === urlPath) {
+      handlePinOpen(threadId);
+    }
+  }, [urlPath, handlePinOpen]);
+
   // When a thread opens (e.g. picked from the sidebar) scroll its anchor into
   // view if it's off-screen, so the pin and popover are actually visible.
   // A directly-clicked pin is already on-screen, so the guard makes this a no-op.
@@ -678,7 +688,29 @@ export function OverlayRenderer() {
             };
           });
         }}
-        onItemOpen={handlePinOpen}
+        prototypeLabel={activePrototype ? (activePrototype.label ?? activePrototype.id) : undefined}
+        fetchPrototypeThreads={activePrototype ? async ({ resolved }) => {
+          if (!store || !activePrototype) return [];
+          const threads = await store.fetchPrototypeThreads(activePrototype.id, { resolved });
+          return threads.map(t => {
+            const member = members?.byId.get(t.createdBy);
+            return {
+              id: t.id,
+              authorName: member?.displayName ?? member?.email ?? 'Unknown',
+              authorAvatarUrl: member?.avatarUrl ?? undefined,
+              snippet: t.comments[0]?.body.slice(0, 80) ?? '',
+              createdAt: t.createdAt,
+              replyCount: Math.max(0, t.comments.length - 1),
+              resolved: t.resolved,
+              unread: false,
+              // Group by screen; the current screen keeps its live-open label.
+              breadcrumb: t.urlPath === urlPath ? 'This screen' : t.urlPath,
+              urlPath: t.urlPath,
+              canDelete: t.createdBy === user?.id,
+            } satisfies ThreadSummary;
+          });
+        } : undefined}
+        onItemOpen={handleInboxItemOpen}
         onItemHover={() => {}}
         container={portalRootRef.current}
       />

@@ -937,6 +937,41 @@
   color: hsl(var(--nodd-muted-foreground));
 }
 
+[data-nodd-root] .nodd-sidebar-scope {
+  display: flex;
+  gap: 2px;
+  margin: 0 var(--nodd-sidebar-pad-x) 10px;
+  padding: 2px;
+  border-radius: var(--nodd-radius-pill);
+  background: hsl(var(--nodd-foreground) / 0.05);
+  border: 1px solid var(--nodd-glass-border);
+}
+
+[data-nodd-root] .nodd-sidebar-scope-btn {
+  flex: 1;
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  border-radius: var(--nodd-radius-pill);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  letter-spacing: -0.005em;
+  color: hsl(var(--nodd-muted-foreground));
+  transition: color 150ms ease, background 150ms ease;
+}
+
+[data-nodd-root] .nodd-sidebar-scope-btn:hover {
+  color: hsl(var(--nodd-foreground));
+}
+
+[data-nodd-root] .nodd-sidebar-scope-btn--active {
+  color: hsl(var(--nodd-foreground));
+  background: hsl(var(--nodd-background));
+  box-shadow: 0 1px 2px hsl(0 0% 0% / 0.08);
+}
+
 [data-nodd-root] .nodd-sidebar-tabs {
   display: flex;
   gap: 4px;

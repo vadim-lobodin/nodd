@@ -121,6 +121,10 @@ function createMemoryStore(): MemoryStore {
     },
     getMembers() { return memberCache; },
     async fetchResolved(urlPath) { return threads.filter(t => t.urlPath === urlPath && t.resolved); },
+    async fetchPrototypeThreads(prototypeId, opts) {
+      const resolved = opts?.resolved ?? false;
+      return threads.filter(t => t.prototypeId === prototypeId && t.resolved === resolved);
+    },
     dispose() { listeners.clear(); threads = []; },
     setReadable(v) { readable = v; notifyAll(); },
     setCurrentUserId(id) { currentUserId = id; },
