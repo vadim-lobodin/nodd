@@ -123,9 +123,34 @@ export function replaceThreadId(
   state.threadIndex.set(serverId, urlPath);
   const page = state.byPath.get(urlPath);
   if (!page) return;
-  const threads = page.threads.map(t =>
-    t.id === tempId ? { ...t, id: serverId, pending: false } : t,
-  );
+  const optimistic = page.threads.find(t => t.id === tempId);
+  const serverThread = page.threads.find(t => t.id === serverId);
+  let threads: Thread[];
+  if (optimistic && serverThread) {
+    // A page fetch can observe the server row before the mutation response
+    // reaches us. Collapse that response with the optimistic row rather than
+    // turning the temp-id reconciliation into two identical pins.
+    const commentIds = new Set(serverThread.comments.map(c => c.id));
+    const comments = [
+      ...serverThread.comments,
+      ...optimistic.comments.filter(c => !commentIds.has(c.id)),
+    ].map(c => ({ ...c, threadId: serverId }));
+    threads = page.threads
+      .filter(t => t.id !== tempId && t.id !== serverId)
+      .concat({ ...serverThread, comments, pending: false })
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  } else {
+    threads = page.threads.map(t =>
+      t.id === tempId
+        ? {
+            ...t,
+            id: serverId,
+            pending: false,
+            comments: t.comments.map(c => ({ ...c, threadId: serverId })),
+          }
+        : t,
+    );
+  }
   state.byPath.set(urlPath, { ...page, threads });
 }
 
@@ -137,8 +162,14 @@ export function replaceCommentId(
 ): void {
   updateThread(state, threadId, t => ({
     ...t,
-    comments: t.comments.map(c =>
-      c.id === tempId ? { ...c, id: serverId, pending: false } : c,
-    ),
+    comments: t.comments.some(c => c.id === serverId)
+      ? t.comments
+          .filter(c => c.id !== tempId)
+          .map(c => ({ ...c, threadId }))
+      : t.comments.map(c =>
+          c.id === tempId
+            ? { ...c, id: serverId, threadId, pending: false }
+            : { ...c, threadId },
+        ),
   }));
 }

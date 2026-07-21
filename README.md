@@ -75,12 +75,49 @@ const layout = useVariant('checkout-layout', ['single-page', 'wizard'], {
 
 Reviewers switch variants from the **Variants panel** (toolbar button or press **V**). Switching is **per-viewer** — persisted to `localStorage`, never synced between viewers. Comments left on a `<Variant>` are tagged with the active option, so they hide when a different option is shown and reappear (with a breadcrumb) when you switch back.
 
+### Local UI states
+
+Nodd cannot infer arbitrary React state from the DOM. If one URL swaps between
+steps, tabs, modals, or reducer states, wrap the stateful region in
+`<NoddState>` so comments do not leak into another state:
+
+```tsx
+import { NoddState, useNoddActivator } from '@vadim_lobodin/nodd';
+
+function OnboardingFlow() {
+  const [step, setStep] = useState<'welcome' | 'add-users'>('welcome');
+  const showWelcome = useCallback(() => setStep('welcome'), []);
+  const showAddUsers = useCallback(() => setStep('add-users'), []);
+
+  useNoddActivator('step:welcome', showWelcome);
+  useNoddActivator('step:add-users', showAddUsers);
+
+  return (
+    <NoddState name={`step:${step}`}>
+      {step === 'welcome' ? <Welcome /> : <AddUsers />}
+    </NoddState>
+  );
+}
+```
+
+The wrapper uses `display: contents`, so it does not change layout. Activators
+are optional, but let the sidebar's **Show me** action restore the state. A
+hook-only `useVariant()` also creates no DOM boundary; wrap the affected region
+in `NoddState` or use `<Variant>` when comments must follow that option.
+
 ## API surface
 
 The public surface is intentionally tiny:
 
 ```ts
-import { NoddProvider, useNodd, useVariant, Variant } from '@vadim_lobodin/nodd';
+import {
+  NoddProvider,
+  NoddState,
+  useNodd,
+  useNoddActivator,
+  useVariant,
+  Variant,
+} from '@vadim_lobodin/nodd';
 
 const { user, signIn, signOut, toggleOverlay, hideForSession, isVisible } = useNodd();
 ```

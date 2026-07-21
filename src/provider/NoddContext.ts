@@ -4,6 +4,7 @@ import type { CommentStore } from '../store';
 import type { VariantRegistry } from './variants';
 
 export type NoddTheme = 'light' | 'dark' | 'system';
+export type NoddWriteStatus = 'ready' | 'joining' | 'error';
 
 export type NoddContextValue = {
   projectId: string;
@@ -19,6 +20,9 @@ export type NoddContextValue = {
   setTheme: (theme: NoddTheme) => void;
   urlPath: string;
   auth: AuthClient;
+  /** Auto-membership must settle before the overlay enables mutations. */
+  writeStatus: NoddWriteStatus;
+  retryOnboarding: () => void;
   store: CommentStore;
   variants: VariantRegistry;
   pinContainer: HTMLElement | null;

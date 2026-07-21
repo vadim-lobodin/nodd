@@ -48,7 +48,7 @@ Nodd already ships state-aware comments (`../state/`). By expressing the active 
 | Pins re-resolve after a switch | Existing reanchor-loop `MutationObserver` |
 | Persistence of the tag | Existing `state_key` column — no migration |
 
-**Limitation:** hook-only variants have no DOM wrapper, so comments placed in hook-controlled regions are **not** tagged with the active option. Prefer `<Variant>` when you want variant-aware comments; use `useVariant` for flags/styling where "which variant is this comment about" is inherently fuzzy.
+**Limitation:** hook-only variants have no DOM wrapper, so comments placed in hook-controlled regions are **not** tagged with the active option. Prefer `<Variant>` when you want variant-aware comments, or wrap the affected DOM in `<NoddState>` whose name is `${key}:${active}`. Use `useVariant` alone for flags/styling where "which variant is this comment about" is inherently fuzzy.
 
 ## 4. Rules & edge cases
 

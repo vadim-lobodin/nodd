@@ -50,7 +50,7 @@ This will:
 
 1. Create a Supabase project (free tier, in the org you pick).
 2. Wait for it to become healthy (~1 min).
-3. Apply the Nodd migrations (`0001_nodd_init.sql`, `0002_bootstrap.sql`).
+3. Apply every numbered Nodd migration in order from `supabase/migrations/`.
 4. Configure auth redirect URLs for `http://localhost:5173` and `http://localhost:3000`.
 5. Generate a `projectId` UUID.
 6. Detect your framework (Vite/Next/CRA) and write `.env.local` with the right env-var prefix.
@@ -150,7 +150,7 @@ Common errors in the browser console:
 Use this only if you can't run `npx nodd init` (e.g. agent-restricted environment, shared Supabase project, or self-hosted Supabase).
 
 1. **Create a Supabase project** at <https://supabase.com/dashboard>. Copy the **Project URL** and **anon public key** from Settings → API.
-2. **Apply migrations** via the SQL editor: paste `node_modules/@vadim_lobodin/nodd/supabase/migrations/0001_nodd_init.sql`, then `0002_bootstrap.sql`. Run each.
+2. **Apply migrations** via the SQL editor: open `node_modules/@vadim_lobodin/nodd/supabase/migrations/` and run every numbered `.sql` file in ascending order.
 3. **Configure auth** at Authentication → URL Configuration: set **Site URL** to `http://localhost:5173`, add your local + deploy origins to **Redirect URLs**.
 4. **Generate a `projectId` UUID** (any tool — `uuidgen`, `crypto.randomUUID()` in the browser console).
 5. **Wire up `<NoddProvider>`** with the four values from steps 1+4 plus `bootstrapAdminEmail` and (optionally) `openMembership`. Sign in once — the bootstrap RPC creates the project row and your membership automatically.

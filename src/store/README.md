@@ -168,10 +168,10 @@ We use [`idb-keyval`](https://www.npmjs.com/package/idb-keyval) (≈600 B gzippe
 
 ### Reconciliation Flow
 
-1. **Hydrate (sync, ≤30 ms):** on first `subscribe(urlPath)`, read cache key `(projectId, urlPath)`. If hit, populate `byPath[urlPath]` with `loading: true` and emit a snapshot immediately so the overlay paints with cached pins.
-2. **Fetch (async, ≤120 ms target):** issue the page-scoped query (§6). On response:
+1. **Hydrate (async, ≤30 ms):** on `subscribe(urlPath)`, start the IndexedDB read and page query in parallel. If the cache wins, populate `byPath[urlPath]` with `loading: true` and emit so the overlay paints with cached pins.
+2. **Fetch (async, ≤120 ms target):** reconcile the page-scoped query (§6). Each subscription has a generation token, so a response from a previous route/auth subscription cannot overwrite the current page. On response:
    - Replace the in-memory thread list for that `urlPath` with the server result.
-   - **Preserve pending optimistic mutations**: any thread/comment with `pending: true` whose temp id is not yet known to the server is re-merged on top of the server snapshot.
+   - **Preserve pending and recently confirmed mutations**: any thread/comment still pending, or confirmed during the Realtime echo-suppression window, is re-merged on top of a snapshot that started before the write.
    - Write the merged result back to IndexedDB.
    - Emit a snapshot with `loading: false`.
 3. **Network failure with cache hit:** keep the cached state, set `error: { kind: 'network-stale', cachedAt }`. Realtime + retry will reconcile when connectivity returns.
@@ -219,7 +219,7 @@ Every mutating method follows the same five-phase contract:
 1. **Generate temp id** (`temp-${nanoid()}`).
 2. **Apply locally**: update in-memory state with `pending: true`, emit snapshot.
 3. **Persist optimistic state** to IndexedDB (so a hard reload mid-flight still shows the user's pin).
-4. **Send to Supabase** via the matching REST call.
+4. **Send to Supabase** with a 15-second timeout. New-thread creation uses the `nodd_create_thread` RPC so the thread and root comment commit in one transaction. Projects that have not applied migration `0005` temporarily fall back to two inserts plus orphan cleanup.
 5. On **success**: replace temp id with server id, clear `pending`, re-emit. On **failure**: remove the optimistic entry (or restore prior `resolved` state), set `failed: true` for one snapshot tick so the UI can toast, then drop after 5 s.
 
 ```ts

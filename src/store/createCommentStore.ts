@@ -41,6 +41,8 @@ export function createCommentStore(deps: {
   const state: StoreState = createInitialState();
   const listeners = new Map<UrlPath, Set<(snapshot: PageSnapshot) => void>>();
   const recentlyWritten = new Set<string>();
+  const recentlyWrittenTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const loadEpochByPath = new Map<UrlPath, number>();
   let memberCache: MemberCache | null = null;
   let disposed = false;
 
@@ -104,6 +106,48 @@ export function createCommentStore(deps: {
     for (const urlPath of listeners.keys()) {
       notify(urlPath);
     }
+  }
+
+  function reconcileIncomingThreads(urlPath: UrlPath, incoming: Thread[]): Thread[] {
+    const local = state.byPath.get(urlPath)?.threads ?? [];
+    const localById = new Map(local.map(thread => [thread.id, thread]));
+    const incomingIds = new Set(incoming.map(thread => thread.id));
+
+    const merged = incoming.map(thread => {
+      const localThread = localById.get(thread.id);
+      if (!localThread) return thread;
+
+      // A fetch can have started before a reply was written and finish after
+      // its mutation response. Keep both pending comments and very recent
+      // confirmed comments until the next server snapshot contains them.
+      const commentIds = new Set(thread.comments.map(comment => comment.id));
+      const localComments = localThread.comments.filter(comment =>
+        !commentIds.has(comment.id) &&
+        (comment.pending || recentlyWritten.has(comment.id)),
+      );
+      if (localComments.length === 0) return thread;
+      return {
+        ...thread,
+        comments: [...thread.comments, ...localComments].sort(
+          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        ),
+      };
+    });
+
+    // The same protection at thread level prevents a stale page response from
+    // erasing a just-created optimistic or recently-confirmed pin.
+    for (const thread of local) {
+      if (
+        !incomingIds.has(thread.id) &&
+        (thread.pending || recentlyWritten.has(thread.id))
+      ) {
+        merged.push(thread);
+      }
+    }
+
+    return merged.sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
   }
 
   // Realtime
@@ -213,8 +257,14 @@ export function createCommentStore(deps: {
   });
 
   function markRecentlyWritten(id: string) {
+    const existingTimer = recentlyWrittenTimers.get(id);
+    if (existingTimer) clearTimeout(existingTimer);
     recentlyWritten.add(id);
-    setTimeout(() => recentlyWritten.delete(id), 5000);
+    const timer = setTimeout(() => {
+      recentlyWritten.delete(id);
+      recentlyWrittenTimers.delete(id);
+    }, 5000);
+    recentlyWrittenTimers.set(id, timer);
   }
 
   const store: CommentStore = {
@@ -224,28 +274,54 @@ export function createCommentStore(deps: {
       }
       listeners.get(urlPath)!.add(listener);
 
-      // Hydrate from cache, then fetch
-      const page = getOrCreatePage(state, urlPath);
+      // Every subscription starts a fresh load generation (notably after auth
+      // changes). Older cache/network responses must never overwrite it.
+      const epoch = (loadEpochByPath.get(urlPath) ?? 0) + 1;
+      loadEpochByPath.set(urlPath, epoch);
+      let cancelled = false;
+      const isCurrent = () =>
+        !disposed && !cancelled && loadEpochByPath.get(urlPath) === epoch;
+
+      const currentPage = getOrCreatePage(state, urlPath);
+      const page = { ...currentPage, loading: true, error: null };
+      state.byPath.set(urlPath, page);
       listener(page);
 
-      (async () => {
-        // Try cache first
-        const cached = await readCache(projectId, urlPath);
-        if (cached) {
-          setPageThreads(state, urlPath, cached, true, null);
-          notify(urlPath);
-        }
+      // Cache and network are independent, so start both immediately. A small
+      // status handshake ensures a late cache hit cannot overwrite a successful
+      // network response while still allowing cache to recover a fast failure.
+      const loadStatus: { network: 'pending' | 'success' | 'failure' } = {
+        network: 'pending',
+      };
 
-        // Fetch from network
+      void (async () => {
+        const cached = await readCache(projectId, urlPath);
+        if (!isCurrent() || !cached || loadStatus.network === 'success') return;
+        const threads = reconcileIncomingThreads(urlPath, cached);
+        setPageThreads(
+          state,
+          urlPath,
+          threads,
+          loadStatus.network === 'pending',
+          loadStatus.network === 'failure'
+            ? { kind: 'network-stale', cachedAt: Date.now() }
+            : null,
+        );
+        notify(urlPath);
+      })();
+
+      void (async () => {
         try {
           const threads = await fetchPageThreads(supabase, projectId, urlPath);
-          // Preserve pending optimistic mutations
-          const pendingThreads = (state.byPath.get(urlPath)?.threads ?? []).filter(t => t.pending);
-          const merged = [...threads, ...pendingThreads];
+          if (!isCurrent()) return;
+          loadStatus.network = 'success';
+          const merged = reconcileIncomingThreads(urlPath, threads);
           setPageThreads(state, urlPath, merged, false, null);
           notify(urlPath);
-          void writeCache(projectId, urlPath, threads);
+          void writeCache(projectId, urlPath, merged.filter(thread => !thread.pending));
         } catch {
+          if (!isCurrent()) return;
+          loadStatus.network = 'failure';
           const existing = state.byPath.get(urlPath);
           if (existing && existing.threads.length > 0) {
             setPageThreads(state, urlPath, existing.threads, false, {
@@ -263,6 +339,7 @@ export function createCommentStore(deps: {
       })();
 
       return () => {
+        cancelled = true;
         listeners.get(urlPath)?.delete(listener);
         if (listeners.get(urlPath)?.size === 0) {
           listeners.delete(urlPath);
@@ -276,6 +353,8 @@ export function createCommentStore(deps: {
 
       const tid = tempId();
       const cid = tempId();
+      const serverThreadId = crypto.randomUUID();
+      const serverCommentId = crypto.randomUUID();
       const now = new Date().toISOString();
 
       const stateKey = input.stateKey ?? '';
@@ -307,6 +386,10 @@ export function createCommentStore(deps: {
       notify(input.urlPath);
 
       try {
+        // Mark the known server ids before sending so Realtime cannot beat the
+        // REST/RPC response and create a duplicate beside the temp ids.
+        markRecentlyWritten(serverThreadId);
+        markRecentlyWritten(serverCommentId);
         const result = await insertThread(supabase, {
           projectId,
           urlPath: input.urlPath,
@@ -315,6 +398,8 @@ export function createCommentStore(deps: {
           body: input.body,
           mentions: input.mentions ?? [],
           createdBy: userId,
+          threadId: serverThreadId,
+          commentId: serverCommentId,
         });
         markRecentlyWritten(result.threadId);
         markRecentlyWritten(result.commentId);
@@ -334,6 +419,7 @@ export function createCommentStore(deps: {
       if (!userId) throw new Error('Not authenticated');
 
       const cid = tempId();
+      const serverCommentId = crypto.randomUUID();
       const now = new Date().toISOString();
 
       const comment: Comment = {
@@ -352,11 +438,13 @@ export function createCommentStore(deps: {
       if (urlPath) notify(urlPath);
 
       try {
+        markRecentlyWritten(serverCommentId);
         const serverId = await insertComment(supabase, {
           threadId: input.threadId,
           body: input.body,
           mentions: input.mentions ?? [],
           authorId: userId,
+          commentId: serverCommentId,
         });
         markRecentlyWritten(serverId);
         replaceCommentId(state, input.threadId, cid, serverId);
@@ -516,6 +604,10 @@ export function createCommentStore(deps: {
       disposed = true;
       supabase.removeChannel(channel);
       listeners.clear();
+      loadEpochByPath.clear();
+      for (const timer of recentlyWrittenTimers.values()) clearTimeout(timer);
+      recentlyWrittenTimers.clear();
+      recentlyWritten.clear();
     },
   };
 

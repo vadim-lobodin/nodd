@@ -297,6 +297,8 @@ function Harness(args: PlaygroundArgs) {
     setTheme: () => {},
     urlPath: '/',
     auth,
+    writeStatus: 'ready',
+    retryOnboarding: () => {},
     store,
     variants,
     pinContainer: pinEl,

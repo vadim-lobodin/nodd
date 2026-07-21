@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { Chat, Layers } from '@carbon/icons-react';
@@ -23,7 +23,7 @@ export function OverlayRenderer() {
   const { user, urlPath, store, variants, signIn, signOut, hideForSession, theme, pinContainer } = ctx;
   // A viewer who can create/edit comments: signed in with a display name set.
   // Everyone else (logged out, or mid-onboarding) gets read-only comments.
-  const canComment = !!user && !ctx.auth.needsDisplayName;
+  const canComment = !!user && !ctx.auth.needsDisplayName && ctx.writeStatus === 'ready';
   const [snapshot, setSnapshot] = useState<PageSnapshot | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
@@ -38,6 +38,13 @@ export function OverlayRenderer() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSending, setAuthSending] = useState(false);
   const [onboardName, setOnboardName] = useState('');
+  const [pendingPin, setPendingPin] = useState<{
+    pin: Pin;
+    x: number;
+    y: number;
+    stateKey: string;
+    urlPath: string;
+  } | null>(null);
 
   // Resolve effective theme
   const effectiveTheme = theme === 'system' ? resolveSystemTheme() : theme;
@@ -130,7 +137,7 @@ export function OverlayRenderer() {
   }, [snapshot]);
 
   // Resolve pins on route change, snapshot change, or DOM mutation
-  useEffect(() => {
+  useLayoutEffect(() => {
     resolveAllPins();
   }, [resolveAllPins, urlPath, domVersion]);
 
@@ -206,7 +213,7 @@ export function OverlayRenderer() {
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [user, isCapturing]);
+  }, [user, isCapturing, canComment]);
 
   const handlePinOpen = useCallback((threadId: string) => {
     setOpenThreadId(prev => (prev === threadId ? null : threadId));
@@ -233,6 +240,23 @@ export function OverlayRenderer() {
     if (openThreadId) scrollThreadIntoView(openThreadId);
   }, [openThreadId, scrollThreadIntoView]);
 
+  // A state transition can keep the same DOM anchor alive while making the
+  // thread itself out-of-scope. Pins already honor stateMatch; the popover must
+  // do the same or it remains floating over the next prototype state.
+  useEffect(() => {
+    if (openThreadId && stateMatch.get(openThreadId) === false) {
+      setOpenThreadId(null);
+    }
+  }, [openThreadId, stateMatch]);
+
+  // Route changes invalidate all transient UI. In particular, never let a pin
+  // captured on route A be submitted under route B by a still-open composer.
+  useEffect(() => {
+    setIsCapturing(false);
+    setOpenThreadId(null);
+    setPendingPin(null);
+  }, [urlPath]);
+
   const handlePinHover = useCallback((_threadId: string | null) => {}, []);
 
   const handleCaptureCreate = useCallback(
@@ -244,19 +268,39 @@ export function OverlayRenderer() {
       if (result) {
         const pos = DOMAnchor.reposition(pin, result.element);
         const stateKey = stackToKey(getStateStackForElement(result.element));
-        setPendingPin({ pin, x: pos.x, y: pos.y, stateKey });
+        setPendingPin({ pin, x: pos.x, y: pos.y, stateKey, urlPath });
       }
     },
-    [store, user],
+    [store, user, urlPath],
   );
 
-  const [pendingPin, setPendingPin] = useState<{ pin: Pin; x: number; y: number; stateKey: string } | null>(null);
+  // A new-thread composer is also state-bound. Re-resolve it after host DOM
+  // mutations and close it if the original target/state is no longer present.
+  useLayoutEffect(() => {
+    if (!pendingPin) return;
+    if (pendingPin.urlPath !== urlPath) {
+      setPendingPin(null);
+      return;
+    }
+    const result = DOMAnchor.resolve(pendingPin.pin);
+    if (
+      !result ||
+      !isStateMatch(pendingPin.stateKey, getStateStackForElement(result.element))
+    ) {
+      setPendingPin(null);
+      return;
+    }
+    const next = DOMAnchor.reposition(pendingPin.pin, result.element);
+    if (next.x !== pendingPin.x || next.y !== pendingPin.y) {
+      setPendingPin(current => current ? { ...current, ...next } : null);
+    }
+  }, [domVersion, urlPath, pendingPin]);
 
   const handleNewThreadSubmit = useCallback(
     async (body: string, mentions: string[]) => {
       if (!store || !pendingPin) return;
       await store.addThread({
-        urlPath,
+        urlPath: pendingPin.urlPath,
         pin: pendingPin.pin,
         stateKey: pendingPin.stateKey,
         body,
@@ -264,7 +308,7 @@ export function OverlayRenderer() {
       });
       setPendingPin(null);
     },
-    [store, urlPath, pendingPin],
+    [store, pendingPin],
   );
 
   const handleReply = useCallback(
@@ -354,6 +398,16 @@ export function OverlayRenderer() {
     if (!ok) return;
     // Wait one frame so the MutationObserver-driven resolveAllPins has run.
     await new Promise<void>(r => requestAnimationFrame(() => r()));
+    const result = DOMAnchor.resolve(thread.pin);
+    if (
+      !result ||
+      !isStateMatch(thread.stateKey, getStateStackForElement(result.element))
+    ) return;
+    const position = DOMAnchor.reposition(thread.pin, result.element);
+    anchorCache.current.set(threadId, result.element);
+    pinPositionsRef.current.set(threadId, position);
+    setPinPositions(current => new Map(current).set(threadId, position));
+    setStateMatch(current => new Map(current).set(threadId, true));
     setOpenThreadId(threadId);
   }, [snapshot]);
 
@@ -446,7 +500,7 @@ export function OverlayRenderer() {
               {authError && <p className="nodd-auth-error" role="alert">{authError}</p>}
             </div>
           )
-        ) : (
+        ) : ctx.auth.needsDisplayName ? (
           <div className="nodd-auth-form">
             <h2 className="nodd-auth-title">Welcome! What should we call you?</h2>
             <input
@@ -462,6 +516,17 @@ export function OverlayRenderer() {
               Continue
             </button>
           </div>
+        ) : (
+          <div className="nodd-auth-form">
+            <h2 className="nodd-auth-title">
+              {ctx.writeStatus === 'joining' ? 'Preparing comments…' : 'Couldn’t enable comments'}
+            </h2>
+            {ctx.writeStatus === 'error' && (
+              <button className="nodd-btn nodd-btn--primary" onClick={ctx.retryOnboarding}>
+                Try again
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -469,6 +534,9 @@ export function OverlayRenderer() {
 
   const openThread = openThreadId ? snapshot?.threads.find(t => t.id === openThreadId) : null;
   const openPos = openThreadId ? (pinPositionsRef.current.get(openThreadId) ?? pinPositions.get(openThreadId)) : null;
+  const openThreadMatchesState = openThreadId
+    ? (stateMatch.get(openThreadId) ?? openThread?.stateKey === '')
+    : false;
 
   return (
     <Tooltip.Provider delayDuration={400}>
@@ -499,7 +567,7 @@ export function OverlayRenderer() {
           {snapshot?.threads.map((thread, i) => {
             const pos = pinPositions.get(thread.id);
             if (!pos) return null;
-            if (!(stateMatch.get(thread.id) ?? true)) return null;
+            if (!(stateMatch.get(thread.id) ?? thread.stateKey === '')) return null;
             const author = members?.byId.get(thread.createdBy);
             return (
               <PinMarker
@@ -532,7 +600,7 @@ export function OverlayRenderer() {
       {/* Thread popover — read-only (no composer/resolve/delete) for viewers
           who can't comment. Portals into the absolute pin container so it
           scrolls with the page, anchored to the pin. */}
-      {pinContainer && openThread && openPos && createPortal(
+      {pinContainer && openThread && openPos && openThreadMatchesState && createPortal(
         <ThreadPopover
           threadId={openThread.id}
           anchorX={openPos.x}

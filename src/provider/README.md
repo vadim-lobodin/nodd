@@ -77,6 +77,8 @@ type NoddContextValue = {
 
   // module handles (internal)
   auth: AuthClient;
+  writeStatus: 'ready' | 'joining' | 'error'; // auto-membership/RLS readiness
+  retryOnboarding: () => void;
   store: CommentStore;
 };
 ```

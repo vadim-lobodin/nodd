@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { NoddContext, type NoddContextValue, type NoddTheme } from './NoddContext';
+import {
+  NoddContext,
+  type NoddContextValue,
+  type NoddTheme,
+  type NoddWriteStatus,
+} from './NoddContext';
 import { AuthClient, type CurrentUser } from '../auth';
 import { createCommentStore, type CommentStore } from '../store';
 import { createVariantRegistry, type VariantRegistry } from './variants';
@@ -195,17 +200,33 @@ export function NoddProvider({
   }, []);
 
   // Auto-onboard: admin claims project + membership; everyone else joins as
-  // member when openMembership is on. Idempotent server-side; client ref
-  // prevents repeated calls within a single session.
-  const onboardedRef = useRef(false);
+  // member when openMembership is on. The overlay stays read-only while this
+  // settles so a fast first comment cannot race the membership RLS grant.
+  const onboardingAttemptRef = useRef<string | null>(null);
+  const activeOnboardingKeyRef = useRef<string | null>(null);
+  const [onboarding, setOnboarding] = useState<{
+    key: string | null;
+    status: NoddWriteStatus;
+  }>({ key: null, status: 'joining' });
+  const [onboardingRetry, setOnboardingRetry] = useState(0);
+  const onboardingKey = user ? `${projectId}:${user.id}` : null;
+  const isBootstrapAdmin = !!(
+    user &&
+    bootstrapAdminEmail &&
+    user.email.toLowerCase() === bootstrapAdminEmail.toLowerCase()
+  );
+  const requiresAutoOnboarding = !!user && (isBootstrapAdmin || openMembership);
+  activeOnboardingKeyRef.current = onboardingKey;
+
   useEffect(() => {
-    if (!user || onboardedRef.current) return;
+    if (!user || !requiresAutoOnboarding || !onboardingKey) return;
+    if (onboarding.key === onboardingKey && onboarding.status === 'ready') return;
+    if (onboardingAttemptRef.current === onboardingKey) return;
 
-    const isAdmin = bootstrapAdminEmail && user.email === bootstrapAdminEmail;
-    if (!isAdmin && !openMembership) return;
+    onboardingAttemptRef.current = onboardingKey;
+    setOnboarding({ key: onboardingKey, status: 'joining' });
 
-    onboardedRef.current = true;
-    const call = isAdmin
+    const call = isBootstrapAdmin
       ? supabase.rpc('nodd_bootstrap_project', {
           _project_id: projectId,
           _project_name: projectName,
@@ -214,13 +235,51 @@ export function NoddProvider({
         })
       : supabase.rpc('nodd_join_project', { _project_id: projectId });
 
-    void call.then(({ error }) => {
-      if (error) {
-        console.warn('[nodd] onboard failed:', error.message);
-        onboardedRef.current = false;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    void (async () => {
+      try {
+        const { error } = await call.abortSignal(controller.signal);
+        if (activeOnboardingKeyRef.current !== onboardingKey) return;
+        if (error) {
+          console.warn('[nodd] onboard failed:', error.message);
+          setOnboarding({ key: onboardingKey, status: 'error' });
+        } else {
+          setOnboarding({ key: onboardingKey, status: 'ready' });
+        }
+      } catch (error) {
+        if (activeOnboardingKeyRef.current !== onboardingKey) return;
+        console.warn('[nodd] onboard failed:', error instanceof Error ? error.message : error);
+        setOnboarding({ key: onboardingKey, status: 'error' });
+      } finally {
+        clearTimeout(timeout);
       }
-    });
-  }, [user, bootstrapAdminEmail, openMembership, allowPublicReads, projectId, projectName, supabase]);
+    })();
+  }, [
+    user,
+    onboardingKey,
+    onboarding.key,
+    onboarding.status,
+    onboardingRetry,
+    requiresAutoOnboarding,
+    isBootstrapAdmin,
+    bootstrapAdminEmail,
+    allowPublicReads,
+    projectId,
+    projectName,
+    supabase,
+  ]);
+
+  const writeStatus: NoddWriteStatus = !requiresAutoOnboarding
+    ? 'ready'
+    : onboarding.key === onboardingKey
+      ? onboarding.status
+      : 'joining';
+
+  const retryOnboarding = useCallback(() => {
+    onboardingAttemptRef.current = null;
+    setOnboardingRetry(value => value + 1);
+  }, []);
 
   // Resolve system theme
   const resolvedTheme = useMemo(() => {
@@ -315,11 +374,13 @@ export function NoddProvider({
       setTheme,
       urlPath,
       auth,
+      writeStatus,
+      retryOnboarding,
       store,
       variants,
       pinContainer: pinContainerEl,
     };
-  }, [projectId, user, signIn, signOut, isVisible, toggleOverlay, setVisible, hideForSession, theme, urlPath, auth, store, variants, storeReady, pinContainerEl]);
+  }, [projectId, user, signIn, signOut, isVisible, toggleOverlay, setVisible, hideForSession, theme, urlPath, auth, writeStatus, retryOnboarding, store, variants, storeReady, pinContainerEl]);
 
   if (!ctxValue) {
     return <>{children}</>;

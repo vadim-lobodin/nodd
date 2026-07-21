@@ -64,7 +64,14 @@ export function startReanchorLoop(opts: ReanchorOpts): () => void {
       }
     }
   });
-  mo.observe(document.body, { childList: true, subtree: true });
+  mo.observe(document.body, {
+    childList: true,
+    subtree: true,
+    // A stable <NoddState name={state}> wrapper can change state without
+    // mounting a new node, so watch that one semantic attribute explicitly.
+    attributes: true,
+    attributeFilter: ['data-nodd-state'],
+  });
 
   // Initial calc
   scheduleRecalc();

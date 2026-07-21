@@ -25,7 +25,13 @@ import { stdin, stdout } from 'node:process';
 const API = 'https://api.supabase.com/v1';
 const PKG_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MIGRATIONS_DIR = join(PKG_DIR, 'supabase', 'migrations');
-const MIGRATION_FILES = ['0001_nodd_init.sql', '0002_bootstrap.sql', '0003_realtime_delete_identity.sql', '0004_public_reads.sql'];
+const MIGRATION_FILES = [
+  '0001_nodd_init.sql',
+  '0002_bootstrap.sql',
+  '0003_realtime_delete_identity.sql',
+  '0004_public_reads.sql',
+  '0005_atomic_thread_create.sql',
+];
 const DEFAULT_REGION = 'us-east-1';
 const DEFAULT_ALLOWLIST = ['http://localhost:5173', 'http://localhost:3000'];
 
