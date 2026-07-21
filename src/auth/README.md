@@ -77,7 +77,7 @@ The redirect URL must be present in the Supabase project's **Allowed Redirect UR
 
 ## 4. Session Persistence (Supabase localStorage adapter)
 
-`AuthClient` does not manage persistence itself. Persistence is delegated entirely to the `@supabase/supabase-js` client, which by default uses its built-in `localStorage` storage adapter under the key `sb-<project-ref>-auth-token`.
+`AuthClient` does not manage persistence itself. Persistence is delegated entirely to the `@supabase/supabase-js` client and its built-in `localStorage` adapter. `NoddProvider` configures the storage key as `nodd-auth:<supabase-host>` so switching a consumer to another Supabase project cannot restore and send a JWT issued by the previous project.
 
 | Concern | Handled by | Notes |
 |---------|------------|-------|
@@ -118,7 +118,7 @@ sequenceDiagram
   App->>Auth: new instance constructed in useEffect
   Auth->>SB: onAuthStateChange subscribe
   SB->>SB: parses URL fragment, exchanges for session
-  SB->>LS: writes sb-<ref>-auth-token
+  SB->>LS: writes nodd-auth:&lt;supabase-host&gt;
   SB-->>Auth: SIGNED_IN event with session
   Auth->>SB: select id, email, display_name, avatar_url<br/>from profiles where id = auth.uid()
   SB-->>Auth: profile row
@@ -171,7 +171,7 @@ src/auth/
 |----------|-----------|
 | Wrap Supabase Auth in a class, not export the client directly | Keeps the dependency direction clean (architecture §2) — only `AuthClient` knows about `supabase.auth`. The rest of Nodd can be unit-tested with a fake `AuthClient`. |
 | `emailRedirectTo: window.location.href` | Magic-link must return the user to the exact prototype URL where they triggered sign-in; otherwise the pin context is lost. Read at call time so SPA navigations are honoured. |
-| Delegate persistence to the Supabase client's localStorage adapter | Avoids dual writes and the consistency bugs they cause. The library does not need any auth state Supabase doesn't already expose. |
+| Delegate persistence to the Supabase client's localStorage adapter | Avoids dual writes and the consistency bugs they cause. The provider scopes Supabase's key by backend host so sessions cannot leak across consumer backend changes. |
 | Single `CurrentUser` shape, `null` for signed-out | Trivial to consume and trivial to test. No `Result`/`Either` ergonomics needed — magic-link errors all surface through promise rejections on `signIn`. |
 | `onAuthChange` emits synchronously on subscribe | Spares every consumer from writing the same "what's the initial value?" boilerplate; matches React's `useSyncExternalStore` mental model. |
 | No `isLoading` flag inside `AuthClient` | "Have we tried to restore yet?" is the provider's lifecycle concern, not auth's. Keeping `AuthClient` stateless beyond the user value makes it composable. |

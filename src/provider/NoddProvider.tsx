@@ -36,6 +36,16 @@ if (isBrowser() && window.location.hash) {
 const CACHE_KEY = '__nodd_client_cache__' as const;
 type ClientEntry = { supabase: SupabaseClient; auth: AuthClient };
 
+function authStorageKey(supabaseUrl: string): string {
+  try {
+    return `nodd-auth:${new URL(supabaseUrl).host}`;
+  } catch {
+    // createClient will report an invalid URL separately. Keep auth storage
+    // isolated even when a host passes a non-standard URL during development.
+    return `nodd-auth:${supabaseUrl || 'unknown'}`;
+  }
+}
+
 function getOrCreateClients(supabaseUrl: string, supabaseAnonKey: string): ClientEntry {
   const g = globalThis as any;
   if (!g[CACHE_KEY]) g[CACHE_KEY] = new Map<string, ClientEntry>();
@@ -46,7 +56,7 @@ function getOrCreateClients(supabaseUrl: string, supabaseAnonKey: string): Clien
   if (!entry) {
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
-        storageKey: 'nodd-auth',
+        storageKey: authStorageKey(supabaseUrl),
         detectSessionInUrl: true,
         flowType: 'implicit',
         // No-op lock: Supabase's default `navigator.locks` coordination

@@ -4,7 +4,7 @@
 // Commands:
 //   init              create+configure a Supabase project, apply migrations,
 //                     write .env.local + .nodd/config.json, print snippet.
-//   add-origin <url>  append a deploy URL to the auth redirect allowlist.
+//   add-origin <url>  configure a deploy URL for auth redirects.
 //
 // Auth: reads SUPABASE_ACCESS_TOKEN env var. Generate at
 // https://supabase.com/dashboard/account/tokens
@@ -33,7 +33,24 @@ const MIGRATION_FILES = [
   '0005_atomic_thread_create.sql',
 ];
 const DEFAULT_REGION = 'us-east-1';
-const DEFAULT_ALLOWLIST = ['http://localhost:5173', 'http://localhost:3000'];
+const DEFAULT_SITE_URL = 'http://localhost:5173';
+const DEFAULT_ORIGINS = ['http://localhost:5173', 'http://localhost:3000'];
+
+function authRedirectEntries(rawUrl) {
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    fail(`invalid origin: ${rawUrl}`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    fail(`auth origin must use http or https: ${rawUrl}`);
+  }
+  const origin = parsed.origin;
+  return { origin, urls: [origin, `${origin}/**`] };
+}
+
+const DEFAULT_ALLOWLIST = DEFAULT_ORIGINS.flatMap(origin => authRedirectEntries(origin).urls);
 
 // Pick the closest Supabase region from the host's IANA timezone.
 // Continent prefix is enough — finer granularity isn't worth the maintenance.
@@ -224,12 +241,13 @@ async function getAnonKey(token, ref) {
 }
 
 async function configureAuth(token, ref, extraOrigins = []) {
-  const allowlist = [...new Set([...DEFAULT_ALLOWLIST, ...extraOrigins])];
+  const extraRedirects = extraOrigins.flatMap(origin => authRedirectEntries(origin).urls);
+  const allowlist = [...new Set([...DEFAULT_ALLOWLIST, ...extraRedirects])];
   await api(`/projects/${ref}/config/auth`, {
     method: 'PATCH',
     token,
     body: {
-      site_url: DEFAULT_ALLOWLIST[0],
+      site_url: DEFAULT_SITE_URL,
       uri_allow_list: allowlist.join(','),
     },
   });
@@ -501,23 +519,29 @@ async function cmdAddOrigin(argv) {
   const cfg = JSON.parse(readFileSync(configPath, 'utf8'));
   const token = getToken();
 
+  const { origin, urls } = authRedirectEntries(url);
   const current = await api(`/projects/${cfg.projectRef}/config/auth`, { token });
   const list = (current.uri_allow_list || '')
     .split(',')
     .map(s => s.trim())
     .filter(Boolean);
-  if (list.includes(url)) {
-    log(`already in allowlist: ${url}`);
+  const updated = [...new Set([...list, ...urls])];
+  const siteUrl = origin.includes('*') ? current.site_url : origin;
+  if (updated.length === list.length && siteUrl === current.site_url) {
+    log(`already configured: ${origin}`);
     return;
   }
-  list.push(url);
   await api(`/projects/${cfg.projectRef}/config/auth`, {
     method: 'PATCH',
     token,
-    body: { uri_allow_list: list.join(',') },
+    body: {
+      site_url: siteUrl,
+      uri_allow_list: updated.join(','),
+    },
   });
-  log(`✓ added ${url} to redirect allowlist`);
-  log(`  full list: ${list.join(', ')}`);
+  log(`✓ configured auth redirects for ${origin}`);
+  if (!origin.includes('*')) log(`  site URL: ${origin}`);
+  log(`  full list: ${updated.join(', ')}`);
 }
 
 function printHelp() {
@@ -530,7 +554,8 @@ Usage:
       Name defaults to package.json#name; region is auto-picked from your timezone.
 
   npx nodd add-origin <url>
-      Append a deploy URL to the auth redirect allowlist.
+      Set a concrete deploy URL as the auth site URL and allow redirects from
+      every route under it. Wildcard preview URLs are allowlisted only.
 
 Auth:
   Set SUPABASE_ACCESS_TOKEN — generate at

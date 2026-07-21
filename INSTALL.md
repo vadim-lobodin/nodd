@@ -102,7 +102,7 @@ For preview deploys with rotating URLs (Vercel/Netlify), use a wildcard:
 npx nodd add-origin "https://*.vercel.app"
 ```
 
-The CLI patches Supabase's auth redirect allowlist via the Management API. Without it, magic-link emails will redirect to `localhost` and fail.
+The CLI sets a concrete deploy origin as Supabase's Site URL and allowlists every route under it. Wildcard preview origins are added to the allowlist without replacing the Site URL. Without this configuration, magic-link emails can redirect to `localhost` and fail.
 
 ---
 
@@ -151,7 +151,7 @@ Use this only if you can't run `npx nodd init` (e.g. agent-restricted environmen
 
 1. **Create a Supabase project** at <https://supabase.com/dashboard>. Copy the **Project URL** and **anon public key** from Settings → API.
 2. **Apply migrations** via the SQL editor: open `node_modules/@vadim_lobodin/nodd/supabase/migrations/` and run every numbered `.sql` file in ascending order.
-3. **Configure auth** at Authentication → URL Configuration: set **Site URL** to `http://localhost:5173`, add your local + deploy origins to **Redirect URLs**.
+3. **Configure auth** at Authentication → URL Configuration: set **Site URL** to the production origin (or `http://localhost:5173` before deployment), then add your local + deploy origins to **Redirect URLs** with `/**` suffixes so magic links can return to nested routes.
 4. **Generate a `projectId` UUID** (any tool — `uuidgen`, `crypto.randomUUID()` in the browser console).
 5. **Wire up `<NoddProvider>`** with the four values from steps 1+4 plus `bootstrapAdminEmail` and (optionally) `openMembership`. Sign in once — the bootstrap RPC creates the project row and your membership automatically.
 6. **For each new deploy origin**, add it to the Redirect URLs allowlist in the dashboard.
