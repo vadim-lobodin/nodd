@@ -6,5 +6,7 @@ export { NoddState, useNoddState, useNoddActivator, useCanActivate } from './pro
 export type { NoddStateProps, Activator } from './provider';
 export { useVariant, Variant } from './provider';
 export type { UseVariantOptions, VariantProps, VariantScope } from './provider';
+export { NoddPrototype, useNoddPrototype } from './provider';
+export type { NoddPrototypeProps, PrototypeScope } from './provider';
 export type { CurrentUser } from './auth';
 export type { Pin, Thread, Comment, PageSnapshot } from './store';

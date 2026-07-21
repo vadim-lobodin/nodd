@@ -27,6 +27,7 @@ Parent: [Architecture Design](../../DESIGN_DOC.md) · Sibling modules: [`src/aut
 | `projectId` | `string` | yes | Project UUID. Used to scope all queries and Realtime subscriptions. |
 | `supabaseUrl` | `string` | yes | Host project's Supabase URL. Passed to the bundled `@supabase/supabase-js` client. |
 | `supabaseAnonKey` | `string` | yes | Anon key. Permissions are enforced server-side via RLS. |
+| `gateToPrototypes` | `boolean` | no | When `true`, the overlay only mounts while a `<NoddPrototype>` boundary is on screen. Off by default (overlay on every route). See §"Prototype scopes". |
 | `children` | `ReactNode` | yes | The host application tree. Rendered untouched. |
 
 ### Hook
@@ -52,6 +53,31 @@ const {
 | Events | Nodd attaches *passive* listeners to `window` (`popstate`, `pushState`/`replaceState` patches, `resize`). All are removed on unmount. |
 | Network | No request is issued before the consumer has called `signIn` or a session has been restored. |
 | SSR | The component is safe to render on the server: it returns `<>{children}</>` and no portal/listener side-effects run until `useEffect` fires on the client. |
+
+### Prototype scopes (`<NoddPrototype>`)
+
+By default the overlay appears on every route, so a catalog/index page that lists prototypes is itself commentable — usually not what you want. `<NoddPrototype>` makes a comment session **live inside a prototype**:
+
+```tsx
+<NoddProvider gateToPrototypes /* … */>
+  <Routes>
+    <Route path="/" element={<Catalog />} />               {/* no overlay here */}
+    <Route path="/p/:id" element={
+      <NoddPrototype id={id} label={title}>                 {/* overlay active */}
+        <Prototype />
+      </NoddPrototype>
+    } />
+  </Routes>
+</NoddProvider>
+```
+
+- **Gating.** With `gateToPrototypes`, the overlay only mounts while at least one `<NoddPrototype>` is mounted. The catalog is left unwrapped, so it's silent — no toolbar, no pins, no thread fetch. This is self-maintaining: a route that isn't a prototype simply isn't wrapped, no path allowlist to keep in sync.
+- **Identity.** `id` should be **stable** for the prototype (a route id / slug), not the raw pathname — a prototype with internal sub-routes keeps one id across them. `id` is currently used only for gating; it becomes the grouping key if per-prototype rollups are added later.
+- **Keying is unchanged.** Threads are still stored per `url_path`, so DOM anchoring stays correct for each internal screen. `<NoddPrototype>` gates *where you can comment*, not *what a comment belongs to*.
+- **Zero footprint.** The component renders a fragment (no wrapper DOM). Registration happens in an effect, so it's SSR-safe and Strict-Mode-safe (ref-counted). Nesting is allowed (innermost wins) but warns in dev.
+- **Opt-in.** Without `gateToPrototypes` the component is inert — consumers that don't adopt it see no behavior change.
+
+The mounted scope is tracked by a per-provider registry (`src/provider/scope/`), mirroring the variant registry pattern. `useNoddPrototype({ id, label })` is the hook form for consumers that can't add a wrapper component.
 
 ## 3. Context Shape
 

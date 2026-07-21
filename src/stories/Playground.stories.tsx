@@ -4,6 +4,7 @@ import { OverlayRenderer } from '../overlay';
 import { DOMAnchor } from '../overlay/anchoring/DOMAnchor';
 import { NoddContext, type NoddContextValue } from '../provider/NoddContext';
 import { createVariantRegistry, type VariantRegistry, Variant } from '../provider/variants';
+import { createPrototypeRegistry, type PrototypeRegistry } from '../provider/scope';
 import type { AuthClient, CurrentUser } from '../auth';
 import type {
   CommentStore,
@@ -208,11 +209,14 @@ function Harness(args: PlaygroundArgs) {
 
   const storeRef = useRef<MemoryStore | null>(null);
   const variantsRef = useRef<VariantRegistry | null>(null);
+  const prototypesRef = useRef<PrototypeRegistry | null>(null);
   const seededRef = useRef(false);
   if (!storeRef.current) storeRef.current = createMemoryStore();
   if (!variantsRef.current) variantsRef.current = createVariantRegistry({ projectId });
+  if (!prototypesRef.current) prototypesRef.current = createPrototypeRegistry();
   const store = storeRef.current;
   const variants = variantsRef.current;
+  const prototypes = prototypesRef.current;
 
   const resolvedTheme = args.theme === 'system'
     ? (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
@@ -301,6 +305,8 @@ function Harness(args: PlaygroundArgs) {
     retryOnboarding: () => {},
     store,
     variants,
+    prototypes,
+    activePrototype: null,
     pinContainer: pinEl,
   };
 

@@ -10,6 +10,7 @@ import {
 import { AuthClient, type CurrentUser } from '../auth';
 import { createCommentStore, type CommentStore } from '../store';
 import { createVariantRegistry, type VariantRegistry } from './variants';
+import { createPrototypeRegistry, type PrototypeRegistry, type PrototypeScope } from './scope';
 import { OverlayRenderer } from '../overlay';
 import { subscribeToRouteChanges } from './useRouteChange';
 import { isBrowser } from './ssr';
@@ -110,6 +111,14 @@ export type NoddProviderProps = {
    * Off by default — comments stay members-only.
    */
   allowPublicReads?: boolean;
+  /**
+   * If true, the overlay only mounts while a `<NoddPrototype>` boundary is
+   * mounted in the tree — so comments live *inside* prototypes and a catalog /
+   * index route (left unwrapped) shows no overlay. Off by default: the overlay
+   * appears on every route, preserving existing behavior for consumers that
+   * don't adopt `<NoddPrototype>`.
+   */
+  gateToPrototypes?: boolean;
   children: ReactNode;
 };
 
@@ -147,6 +156,7 @@ export function NoddProvider({
   projectName = 'My Prototype',
   openMembership = false,
   allowPublicReads = false,
+  gateToPrototypes = false,
   children,
 }: NoddProviderProps) {
   const [user, setUser] = useState<CurrentUser | null>(null);
@@ -155,6 +165,7 @@ export function NoddProvider({
   const [urlPath, setUrlPath] = useState('/');
   const [portalEl, setPortalEl] = useState<HTMLElement | null>(null);
   const [theme, setTheme] = useState<NoddTheme>(initialTheme);
+  const [activePrototype, setActivePrototype] = useState<PrototypeScope | null>(null);
 
   // Module-level singleton — safe across Strict Mode double-render
   const { supabase, auth } = getOrCreateClients(supabaseUrl, supabaseAnonKey);
@@ -165,6 +176,7 @@ export function NoddProvider({
   // `storeReady` flag in ctxValue.
   const storeRef = useRef<CommentStore | null>(null);
   const variantsRef = useRef<VariantRegistry | null>(null);
+  const prototypesRef = useRef<PrototypeRegistry | null>(null);
   const [storeReady, setStoreReady] = useState(false);
 
   useEffect(() => {
@@ -178,6 +190,9 @@ export function NoddProvider({
     if (!variantsRef.current) {
       variantsRef.current = createVariantRegistry({ projectId });
     }
+    if (!prototypesRef.current) {
+      prototypesRef.current = createPrototypeRegistry();
+    }
     // Load persisted selections from localStorage in an effect (SSR-safe).
     variantsRef.current.hydrate();
     setStoreReady(true);
@@ -186,6 +201,8 @@ export function NoddProvider({
       storeRef.current = null;
       variantsRef.current?.dispose();
       variantsRef.current = null;
+      prototypesRef.current?.dispose();
+      prototypesRef.current = null;
       setStoreReady(false);
     };
   }, [supabase, projectId, auth]);
@@ -208,6 +225,39 @@ export function NoddProvider({
   useEffect(() => {
     return subscribeToRouteChanges(setUrlPath);
   }, []);
+
+  // Track the active prototype scope. Reading only through subscribe + state
+  // (never a synchronous flush) is what avoids a one-frame overlay unmount
+  // during a prototype→prototype route swap: React commits the old subtree's
+  // cleanup and the new subtree's registration together, so the batched update
+  // lands on the new scope.
+  useEffect(() => {
+    if (!storeReady) return;
+    const registry = prototypesRef.current;
+    if (!registry) return;
+    setActivePrototype(registry.getActive());
+    return registry.subscribe(() => setActivePrototype(registry.getActive()));
+  }, [storeReady]);
+
+  // Dev nudge: gating is on but nothing ever registered a scope — the most
+  // likely cause of a "the overlay vanished" report is a missing
+  // `<NoddPrototype>` wrapper. Warn once, well after mount.
+  useEffect(() => {
+    if (!gateToPrototypes || !isBrowser()) return;
+    const isDev =
+      typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
+    if (!isDev) return;
+    const t = setTimeout(() => {
+      if (!prototypesRef.current?.getActive()) {
+        console.warn(
+          '[nodd] gateToPrototypes is on but no <NoddPrototype> has mounted. ' +
+            'The overlay stays hidden until a prototype boundary is on screen — ' +
+            'wrap each prototype route in <NoddPrototype id="…">.',
+        );
+      }
+    }, 5_000);
+    return () => clearTimeout(t);
+  }, [gateToPrototypes]);
 
   // Auto-onboard: admin claims project + membership; everyone else joins as
   // member when openMembership is on. The overlay stays read-only while this
@@ -368,9 +418,10 @@ export function NoddProvider({
 
   const store = storeRef.current;
   const variants = variantsRef.current;
+  const prototypes = prototypesRef.current;
 
   const ctxValue: NoddContextValue | null = useMemo(() => {
-    if (!store || !variants) return null;
+    if (!store || !variants || !prototypes) return null;
     return {
       projectId,
       user,
@@ -388,18 +439,26 @@ export function NoddProvider({
       retryOnboarding,
       store,
       variants,
+      prototypes,
+      activePrototype,
       pinContainer: pinContainerEl,
     };
-  }, [projectId, user, signIn, signOut, isVisible, toggleOverlay, setVisible, hideForSession, theme, urlPath, auth, writeStatus, retryOnboarding, store, variants, storeReady, pinContainerEl]);
+  }, [projectId, user, signIn, signOut, isVisible, toggleOverlay, setVisible, hideForSession, theme, urlPath, auth, writeStatus, retryOnboarding, store, variants, prototypes, activePrototype, storeReady, pinContainerEl]);
 
   if (!ctxValue) {
     return <>{children}</>;
   }
 
+  // When gating is on, the overlay only mounts inside a `<NoddPrototype>` — so
+  // the catalog/index route shows nothing. Full unmount (not just hidden)
+  // preserves the "zero host impact when off" invariant and resets transient
+  // overlay state on prototype exit.
+  const overlayActive = !gateToPrototypes || !!activePrototype;
+
   return (
     <NoddContext.Provider value={ctxValue}>
       {children}
-      {portalEl && isVisible ? createPortal(<OverlayRenderer />, portalEl) : null}
+      {portalEl && isVisible && overlayActive ? createPortal(<OverlayRenderer />, portalEl) : null}
     </NoddContext.Provider>
   );
 }

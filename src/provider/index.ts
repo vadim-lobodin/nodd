@@ -6,3 +6,5 @@ export { NoddState, useNoddState, useNoddActivator, useCanActivate } from './sta
 export type { NoddStateProps, Activator } from './state';
 export { useVariant, Variant } from './variants';
 export type { UseVariantOptions, VariantProps, VariantScope } from './variants';
+export { NoddPrototype, useNoddPrototype } from './scope';
+export type { NoddPrototypeProps, PrototypeScope } from './scope';

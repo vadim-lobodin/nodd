@@ -2,6 +2,7 @@ import { createContext, useContext } from 'react';
 import type { AuthClient, CurrentUser } from '../auth';
 import type { CommentStore } from '../store';
 import type { VariantRegistry } from './variants';
+import type { PrototypeRegistry, PrototypeScope } from './scope';
 
 export type NoddTheme = 'light' | 'dark' | 'system';
 export type NoddWriteStatus = 'ready' | 'joining' | 'error';
@@ -25,6 +26,10 @@ export type NoddContextValue = {
   retryOnboarding: () => void;
   store: CommentStore;
   variants: VariantRegistry;
+  /** Registry of mounted `<NoddPrototype>` scopes (gates the overlay). */
+  prototypes: PrototypeRegistry;
+  /** The innermost currently-mounted prototype scope, or null. */
+  activePrototype: PrototypeScope | null;
   pinContainer: HTMLElement | null;
 };
 
