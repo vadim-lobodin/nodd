@@ -20,7 +20,7 @@ function resolveSystemTheme(): 'light' | 'dark' {
 
 export function OverlayRenderer() {
   const ctx = useNoddContext();
-  const { user, urlPath, store, variants, signIn, signOut, hideForSession, theme, pinContainer } = ctx;
+  const { user, urlPath, store, variants, signIn, signOut, hideForSession, theme, pinContainer, activePrototype } = ctx;
   // A viewer who can create/edit comments: signed in with a display name set.
   // Everyone else (logged out, or mid-onboarding) gets read-only comments.
   const canComment = !!user && !ctx.auth.needsDisplayName && ctx.writeStatus === 'ready';
@@ -44,6 +44,7 @@ export function OverlayRenderer() {
     y: number;
     stateKey: string;
     urlPath: string;
+    prototypeId: string | null;
   } | null>(null);
 
   // Resolve effective theme
@@ -256,10 +257,12 @@ export function OverlayRenderer() {
       if (result) {
         const pos = DOMAnchor.reposition(pin, result.element);
         const stateKey = stackToKey(getStateStackForElement(result.element));
-        setPendingPin({ pin, x: pos.x, y: pos.y, stateKey, urlPath });
+        // Snapshot the active prototype at capture time — same guard as urlPath,
+        // so a scope change between click and submit can't mis-stamp the thread.
+        setPendingPin({ pin, x: pos.x, y: pos.y, stateKey, urlPath, prototypeId: activePrototype?.id ?? null });
       }
     },
-    [store, user, urlPath],
+    [store, user, urlPath, activePrototype],
   );
 
   // A new-thread composer is also state-bound. Re-resolve it after host DOM
@@ -291,6 +294,7 @@ export function OverlayRenderer() {
         urlPath: pendingPin.urlPath,
         pin: pendingPin.pin,
         stateKey: pendingPin.stateKey,
+        prototypeId: pendingPin.prototypeId,
         body,
         mentions,
       });

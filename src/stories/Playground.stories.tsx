@@ -72,7 +72,7 @@ function createMemoryStore(): MemoryStore {
       if (!currentUserId) throw new Error('Not authenticated');
       const tid = uid(), cid = uid(), ts = now();
       threads = [...threads, {
-        id: tid, projectId: 'playground', urlPath: input.urlPath, pin: input.pin,
+        id: tid, projectId: 'playground', urlPath: input.urlPath, prototypeId: input.prototypeId ?? null, pin: input.pin,
         stateKey: input.stateKey ?? '', resolved: false, resolvedBy: null, resolvedAt: null,
         createdBy: currentUserId, createdAt: ts,
         comments: [{ id: cid, threadId: tid, authorId: currentUserId, body: input.body, mentions: input.mentions ?? [], createdAt: ts, editedAt: null }],
@@ -127,7 +127,7 @@ function createMemoryStore(): MemoryStore {
     seed({ urlPath, pin, authorId, body }) {
       const tid = uid(), cid = uid(), ts = now();
       threads = [...threads, {
-        id: tid, projectId: 'playground', urlPath, pin, stateKey: '', resolved: false,
+        id: tid, projectId: 'playground', urlPath, prototypeId: null, pin, stateKey: '', resolved: false,
         resolvedBy: null, resolvedAt: null, createdBy: authorId, createdAt: ts,
         comments: [{ id: cid, threadId: tid, authorId, body, mentions: [], createdAt: ts, editedAt: null }],
       }];

@@ -17,7 +17,7 @@ import { insertThread, insertComment, updateThreadResolved, deleteThread, delete
 
 export type CommentStore = {
   subscribe(urlPath: string, listener: (snapshot: PageSnapshot) => void): () => void;
-  addThread(input: { urlPath: string; pin: Pin; stateKey?: string; body: string; mentions?: UserId[] }): Promise<ThreadId>;
+  addThread(input: { urlPath: string; pin: Pin; stateKey?: string; body: string; mentions?: UserId[]; prototypeId?: string | null }): Promise<ThreadId>;
   replyToThread(input: { threadId: ThreadId; body: string; mentions?: UserId[] }): Promise<CommentId>;
   resolveThread(threadId: ThreadId): Promise<void>;
   reopenThread(threadId: ThreadId): Promise<void>;
@@ -176,6 +176,7 @@ export function createCommentStore(deps: {
           id: payload.new.id,
           projectId: payload.new.project_id,
           urlPath: payload.new.url_path,
+          prototypeId: payload.new.prototype_id ?? null,
           pin: payload.new.pin,
           stateKey: payload.new.state_key ?? '',
           resolved: payload.new.resolved,
@@ -358,10 +359,12 @@ export function createCommentStore(deps: {
       const now = new Date().toISOString();
 
       const stateKey = input.stateKey ?? '';
+      const prototypeId = input.prototypeId ?? null;
       const thread: Thread = {
         id: tid,
         projectId,
         urlPath: input.urlPath,
+        prototypeId,
         pin: input.pin,
         stateKey,
         resolved: false,
@@ -400,6 +403,7 @@ export function createCommentStore(deps: {
           createdBy: userId,
           threadId: serverThreadId,
           commentId: serverCommentId,
+          prototypeId,
         });
         markRecentlyWritten(result.threadId);
         markRecentlyWritten(result.commentId);

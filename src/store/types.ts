@@ -29,6 +29,13 @@ export type Thread = {
   id: ThreadId;
   projectId: ProjectId;
   urlPath: string;
+  /**
+   * Prototype scope this thread belongs to (from `<NoddPrototype id>`), spanning
+   * all of its screens/url_paths. Null for threads created before prototype
+   * scoping shipped, or when the overlay is ungated — such threads are page-only
+   * and never surface in the per-prototype inbox.
+   */
+  prototypeId: string | null;
   pin: Pin;
   stateKey: string;
   resolved: boolean;

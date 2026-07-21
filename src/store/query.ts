@@ -5,6 +5,7 @@ type RawThread = {
   id: string;
   project_id: string;
   url_path: string;
+  prototype_id: string | null;
   pin: any;
   state_key: string | null;
   resolved: boolean;
@@ -42,6 +43,7 @@ function mapThread(raw: RawThread): Thread {
     id: raw.id,
     projectId: raw.project_id,
     urlPath: raw.url_path,
+    prototypeId: raw.prototype_id ?? null,
     pin: raw.pin,
     stateKey: raw.state_key ?? '',
     resolved: raw.resolved,

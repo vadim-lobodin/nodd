@@ -58,23 +58,30 @@ export async function insertThread(
     createdBy: UserId;
     threadId: string;
     commentId: string;
+    prototypeId?: string | null;
   },
 ): Promise<{ threadId: string; commentId: string }> {
   return withMutationTimeout('Creating comment', async signal => {
     // Newer projects use one Postgres transaction for the thread and its root
     // comment. Supplying ids client-side also lets the store suppress Realtime
     // echoes before the request starts, rather than racing the server events.
+    //
+    // `_prototype_id` is only sent when scoped: PostgREST matches an RPC by its
+    // exact named-arg set, so omitting it lets an unscoped write still resolve
+    // the pre-0006 8-arg signature on projects that have 0005 but not 0006.
+    const rpcArgs: Record<string, unknown> = {
+      _thread_id: input.threadId,
+      _comment_id: input.commentId,
+      _project_id: input.projectId,
+      _url_path: input.urlPath,
+      _pin: input.pin,
+      _state_key: input.stateKey,
+      _body: input.body,
+      _mentions: input.mentions,
+    };
+    if (input.prototypeId != null) rpcArgs._prototype_id = input.prototypeId;
     const { error: rpcError } = await supabase
-      .rpc('nodd_create_thread', {
-        _thread_id: input.threadId,
-        _comment_id: input.commentId,
-        _project_id: input.projectId,
-        _url_path: input.urlPath,
-        _pin: input.pin,
-        _state_key: input.stateKey,
-        _body: input.body,
-        _mentions: input.mentions,
-      })
+      .rpc('nodd_create_thread', rpcArgs)
       .abortSignal(signal);
 
     if (!rpcError) {
@@ -83,8 +90,11 @@ export async function insertThread(
     if (!isMissingAtomicCreateRpc(rpcError)) throw rpcError;
 
     // Backward-compatible fallback for an existing Supabase project before it
-    // applies 0005_atomic_thread_create.sql. If the second insert fails, remove
-    // the otherwise-empty thread so it cannot surface as a ghost pin later.
+    // applies 0005_atomic_thread_create.sql. Such a project also predates 0006,
+    // so the prototype_id column does not exist yet and is intentionally not set
+    // here — the thread stays page-only until the project migrates. If the second
+    // insert fails, remove the otherwise-empty thread so it cannot surface as a
+    // ghost pin later.
     const { data: thread, error: threadErr } = await supabase
       .from('threads')
       .insert({
