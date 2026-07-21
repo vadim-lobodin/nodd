@@ -11,6 +11,7 @@ const THREADS: ThreadSummary[] = [
     replyCount: 2,
     resolved: false,
     unread: true,
+    canDelete: true,
   },
   {
     id: 't2',
@@ -53,6 +54,7 @@ function SidebarStory({ threads = THREADS }: { threads?: ThreadSummary[] }) {
         fetchResolved={async () => []}
         onItemOpen={() => {}}
         onItemHover={() => {}}
+        onItemDelete={() => {}}
         userName="Alice Chen"
         onSignOut={() => {}}
         onHideForSession={() => {}}

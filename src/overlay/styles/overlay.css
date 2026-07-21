@@ -630,14 +630,14 @@
 
 /* Sidebar item delete — revealed on row hover/focus to keep the list calm */
 [data-nodd-root] .nodd-sidebar-item-delete {
+  position: relative;
+  z-index: 1;
   opacity: 0;
-  pointer-events: none;
   transition: opacity 120ms ease;
 }
 [data-nodd-root] .nodd-sidebar-item:hover .nodd-sidebar-item-delete,
 [data-nodd-root] .nodd-sidebar-item:focus-within .nodd-sidebar-item-delete {
   opacity: 1;
-  pointer-events: auto;
 }
 
 /* ==========================================================================
@@ -1090,6 +1090,7 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: hsl(var(--nodd-muted-foreground));
+  pointer-events: none;
   transition: opacity 120ms ease;
 }
 
