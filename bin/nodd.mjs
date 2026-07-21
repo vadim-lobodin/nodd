@@ -14,6 +14,7 @@ import {
   writeFileSync,
   existsSync,
   mkdirSync,
+  readdirSync,
 } from 'node:fs';
 import { dirname, join, basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,13 +26,19 @@ import { stdin, stdout } from 'node:process';
 const API = 'https://api.supabase.com/v1';
 const PKG_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MIGRATIONS_DIR = join(PKG_DIR, 'supabase', 'migrations');
-const MIGRATION_FILES = [
-  '0001_nodd_init.sql',
-  '0002_bootstrap.sql',
-  '0003_realtime_delete_identity.sql',
-  '0004_public_reads.sql',
-  '0005_atomic_thread_create.sql',
-];
+
+// Discover migrations from the bundled directory rather than a hardcoded list,
+// so a new numbered file is picked up automatically. Lexicographic sort matches
+// the numeric prefix order (0001…0006…). Every migration is written to be
+// re-runnable (create ... if not exists / create or replace / drop if exists),
+// so applying the full set on --reconfigure is safe.
+function listMigrationFiles() {
+  const files = readdirSync(MIGRATIONS_DIR)
+    .filter(f => f.endsWith('.sql'))
+    .sort();
+  if (!files.length) fail(`no migrations found in ${MIGRATIONS_DIR}`);
+  return files;
+}
 const DEFAULT_REGION = 'us-east-1';
 const DEFAULT_SITE_URL = 'http://localhost:5173';
 const DEFAULT_ORIGINS = ['http://localhost:5173', 'http://localhost:3000'];
@@ -203,7 +210,7 @@ async function pollHealthy(token, ref) {
 }
 
 async function applyMigrations(token, ref) {
-  for (const file of MIGRATION_FILES) {
+  for (const file of listMigrationFiles()) {
     const sqlPath = join(MIGRATIONS_DIR, file);
     if (!existsSync(sqlPath)) fail(`migration not found: ${sqlPath}`);
     const sql = readFileSync(sqlPath, 'utf8');
