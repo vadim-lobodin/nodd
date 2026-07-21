@@ -331,6 +331,7 @@ function Harness(args: PlaygroundArgs) {
     variants,
     prototypes,
     activePrototype: null,
+    navigate: () => {},
     pinContainer: pinEl,
   };
 

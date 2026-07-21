@@ -28,6 +28,7 @@ Parent: [Architecture Design](../../DESIGN_DOC.md) · Sibling modules: [`src/aut
 | `supabaseUrl` | `string` | yes | Host project's Supabase URL. Passed to the bundled `@supabase/supabase-js` client. |
 | `supabaseAnonKey` | `string` | yes | Anon key. Permissions are enforced server-side via RLS. |
 | `gateToPrototypes` | `boolean` | no | When `true`, the overlay only mounts while a `<NoddPrototype>` boundary is on screen. Off by default (overlay on every route). See §"Prototype scopes". |
+| `onNavigate` | `(path: string) => void` | no | Router hook for cross-screen navigation from the prototype inbox. Pass `path => router.push(path)` for SPA navigation (no reload); omitted → full page load. The path may carry a `#nodd-thread=<id>` fragment the overlay consumes on arrival. See §"Prototype scopes". |
 | `children` | `ReactNode` | yes | The host application tree. Rendered untouched. |
 
 ### Hook
@@ -72,8 +73,9 @@ By default the overlay appears on every route, so a catalog/index page that list
 ```
 
 - **Gating.** With `gateToPrototypes`, the overlay only mounts while at least one `<NoddPrototype>` is mounted. The catalog is left unwrapped, so it's silent — no toolbar, no pins, no thread fetch. This is self-maintaining: a route that isn't a prototype simply isn't wrapped, no path allowlist to keep in sync.
-- **Identity.** `id` should be **stable** for the prototype (a route id / slug), not the raw pathname — a prototype with internal sub-routes keeps one id across them. `id` is currently used only for gating; it becomes the grouping key if per-prototype rollups are added later.
-- **Keying is unchanged.** Threads are still stored per `url_path`, so DOM anchoring stays correct for each internal screen. `<NoddPrototype>` gates *where you can comment*, not *what a comment belongs to*.
+- **Identity.** `id` should be **stable** for the prototype (a route id / slug), not the raw pathname — a prototype with internal sub-routes keeps one id across them. It gates the overlay *and* is stamped onto each thread as `prototype_id`, so it doubles as the inbox grouping key.
+- **Keying is unchanged.** Threads are still stored per `url_path`, so DOM anchoring stays correct for each internal screen. `<NoddPrototype>` gates *where you can comment*, not *which screen a comment anchors to*. The `prototype_id` stamp is an additional roll-up key layered on top of `url_path`, not a replacement.
+- **Per-prototype inbox.** When a scope is active, the sidebar shows a "This screen | This prototype" toggle. "This prototype" lists every thread across all the prototype's screens, grouped by screen; clicking a thread on another screen navigates there (via `onNavigate`, or a full load) and auto-opens it. Threads created before this shipped have `prototype_id = null` and never appear in the inbox — they stay page-scoped. The inbox is fetch-on-open (not live); the current screen stays live via its normal subscription.
 - **Zero footprint.** The component renders a fragment (no wrapper DOM). Registration happens in an effect, so it's SSR-safe and Strict-Mode-safe (ref-counted). Nesting is allowed (innermost wins) but warns in dev.
 - **Opt-in.** Without `gateToPrototypes` the component is inert — consumers that don't adopt it see no behavior change.
 

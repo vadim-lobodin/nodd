@@ -212,6 +212,8 @@ This relies on the composite index `threads(project_id, url_path) where resolved
 
 Resolved threads are fetched lazily by the sidebar's "Resolved" tab — out of scope for this module's default subscription, but exposed via an internal `fetchResolved(urlPath)` helper consumed by `OverlayRenderer`.
 
+The per-prototype inbox is served the same way: `fetchPrototypeThreads(prototypeId, { resolved })` reads every thread across all of a prototype's `url_path`s in one query (`project_id = $1 and prototype_id = $2`), backed by the partial index `threads(project_id, prototype_id) where resolved = false` from migration `0006`. Like `fetchResolved`, it is fetch-on-open rather than a subscription — the active screen stays live through the normal page channel; the inbox is a bounded snapshot the viewer explicitly requests. Threads written before `0006` have `prototype_id = null` and are never returned.
+
 ## 7. Optimistic Update + Rollback
 
 Every mutating method follows the same five-phase contract:

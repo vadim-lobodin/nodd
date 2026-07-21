@@ -119,6 +119,15 @@ export type NoddProviderProps = {
    * don't adopt `<NoddPrototype>`.
    */
   gateToPrototypes?: boolean;
+  /**
+   * Navigate to another in-app screen. The prototype inbox uses this to open a
+   * thread that lives on a different url_path. Pass your router's push (e.g.
+   * `path => router.push(path)`) for SPA navigation with no reload; when
+   * omitted, Nodd falls back to a full page load (`window.location.assign`).
+   * The target path may carry a `#nodd-thread=<id>` fragment, which the overlay
+   * consumes on arrival to auto-open that thread.
+   */
+  onNavigate?: (path: string) => void;
   children: ReactNode;
 };
 
@@ -157,6 +166,7 @@ export function NoddProvider({
   openMembership = false,
   allowPublicReads = false,
   gateToPrototypes = false,
+  onNavigate,
   children,
 }: NoddProviderProps) {
   const [user, setUser] = useState<CurrentUser | null>(null);
@@ -416,6 +426,14 @@ export function NoddProvider({
 
   const signOut = useCallback(() => auth.signOut(), [auth]);
 
+  // Router-agnostic navigation for cross-screen inbox jumps. Prefer the host's
+  // router (no reload, overlay state preserved); otherwise a full-page load,
+  // after which the deep-link fragment re-opens the thread on the new screen.
+  const navigate = useCallback((path: string) => {
+    if (onNavigate) onNavigate(path);
+    else if (isBrowser()) window.location.assign(path);
+  }, [onNavigate]);
+
   const store = storeRef.current;
   const variants = variantsRef.current;
   const prototypes = prototypesRef.current;
@@ -441,9 +459,10 @@ export function NoddProvider({
       variants,
       prototypes,
       activePrototype,
+      navigate,
       pinContainer: pinContainerEl,
     };
-  }, [projectId, user, signIn, signOut, isVisible, toggleOverlay, setVisible, hideForSession, theme, urlPath, auth, writeStatus, retryOnboarding, store, variants, prototypes, activePrototype, storeReady, pinContainerEl]);
+  }, [projectId, user, signIn, signOut, isVisible, toggleOverlay, setVisible, hideForSession, theme, urlPath, auth, writeStatus, retryOnboarding, store, variants, prototypes, activePrototype, navigate, storeReady, pinContainerEl]);
 
   if (!ctxValue) {
     return <>{children}</>;

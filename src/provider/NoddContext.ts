@@ -30,6 +30,12 @@ export type NoddContextValue = {
   prototypes: PrototypeRegistry;
   /** The innermost currently-mounted prototype scope, or null. */
   activePrototype: PrototypeScope | null;
+  /**
+   * Navigate to another screen (used by the prototype inbox to open a thread on
+   * a different url_path). Uses the host router via NoddProvider's `onNavigate`
+   * when provided, else falls back to a full page load.
+   */
+  navigate: (path: string) => void;
   pinContainer: HTMLElement | null;
 };
 

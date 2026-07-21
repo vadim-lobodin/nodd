@@ -20,7 +20,7 @@ function resolveSystemTheme(): 'light' | 'dark' {
 
 export function OverlayRenderer() {
   const ctx = useNoddContext();
-  const { user, urlPath, store, variants, signIn, signOut, hideForSession, theme, pinContainer, activePrototype } = ctx;
+  const { user, urlPath, store, variants, signIn, signOut, hideForSession, theme, pinContainer, activePrototype, navigate } = ctx;
   // A viewer who can create/edit comments: signed in with a display name set.
   // Everyone else (logged out, or mid-onboarding) gets read-only comments.
   const canComment = !!user && !ctx.auth.needsDisplayName && ctx.writeStatus === 'ready';
@@ -209,14 +209,16 @@ export function OverlayRenderer() {
   }, []);
 
   // Sidebar inbox item: threads from other screens of the prototype carry their
-  // own urlPath. Same-screen items open in place; cross-screen navigation is
-  // wired in 2c. Until then a cross-screen click is a no-op rather than opening
-  // a thread whose pin isn't on this page.
+  // own urlPath. Same-screen items open in place; cross-screen items navigate to
+  // that screen with a #nodd-thread=<id> fragment the deep-link effect consumes
+  // on arrival to auto-open the thread.
   const handleInboxItemOpen = useCallback((threadId: string, itemUrlPath?: string) => {
     if (!itemUrlPath || itemUrlPath === urlPath) {
       handlePinOpen(threadId);
+      return;
     }
-  }, [urlPath, handlePinOpen]);
+    navigate(`${itemUrlPath}#nodd-thread=${threadId}`);
+  }, [urlPath, handlePinOpen, navigate]);
 
   // When a thread opens (e.g. picked from the sidebar) scroll its anchor into
   // view if it's off-screen, so the pin and popover are actually visible.
@@ -255,6 +257,34 @@ export function OverlayRenderer() {
     setOpenThreadId(null);
     setPendingPin(null);
   }, [urlPath]);
+
+  // Deep link (#nodd-thread=<id>): a cross-screen inbox click navigates here
+  // with this fragment. Capture the target and clean the URL on arrival; the
+  // actual open waits until that thread is present in the loaded snapshot.
+  const pendingDeepLinkRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const match = window.location.hash.match(/nodd-thread=([^&]+)/);
+    if (!match) return;
+    pendingDeepLinkRef.current = decodeURIComponent(match[1]);
+    const cleaned = window.location.hash
+      .replace(/(&)?nodd-thread=[^&]+/, '')
+      .replace(/^#$/, '');
+    window.history.replaceState(
+      null,
+      '',
+      window.location.pathname + window.location.search + (cleaned && cleaned !== '#' ? cleaned : ''),
+    );
+  }, [urlPath]);
+
+  useEffect(() => {
+    const id = pendingDeepLinkRef.current;
+    if (!id || !snapshot) return;
+    if (snapshot.threads.some(t => t.id === id)) {
+      pendingDeepLinkRef.current = null;
+      setOpenThreadId(id);
+    }
+  }, [snapshot]);
 
   const handlePinHover = useCallback((_threadId: string | null) => {}, []);
 
