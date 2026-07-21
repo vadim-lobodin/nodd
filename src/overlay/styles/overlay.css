@@ -631,11 +631,13 @@
 /* Sidebar item delete — revealed on row hover/focus to keep the list calm */
 [data-nodd-root] .nodd-sidebar-item-delete {
   opacity: 0;
+  pointer-events: none;
   transition: opacity 120ms ease;
 }
 [data-nodd-root] .nodd-sidebar-item:hover .nodd-sidebar-item-delete,
 [data-nodd-root] .nodd-sidebar-item:focus-within .nodd-sidebar-item-delete {
   opacity: 1;
+  pointer-events: auto;
 }
 
 /* ==========================================================================
@@ -1072,15 +1074,28 @@
   color: hsl(var(--nodd-foreground) / 0.6);
 }
 
+[data-nodd-root] .nodd-sidebar-item-meta {
+  display: grid;
+  place-items: center end;
+  margin-left: auto;
+}
+
+[data-nodd-root] .nodd-sidebar-item-meta > * {
+  grid-area: 1 / 1;
+}
+
 [data-nodd-root] .nodd-sidebar-item-time {
   font-family: var(--nodd-font-mono);
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: hsl(var(--nodd-muted-foreground));
-  /* Right-align the timestamp; the delete button (own threads only) follows it,
-     so rows without a delete button keep the same alignment. */
-  margin-left: auto;
+  transition: opacity 120ms ease;
+}
+
+[data-nodd-root] .nodd-sidebar-item:hover .nodd-sidebar-item-meta--actionable .nodd-sidebar-item-time,
+[data-nodd-root] .nodd-sidebar-item:focus-within .nodd-sidebar-item-meta--actionable .nodd-sidebar-item-time {
+  opacity: 0;
 }
 
 [data-nodd-root] .nodd-sidebar-item-snippet {

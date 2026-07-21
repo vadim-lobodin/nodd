@@ -295,17 +295,19 @@ function SidebarItem({
           className="nodd-avatar--sm"
         />
         <span className="nodd-sidebar-item-author">{item.authorName}</span>
-        <span className="nodd-sidebar-item-time">{formatTime(item.createdAt)}</span>
-        {showDelete && (
-          <button
-            className="nodd-btn nodd-btn--delete nodd-sidebar-item-delete"
-            onClick={e => { e.stopPropagation(); void onItemDelete?.(item.id); }}
-            aria-label="Delete thread"
-            title="Delete thread"
-          >
-            <TrashCan size={16} />
-          </button>
-        )}
+        <div className={`nodd-sidebar-item-meta${showDelete ? ' nodd-sidebar-item-meta--actionable' : ''}`}>
+          <span className="nodd-sidebar-item-time">{formatTime(item.createdAt)}</span>
+          {showDelete && (
+            <button
+              className="nodd-btn nodd-btn--delete nodd-sidebar-item-delete"
+              onClick={e => { e.stopPropagation(); void onItemDelete?.(item.id); }}
+              aria-label="Delete thread"
+              title="Delete thread"
+            >
+              <TrashCan size={16} />
+            </button>
+          )}
+        </div>
       </div>
       <div className="nodd-sidebar-item-snippet">{item.snippet}</div>
       {item.replyCount > 0 && (
