@@ -151,7 +151,7 @@ export function createCommentStore(deps: {
   }
 
   // Realtime
-  const channel = createRealtimeChannel(supabase, projectId, {
+  const realtime = createRealtimeChannel(supabase, projectId, {
     onThreadChange(payload) {
       if (disposed) return;
 
@@ -602,7 +602,7 @@ export function createCommentStore(deps: {
     dispose() {
       if (disposed) return;
       disposed = true;
-      supabase.removeChannel(channel);
+      realtime.dispose();
       listeners.clear();
       loadEpochByPath.clear();
       for (const timer of recentlyWrittenTimers.values()) clearTimeout(timer);
