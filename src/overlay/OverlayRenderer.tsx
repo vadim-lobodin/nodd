@@ -37,7 +37,7 @@ export function OverlayRenderer() {
   const [authSent, setAuthSent] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSending, setAuthSending] = useState(false);
-  const [onboardName, setOnboardName] = useState('');
+  const [authName, setAuthName] = useState('');
   const [pendingPin, setPendingPin] = useState<{
     pin: Pin;
     x: number;
@@ -58,21 +58,9 @@ export function OverlayRenderer() {
     }
   }, [effectiveTheme]);
 
-  // Push host layout when either right-side panel is open, instead of
-  // overlaying. Uses inline style to avoid leaking unscoped CSS into the host
-  // (see CLAUDE.md). Must clear the panel's full footprint: right gap (16) +
-  // width (300) + a left breathing gap (16) = 332px, otherwise it overlaps
-  // host content. The two panels are mutually exclusive so they share the gap.
+  // The panels overlay the host without mutating its layout. Keep this derived
+  // flag only for moving the toolbar clear of whichever panel is open.
   const panelOpen = sidebarOpen || variantsOpen;
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    const body = document.body;
-    const prevMargin = body.style.marginRight;
-    body.style.marginRight = panelOpen ? 'min(332px, 90vw)' : prevMargin || '';
-    return () => {
-      body.style.marginRight = prevMargin;
-    };
-  }, [panelOpen]);
 
   // Listen for system theme changes when theme='system'
   useEffect(() => {
@@ -155,7 +143,7 @@ export function OverlayRenderer() {
         pinPositionsRef.current.set(id, { x, y });
         // Imperative DOM update — no React re-render
         const el = document.querySelector(`[data-nodd-pin-id="${id}"]`) as HTMLElement | null;
-        if (el) el.style.transform = `translate(${x}px, ${y}px)`;
+        if (el) el.style.translate = `${x}px ${y}px`;
       },
       onDOMMutation: () => setDomVersion(v => v + 1),
     });
@@ -412,11 +400,17 @@ export function OverlayRenderer() {
   }, [snapshot]);
 
   const handleSignIn = useCallback(async () => {
-    if (!authEmail.trim() || authSending) return;
+    const email = authEmail.trim();
+    const name = authName.trim();
+    if (authSending) return;
+    if (!name || !email) {
+      setAuthError('Enter your name and email address.');
+      return;
+    }
     setAuthError(null);
     setAuthSending(true);
     try {
-      await signIn(authEmail);
+      await signIn(email, name);
       setAuthSent(true);
     } catch (err) {
       setAuthError(
@@ -425,13 +419,13 @@ export function OverlayRenderer() {
     } finally {
       setAuthSending(false);
     }
-  }, [authEmail, authSending, signIn]);
+  }, [authEmail, authName, authSending, signIn]);
 
   const handleSetName = useCallback(async () => {
-    const name = onboardName.trim();
+    const name = authName.trim();
     if (!name) return;
     await ctx.auth.setDisplayName(name);
-  }, [onboardName, ctx.auth]);
+  }, [authName, ctx.auth]);
 
   // Variants chrome (toolbar button + panel) is independent of auth and comment
   // mode — a signed-out viewer with the overlay on can still switch variants.
@@ -479,26 +473,41 @@ export function OverlayRenderer() {
               <button className="nodd-btn" onClick={() => setAuthSent(false)}>Try again</button>
             </div>
           ) : (
-            <div className="nodd-auth-form">
+            <form
+              className="nodd-auth-form"
+              onSubmit={e => { e.preventDefault(); void handleSignIn(); }}
+            >
               <h2 className="nodd-auth-title">Log in to leave comments</h2>
               <input
                 className="nodd-auth-input"
+                type="text"
+                name="name"
+                autoComplete="name"
+                placeholder="Your name"
+                value={authName}
+                onChange={e => { setAuthName(e.target.value); setAuthError(null); }}
+                autoFocus
+                required
+              />
+              <input
+                className="nodd-auth-input"
                 type="email"
+                name="email"
+                autoComplete="email"
                 placeholder="you@example.com"
                 value={authEmail}
                 onChange={e => { setAuthEmail(e.target.value); setAuthError(null); }}
-                onKeyDown={e => e.key === 'Enter' && handleSignIn()}
-                autoFocus
+                required
               />
               <button
                 className="nodd-btn nodd-btn--primary"
-                onClick={handleSignIn}
+                type="submit"
                 disabled={authSending}
               >
                 {authSending ? 'Sending…' : 'Send magic link'}
               </button>
               {authError && <p className="nodd-auth-error" role="alert">{authError}</p>}
-            </div>
+            </form>
           )
         ) : ctx.auth.needsDisplayName ? (
           <div className="nodd-auth-form">
@@ -507,8 +516,8 @@ export function OverlayRenderer() {
               className="nodd-auth-input"
               type="text"
               placeholder="Your name"
-              value={onboardName}
-              onChange={e => setOnboardName(e.target.value)}
+              value={authName}
+              onChange={e => setAuthName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSetName()}
               autoFocus
             />

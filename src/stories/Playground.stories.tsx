@@ -18,7 +18,7 @@ import type {
  * an in-memory store + mock auth — no Supabase — so the whole flow can be
  * exercised: drop pins (press "C"), reply, resolve, delete, the sidebar,
  * the variants panel, the settings menu, hide-for-session, and every auth
- * state (logged-out / first-time name prompt / signed-in). Public-reads is
+ * state (logged-out / legacy name prompt / signed-in). Public-reads is
  * simulated: when logged out, comments are visible+read-only only if enabled.
  */
 
@@ -177,7 +177,7 @@ function PlaygroundPage() {
           </button>
         </div>
         <div style={{ padding: 20, border: '1px solid #e5e5e5', borderRadius: 12 }}>
-          <h3 style={{ marginTop: 0 }}>Shipping</h3>
+          <h3 data-pin-seed-own style={{ marginTop: 0 }}>Shipping</h3>
           <p style={{ color: '#666' }}>Standard · 3–5 business days</p>
         </div>
       </div>
@@ -257,7 +257,8 @@ function Harness(args: PlaygroundArgs) {
   const readable = user != null || args.allowPublicReads;
   useEffect(() => { store.setReadable(readable); }, [readable, store]);
 
-  // Seed a comment anchored to a real element (built via DOMAnchor so it resolves).
+  // Seed comments against real elements (built via DOMAnchor so they resolve).
+  // SignedIn also gets an own comment so delete UX is always testable.
   useEffect(() => {
     if (!pinEl || seededRef.current) return;
     if (!args.seeded) return;
@@ -266,8 +267,26 @@ function Harness(args: PlaygroundArgs) {
     const r = el.getBoundingClientRect();
     const pin = DOMAnchor.create(el, r.left + r.width * 0.4, r.top + r.height * 0.5);
     store.seed({ urlPath: '/', pin, authorId: 'alice', body: 'Can we tighten the spacing under this heading?' });
+
+    if (args.authState === 'signed-in') {
+      const ownEl = document.querySelector('[data-pin-seed-own]');
+      if (ownEl) {
+        const ownRect = ownEl.getBoundingClientRect();
+        const ownPin = DOMAnchor.create(
+          ownEl,
+          ownRect.left + ownRect.width * 0.6,
+          ownRect.top + ownRect.height * 0.5,
+        );
+        store.seed({
+          urlPath: '/',
+          pin: ownPin,
+          authorId: 'me',
+          body: 'Can we make the delivery estimate more prominent?',
+        });
+      }
+    }
     seededRef.current = true;
-  }, [args.seeded, pinEl, store]);
+  }, [args.authState, args.seeded, pinEl, store]);
 
   const auth = {
     get needsDisplayName() { return user != null && !hasName; },
@@ -281,11 +300,12 @@ function Harness(args: PlaygroundArgs) {
   const ctx: NoddContextValue = {
     projectId,
     user,
-    signIn: async (email: string) => {
-      // No email round-trip in the playground: "signing in" drops you at the
-      // first-time name prompt so the full onboarding flow is testable.
-      setUser({ id: 'me', email, displayName: null, avatarUrl: null });
-      setHasName(false);
+    signIn: async (email: string, displayName?: string) => {
+      // No email round-trip in the playground: the combined form immediately
+      // creates the signed-in viewer. Missing names still exercise the legacy fallback.
+      const name = displayName?.trim() || null;
+      setUser({ id: 'me', email, displayName: name, avatarUrl: null });
+      setHasName(name !== null);
       store.setCurrentUserId('me');
     },
     signOut: async () => {
@@ -368,7 +388,7 @@ export const LoggedOutPrivate: Story = {
   args: { authState: 'logged-out', allowPublicReads: false },
 };
 
-/** First-time viewer: signed in but must choose a display name before commenting. */
+/** Legacy account: signed in but still missing display-name metadata. */
 export const NeedsName: Story = {
   args: { authState: 'needs-name' },
 };

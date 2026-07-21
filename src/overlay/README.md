@@ -151,7 +151,7 @@ For each non-orphan thread on the current `url_path`, the renderer:
    px = left + offsetX * width
    py = top  + offsetY * height
    ```
-4. Renders `<PinMarker>` at `transform: translate(px - r, py - r)` where `r = pinSize / 2`. `transform` is used (not `top`/`left`) so animation/repositioning runs on the compositor thread.
+4. Renders `<PinMarker>` with the individual CSS `translate` property at `(px - r, py - r)`, where `r = pinSize / 2`. `translate` is used instead of `top`/`left` so repositioning stays on the compositor thread without sharing the hover-scale transition.
 5. The pin's number is its 1-based index in the chronologically-sorted thread list for the page (matches sidebar order).
 
 If the bounding rect is fully outside the viewport, the marker is rendered with reduced opacity at the nearest viewport edge so users can still navigate to it (clicking scrolls the anchor element into view).
@@ -173,6 +173,7 @@ Updates use `requestAnimationFrame` to coalesce hover-move events to 60 fps.
 The sidebar is a slide-out drawer rendered into the same portal:
 
 - Width: `min(360px, 90vw)`. Anchored to the right edge: `right:0; top:0; bottom:0`.
+- Overlays the host page and never changes `body` margin or any other host layout style.
 - Tabs: **Open** (default) and **Resolved**. Resolved threads are lazy-loaded from `CommentStore.fetchResolved(urlPath)`.
 - Each list item shows pin number, author avatar+name, first comment snippet, timestamp, reply count.
 - Click on item → scrolls anchored element into view, opens the thread popover, and emphasises the pin.
@@ -306,7 +307,7 @@ function scheduleRecalc() {
       const el = anchorCache.get(pin.id);   // resolved at mount or route change
       if (!el || !el.isConnected) continue; // will be re-resolved on route change
       const { x, y } = DOMAnchor.reposition(pin, el);
-      pinElement(pin.id).style.transform = `translate(${x}px, ${y}px)`;
+      pinElement(pin.id).style.translate = `${x}px ${y}px`;
     }
     HoverHighlight.refresh();                // also moves with anchor
   });
@@ -338,7 +339,7 @@ The CSS file ships as `dist/style.css` (per DESIGN_DOC §7) and consumers import
 |----------|-----------|
 | **Single React portal, not shadow DOM** | Shadow DOM would isolate styles perfectly but breaks `position:fixed` relative to viewport in some browsers, and prevents `elementFromPoint` from seeing host nodes from inside. A scoped CSS prefix achieves 95 % of the isolation with none of the complexity. |
 | **`visibility:hidden` for capture hit-test** | Preserves layout so there is no reflow cost; one frame is enough for the next paint to omit the overlay from hit-testing. `display:none` would trigger relayout on every capture click. |
-| **`transform: translate(...)` for pin positioning** | Compositor-thread updates run at 60 fps even with hundreds of pins, vs `top`/`left` which trigger layout. Crucial for the ResizeObserver loop. |
+| **Individual CSS `translate` for pin positioning** | Compositor-thread updates run at 60 fps even with hundreds of pins, while `transform` remains free for hover scale and its transition cannot delay coordinate updates. |
 | **Single `ResizeObserver` on `body`** | One observer is dramatically cheaper than per-element observers, and we don't need to know *which* element resized — we just re-position all visible pins. |
 | **Selector resolution only on route change** | DOM queries dominate cost; layout changes happen far more often than routes. Caching resolved elements between route changes keeps the rAF loop trivial. |
 | **3-tier anchoring** | Selector is fast and usually correct; fingerprint catches markup churn; orphan tier prevents silently dropping user data. |

@@ -8,7 +8,7 @@ Parent: [Architecture Design](../../DESIGN_DOC.md) · Sibling modules: [`src/pro
 
 Nodd uses **passwordless magic-link auth via Supabase** (architecture doc §4). `AuthClient` exists so the rest of the library never imports `supabase.auth` directly. It encapsulates four concerns:
 
-1. Triggering a magic-link email for a given address (`signIn`).
+1. Triggering a magic-link email for a given address and optional display name (`signIn`).
 2. Tearing down the active session (`signOut`).
 3. Rehydrating a session from `localStorage` on app boot (`restoreSession`).
 4. Notifying the runtime when the auth state changes (`onAuthChange`).
@@ -30,7 +30,7 @@ export type CurrentUser = {
 export class AuthClient {
   constructor(supabase: SupabaseClient);
 
-  signIn(email: string): Promise<void>;
+  signIn(email: string, displayName?: string): Promise<void>;
   signOut(): Promise<void>;
   restoreSession(): Promise<CurrentUser | null>;
   onAuthChange(callback: (user: CurrentUser | null) => void): () => void;
@@ -44,7 +44,7 @@ export class AuthClient {
 
 | Method | Description |
 |--------|-------------|
-| `signIn(email)` | Calls `supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.href } })`. Resolves once Supabase has accepted the request and dispatched the email; **does not** wait for the user to click the link. Rejects with the Supabase error on rate-limit, malformed email, or network failure. The provider/UI is responsible for showing a "check your inbox" state until `onAuthChange` later emits a non-null user. |
+| `signIn(email, displayName?)` | Calls `supabase.auth.signInWithOtp`, passing a non-empty display name as `options.data.display_name`. Resolves once Supabase has accepted the request and dispatched the email; **does not** wait for the user to click the link. Rejects with the Supabase error on rate-limit, malformed email, or network failure. The provider/UI is responsible for showing a "check your inbox" state until `onAuthChange` later emits a non-null user. |
 | `signOut()` | Calls `supabase.auth.signOut()`. Clears the Supabase-managed session in `localStorage`, then emits `null` through `onAuthChange`. Idempotent — safe to call when already signed out. |
 | `restoreSession()` | Reads any persisted session from the Supabase client (which itself reads `localStorage` via its built-in storage adapter), validates it server-side via `supabase.auth.getSession()` (refreshing the access token if needed), and returns the resolved `CurrentUser` or `null`. Emits the same value through `onAuthChange`. Safe to call multiple times; the second call is a no-op if the session has not changed. |
 | `onAuthChange(cb)` | Subscribes to `supabase.auth.onAuthStateChange` under the hood. Fires on `SIGNED_IN`, `SIGNED_OUT`, `TOKEN_REFRESHED`, and `USER_UPDATED`. Returns an unsubscribe function. Emits the *current* value synchronously on subscribe so consumers don't need a separate `getInitialUser()` call. |
@@ -56,20 +56,22 @@ export class AuthClient {
 
 ## 3. Supabase `signInWithOtp` Configuration
 
-Magic-link is configured with one option: the redirect target.
+Magic-link is configured with the redirect target and, for the combined onboarding form, display-name metadata.
 
 ```ts
 await supabase.auth.signInWithOtp({
   email,
   options: {
-    emailRedirectTo: window.location.href,
+    emailRedirectTo: window.location.origin + window.location.pathname + window.location.search,
+    data: { display_name: displayName },
   },
 });
 ```
 
 | Option | Value | Reason |
 |--------|-------|--------|
-| `emailRedirectTo` | `window.location.href` (read at call time) | The user must land back on the *exact* page they were viewing when they triggered sign-in — Nodd is a pin-on-a-prototype tool, and bouncing the user to `/` would break the flow. Reading at call time (not at module construction) means programmatic navigations after import are reflected. |
+| `emailRedirectTo` | Current origin + path + query (read at call time) | The user must land back on the *exact* page they were viewing when they triggered sign-in — Nodd is a pin-on-a-prototype tool, and bouncing the user to `/` would break the flow. Reading at call time (not at module construction) means programmatic navigations after import are reflected. |
+| `data.display_name` | Trimmed non-empty name; omitted when absent | New users get their display name in `raw_user_meta_data` during account creation, so name and email are collected in one step. Existing accounts without metadata still use the legacy `setDisplayName` fallback. |
 | `shouldCreateUser` | (default `true`) | Magic-link is the only sign-up path in v1; first-time users are auto-provisioned in `auth.users`. The `project_members` row is created out-of-band by an invite flow (architecture §11, future work). |
 | OTP token | not used | Nodd does not present a "type the 6-digit code" UI; the email link is the sole credential. |
 
@@ -103,9 +105,9 @@ sequenceDiagram
   participant LS as localStorage
   participant Mail as Email
 
-  User->>App: opens overlay, enters email
-  App->>Auth: signIn("alice@example.com")
-  Auth->>SB: signInWithOtp({ email, emailRedirectTo: location.href })
+  User->>App: opens overlay, enters name + email
+  App->>Auth: signIn("alice@example.com", "Alice")
+  Auth->>SB: signInWithOtp({ email, data: { display_name: "Alice" } })
   SB-->>Mail: dispatches magic-link email
   SB-->>Auth: ack (Promise resolves)
   Auth-->>App: resolved → render "check your inbox"
@@ -130,7 +132,7 @@ Key properties:
 
 - The round-trip survives a **full page reload** because the session is persisted before the user even returns. The Supabase client picks up the URL fragment on next mount and emits `SIGNED_IN`, which `AuthClient` forwards.
 - `signIn` resolving does **not** mean the user is signed in — it means the email request was accepted. UI state ("check your inbox") and authenticated state ("user is here") are decoupled.
-- The redirect lands on `window.location.href` captured at `signIn` time, so a user who triggers sign-in on `/checkout/step-2` returns to that exact page with their context intact.
+- The redirect target is captured from the current origin, path, and query at `signIn` time, so a user who triggers sign-in on `/checkout/step-2` returns to that exact page with their context intact.
 - Profile hydration is a separate, fast query against the `profiles` view; the user is considered authenticated as soon as Supabase emits `SIGNED_IN`, and `displayName` / `avatarUrl` fill in shortly after.
 
 ## 6. Unauthenticated State Exposure
@@ -170,7 +172,8 @@ src/auth/
 | Decision | Rationale |
 |----------|-----------|
 | Wrap Supabase Auth in a class, not export the client directly | Keeps the dependency direction clean (architecture §2) — only `AuthClient` knows about `supabase.auth`. The rest of Nodd can be unit-tested with a fake `AuthClient`. |
-| `emailRedirectTo: window.location.href` | Magic-link must return the user to the exact prototype URL where they triggered sign-in; otherwise the pin context is lost. Read at call time so SPA navigations are honoured. |
+| Redirect to the current origin + path + query | Magic-link must return the user to the exact prototype URL where they triggered sign-in; otherwise the pin context is lost. The auth hash is intentionally excluded, and the location is read at call time so SPA navigations are honoured. |
+| Put `display_name` in OTP signup metadata | Collects name and email in one form for new users while preserving `signIn(email)` compatibility and the name prompt fallback for legacy accounts. |
 | Delegate persistence to the Supabase client's localStorage adapter | Avoids dual writes and the consistency bugs they cause. The provider scopes Supabase's key by backend host so sessions cannot leak across consumer backend changes. |
 | Single `CurrentUser` shape, `null` for signed-out | Trivial to consume and trivial to test. No `Result`/`Either` ergonomics needed — magic-link errors all surface through promise rejections on `signIn`. |
 | `onAuthChange` emits synchronously on subscribe | Spares every consumer from writing the same "what's the initial value?" boilerplate; matches React's `useSyncExternalStore` mental model. |

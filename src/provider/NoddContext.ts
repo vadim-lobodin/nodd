@@ -10,7 +10,7 @@ export type NoddWriteStatus = 'ready' | 'joining' | 'error';
 export type NoddContextValue = {
   projectId: string;
   user: CurrentUser | null;
-  signIn: (email: string) => Promise<void>;
+  signIn: (email: string, displayName?: string) => Promise<void>;
   signOut: () => Promise<void>;
   isVisible: boolean;
   toggleOverlay: () => void;
@@ -41,7 +41,7 @@ export const NoddContext = createContext<NoddContextValue | null>(null);
 
 export function useNodd(): {
   user: CurrentUser | null;
-  signIn: (email: string) => Promise<void>;
+  signIn: (email: string, displayName?: string) => Promise<void>;
   signOut: () => Promise<void>;
   toggleOverlay: () => void;
   hideForSession: () => void;

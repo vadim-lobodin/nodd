@@ -25,13 +25,15 @@ export class AuthClient {
     return this._currentUser;
   }
 
-  async signIn(email: string): Promise<void> {
+  async signIn(email: string, displayName?: string): Promise<void> {
+    const name = displayName?.trim();
     const { error } = await this.supabase.auth.signInWithOtp({
       email,
       options: {
         emailRedirectTo: typeof window !== 'undefined'
           ? window.location.origin + window.location.pathname + window.location.search
           : undefined,
+        ...(name ? { data: { display_name: name } } : {}),
       },
     });
     if (error) throw error;

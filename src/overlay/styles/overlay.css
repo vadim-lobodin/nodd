@@ -306,8 +306,8 @@
   pointer-events: auto;
   position: fixed;
   bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
+  right: 24px;
+  transform: translateX(0);
   display: flex;
   gap: 6px;
   align-items: center;
@@ -322,10 +322,9 @@
   transition: transform 220ms cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* When a right-side panel is open, keep the pill centered in the space that
-   remains to its left instead of drifting under the panel. */
+/* Keep the right-anchored pill visible just to the left of an open panel. */
 [data-nodd-root] .nodd-toolbar--shifted {
-  transform: translateX(calc(-50% - (min(332px, 90vw) / 2)));
+  transform: translateX(calc(0px - min(300px, calc(100vw - 32px)) - 16px));
 }
 
 /* ==========================================================================
@@ -504,25 +503,33 @@
   border-color: transparent;
 }
 
-/* --close (icon ✕) */
-[data-nodd-root] .nodd-btn--close {
-  background: transparent;
-  border: none;
-  font-size: 14px;
-  cursor: pointer;
-  color: hsl(var(--nodd-muted-foreground));
-  padding: 6px;
+/* Compact icon actions: close, resolve, delete */
+[data-nodd-root] .nodd-btn--close,
+[data-nodd-root] .nodd-btn--resolve,
+[data-nodd-root] .nodd-btn--delete {
   width: 28px;
   height: 28px;
-  border-radius: 50%;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: hsl(var(--nodd-muted-foreground));
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
-[data-nodd-root] .nodd-btn--close:hover {
+[data-nodd-root] .nodd-btn--close:hover,
+[data-nodd-root] .nodd-btn--resolve:hover,
+[data-nodd-root] .nodd-btn--delete:hover {
   background: hsl(var(--nodd-foreground) / 0.08);
   color: hsl(var(--nodd-foreground));
+  border-color: transparent;
   transform: none;
+}
+
+/* Delete keeps destructive semantics without changing the shared hover shape. */
+[data-nodd-root] .nodd-btn--delete:hover {
+  color: hsl(var(--nodd-destructive));
 }
 
 /* --send */
@@ -548,45 +555,6 @@
 [data-nodd-root] .nodd-btn--send:disabled {
   opacity: 0.45;
   cursor: not-allowed;
-}
-
-/* --resolve */
-[data-nodd-root] .nodd-btn--resolve {
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border-radius: 999px;
-  background: transparent;
-  border-color: transparent;
-  color: hsl(var(--nodd-muted-foreground));
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-[data-nodd-root] .nodd-btn--resolve:hover {
-  background: hsl(var(--nodd-foreground) / 0.06);
-  color: hsl(var(--nodd-foreground));
-  border-color: hsl(var(--nodd-foreground) / 0.14);
-}
-
-/* --delete (icon button) */
-[data-nodd-root] .nodd-btn--delete {
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border-radius: 999px;
-  background: transparent;
-  border-color: transparent;
-  color: hsl(var(--nodd-muted-foreground));
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-[data-nodd-root] .nodd-btn--delete:hover {
-  background: hsl(var(--nodd-destructive) / 0.12);
-  color: hsl(var(--nodd-destructive));
-  border-color: transparent;
-  transform: none;
 }
 
 /* --danger (filled destructive action) */
@@ -647,8 +615,7 @@
   pointer-events: auto;
   position: fixed;
   inset: 0;
-  /* Figma-style comment-bubble cursor; hotspot at the tail tip (4, 28). */
-  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M9 3 H27 q4 0 4 4 V17 q0 4 -4 4 H13 L4 28 L9 21 Q5 21 5 17 V7 Q5 3 9 3 Z' fill='%2318181b' stroke='%23ffffff' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E") 4 28, crosshair;
+  cursor: crosshair;
   background: hsl(var(--nodd-foreground) / 0.04);
 }
 

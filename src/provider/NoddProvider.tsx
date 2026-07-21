@@ -410,7 +410,7 @@ export function NoddProvider({
   }, [projectId]);
 
   const signIn = useCallback(
-    (email: string) => auth.signIn(email),
+    (email: string, displayName?: string) => auth.signIn(email, displayName),
     [auth],
   );
 

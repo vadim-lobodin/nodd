@@ -9,14 +9,15 @@ import type { Meta, StoryObj } from '@storybook/react';
  */
 
 function SignInGate({ initialSent = false }: { initialSent?: boolean }) {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(initialSent);
   const [error, setError] = useState<string | null>(null);
 
   const handleSignIn = () => {
-    if (!email.trim()) {
-      setError('Enter your email address.');
+    if (!name.trim() || !email.trim()) {
+      setError('Enter your name and email address.');
       return;
     }
     setError(null);
@@ -37,26 +38,41 @@ function SignInGate({ initialSent = false }: { initialSent?: boolean }) {
             <button className="nodd-btn" onClick={() => setSent(false)}>Try again</button>
           </div>
         ) : (
-          <div className="nodd-auth-form">
+          <form
+            className="nodd-auth-form"
+            onSubmit={e => { e.preventDefault(); handleSignIn(); }}
+          >
             <h2 className="nodd-auth-title">Log in to leave comments</h2>
             <input
               className="nodd-auth-input"
+              type="text"
+              name="name"
+              autoComplete="name"
+              placeholder="Your name"
+              value={name}
+              onChange={e => { setName(e.target.value); setError(null); }}
+              autoFocus
+              required
+            />
+            <input
+              className="nodd-auth-input"
               type="email"
+              name="email"
+              autoComplete="email"
               placeholder="you@example.com"
               value={email}
               onChange={e => { setEmail(e.target.value); setError(null); }}
-              onKeyDown={e => e.key === 'Enter' && handleSignIn()}
-              autoFocus
+              required
             />
             <button
               className="nodd-btn nodd-btn--primary"
-              onClick={handleSignIn}
+              type="submit"
               disabled={sending}
             >
               {sending ? 'Sending…' : 'Send magic link'}
             </button>
             {error && <p className="nodd-auth-error" role="alert">{error}</p>}
-          </div>
+          </form>
         )}
       </div>
     </div>
@@ -92,7 +108,7 @@ const meta: Meta<typeof SignInGate> = {
 export default meta;
 type Story = StoryObj<typeof SignInGate>;
 
-/** Email entry → "Send magic link". */
+/** Name + email entry → "Send magic link". */
 export const SignIn: Story = {};
 
 /** Confirmation state after the magic link has been sent. */
@@ -100,8 +116,8 @@ export const MagicLinkSent: Story = {
   args: { initialSent: true },
 };
 
-/** First-time viewer choosing a display name after signing in. */
+/** Legacy fallback for an existing account without a display name. */
 export const NamePrompt_: Story = {
-  name: 'Name Prompt',
+  name: 'Name Prompt (legacy fallback)',
   render: () => <NamePrompt />,
 };

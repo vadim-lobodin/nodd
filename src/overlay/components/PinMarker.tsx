@@ -105,7 +105,7 @@ export function PinMarker({
         ref={buttonRef}
         className={`nodd-pin nodd-pin--${pinState}${hovered ? ' nodd-pin--hovered' : ''}`}
         data-nodd-pin-id={threadId}
-        style={{ transform: `translate(${x}px, ${y}px)` }}
+        style={{ translate: `${x}px ${y}px` }}
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}

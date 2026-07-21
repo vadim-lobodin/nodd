@@ -35,7 +35,7 @@ Parent: [Architecture Design](../../DESIGN_DOC.md) · Sibling modules: [`src/aut
 ```ts
 const {
   user,            // CurrentUser | null         — null when signed out
-  signIn,          // (email: string) => Promise<void>
+  signIn,          // (email: string, displayName?: string) => Promise<void>
   signOut,         // () => Promise<void>
   toggleOverlay,   // () => void                 — flips isVisible
   isVisible,       // boolean                    — overlay on/off
@@ -90,7 +90,7 @@ type NoddContextValue = {
 
   // identity
   user: CurrentUser | null;
-  signIn: (email: string) => Promise<void>;
+  signIn: (email: string, displayName?: string) => Promise<void>;
   signOut: () => Promise<void>;
 
   // visibility

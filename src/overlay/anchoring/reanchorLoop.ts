@@ -53,6 +53,12 @@ export function startReanchorLoop(opts: ReanchorOpts): () => void {
   const ro = new ResizeObserver(() => scheduleRecalc());
   ro.observe(document.body);
 
+  // ResizeObserver is delivered after layout and can miss the current paint's
+  // rAF deadline. The viewport event schedules the same coalesced pass sooner;
+  // `pending` ensures both signals still produce at most one calculation per
+  // frame.
+  window.addEventListener('resize', scheduleRecalc, { passive: true });
+
   // MutationObserver: re-run selector resolution when host DOM changes
   // (modal opens, route changes, content re-renders). Ignores mutations
   // inside our own portals to avoid feedback loops.
@@ -79,5 +85,6 @@ export function startReanchorLoop(opts: ReanchorOpts): () => void {
   return () => {
     ro.disconnect();
     mo.disconnect();
+    window.removeEventListener('resize', scheduleRecalc);
   };
 }

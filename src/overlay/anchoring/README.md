@@ -239,7 +239,7 @@ graph LR
   Cache -->|reposition()| Frame[rAF tick]
   RO[ResizeObserver fires] --> RAFSchedule[scheduleRecalc]
   RAFSchedule -->|coalesced| Frame
-  Frame --> Style[pin.style.transform = translate]
+  Frame --> Style[pin.style.translate = coordinates]
   RouteChange2[Next route change] -->|invalidate + resolve| Cache
 ```
 
@@ -259,7 +259,7 @@ function scheduleRecalc() {
       const el = anchorCache.get(pin.id);
       if (!el || !el.isConnected) continue;
       const { x, y } = DOMAnchor.reposition(pin, el);
-      pinElement(pin.id).style.transform = `translate(${x}px, ${y}px)`;
+      pinElement(pin.id).style.translate = `${x}px ${y}px`;
     }
     HoverHighlight.refresh();
   });
@@ -271,6 +271,12 @@ Three properties matter:
 1. **Single observer** on `document.body`. We don't observe individual anchored elements because (a) we'd need to add/remove observation on every cache update, and (b) `body`-level observation already catches all layout-triggering changes including font-load shifts, image loads, accordion opens.
 2. **rAF coalescing.** A burst of `ResizeObserver` callbacks within a single frame collapse into one position pass. This is essential — without coalescing, an animation could fire 20 callbacks per frame.
 3. **`isConnected` guard.** If a cached element was detached (e.g. virtualized list scrolled it offscreen, host removed a section), we skip it rather than crash. The pin is hidden until the next route change re-runs `resolve()`.
+
+Viewport `resize` events feed the same scheduler so the position pass can make
+the current frame's rAF deadline instead of waiting for the later
+`ResizeObserver` delivery. Coordinates use the individual CSS `translate`
+property, while `transform` remains reserved for hover scale; the 180 ms hover
+transition therefore never interpolates layout movement.
 
 ### 7.2 Route-change invalidation
 
