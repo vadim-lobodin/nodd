@@ -48,10 +48,6 @@ export type SidebarProps = {
   onItemDelete?: (threadId: string) => Promise<void> | void;
   container?: HTMLElement | null;
   userName?: string;
-  /** Provided when signed in — surfaces the "Exit" item in the settings menu. */
-  onSignOut?: () => void;
-  /** Dismiss the overlay for this tab session (settings menu). */
-  onHideForSession: () => void;
   /**
    * Label of the active prototype scope. When set, the sidebar shows a
    * "This screen | This prototype" toggle backed by fetchPrototypeThreads.
@@ -76,8 +72,6 @@ export function Sidebar({
   onItemDelete,
   container,
   userName,
-  onSignOut,
-  onHideForSession,
   prototypeLabel,
   fetchPrototypeThreads,
 }: SidebarProps) {
@@ -133,8 +127,6 @@ export function Sidebar({
             <Dialog.Title className="nodd-sidebar-title">Comments</Dialog.Title>
             <div className="nodd-sidebar-header-actions">
               <PanelSettingsMenu
-                onHideForSession={onHideForSession}
-                onSignOut={onSignOut}
                 showResolved={showResolved}
                 onToggleShowResolved={onToggleShowResolved}
                 container={container}

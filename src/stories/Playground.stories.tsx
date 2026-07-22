@@ -320,7 +320,7 @@ function Harness(args: PlaygroundArgs) {
     isVisible,
     toggleOverlay: () => setIsVisible(v => !v),
     setVisible: setIsVisible,
-    hideForSession: () => setIsVisible(false),
+    hideForDuration: () => setIsVisible(false),
     theme: args.theme,
     setTheme: () => {},
     urlPath: '/',

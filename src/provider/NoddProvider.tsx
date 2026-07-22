@@ -14,6 +14,7 @@ import { createPrototypeRegistry, type PrototypeRegistry, type PrototypeScope } 
 import { OverlayRenderer } from '../overlay';
 import { subscribeToRouteChanges } from './useRouteChange';
 import { isBrowser } from './ssr';
+import { matchesKey } from './keys';
 
 // Strip stale Supabase auth error fragments from the URL hash before the client
 // parses them. Keeps the last valid access_token block if present.
@@ -131,28 +132,30 @@ export type NoddProviderProps = {
   children: ReactNode;
 };
 
-// Session-scoped "hide" flag. Distinct from the transient `toggleOverlay`
-// state: it survives reloads within the same tab (sessionStorage) so a viewer
-// who dismisses the overlay isn't nagged on every navigation, but a fresh tab
-// starts visible again.
-function hiddenStorageKey(projectId: string): string {
-  return `nodd:hidden:${projectId}`;
+// Wall-clock "hide until" flag: a timestamp in localStorage so a "Hide for 1
+// hour" survives reloads and navigation within the hour, then auto-expires.
+// `0`/absent means not set. This is the overlay's only persisted dismissal —
+// distinct from the transient `toggleOverlay` state, which isn't persisted.
+function hiddenUntilKey(projectId: string): string {
+  return `nodd:hidden-until:${projectId}`;
 }
-function readSessionHidden(projectId: string): boolean {
-  if (!isBrowser()) return false;
+function readHiddenUntil(projectId: string): number {
+  if (!isBrowser()) return 0;
   try {
-    return window.sessionStorage.getItem(hiddenStorageKey(projectId)) === '1';
+    const raw = window.localStorage.getItem(hiddenUntilKey(projectId));
+    const ts = raw ? Number(raw) : 0;
+    return Number.isFinite(ts) ? ts : 0;
   } catch {
-    return false;
+    return 0;
   }
 }
-function writeSessionHidden(projectId: string, hidden: boolean): void {
+function writeHiddenUntil(projectId: string, ts: number): void {
   if (!isBrowser()) return;
   try {
-    if (hidden) window.sessionStorage.setItem(hiddenStorageKey(projectId), '1');
-    else window.sessionStorage.removeItem(hiddenStorageKey(projectId));
+    if (ts > 0) window.localStorage.setItem(hiddenUntilKey(projectId), String(ts));
+    else window.localStorage.removeItem(hiddenUntilKey(projectId));
   } catch {
-    // private-mode / quota — hide stays in-memory for this render only
+    // private-mode / quota — timed hide stays in-memory for this render only
   }
 }
 
@@ -170,8 +173,8 @@ export function NoddProvider({
   children,
 }: NoddProviderProps) {
   const [user, setUser] = useState<CurrentUser | null>(null);
-  // Start hidden if this tab's session was dismissed via "Hide for this session".
-  const [isVisible, setIsVisible] = useState(() => !readSessionHidden(projectId));
+  // Start hidden if a timed hide ("Hide for 1 hour") is still in effect.
+  const [isVisible, setIsVisible] = useState(() => !(readHiddenUntil(projectId) > Date.now()));
   const [urlPath, setUrlPath] = useState('/');
   const [portalEl, setPortalEl] = useState<HTMLElement | null>(null);
   const [theme, setTheme] = useState<NoddTheme>(initialTheme);
@@ -397,27 +400,54 @@ export function NoddProvider({
     if (pinContainerEl) pinContainerEl.setAttribute('data-nodd-theme', resolvedTheme);
   }, [portalEl, pinContainerEl, resolvedTheme]);
 
-  // Showing the overlay (toggle-on or explicit) also clears any session-hide,
-  // so the host's own launcher brings it back after "Hide for this session".
+  // Showing the overlay (toggle-on or explicit) also clears any timed hide,
+  // so the host's own launcher brings it back after "Hide for 1 hour".
   const setVisible = useCallback((v: boolean) => {
-    writeSessionHidden(projectId, false);
+    writeHiddenUntil(projectId, 0);
     setIsVisible(v);
   }, [projectId]);
 
   const toggleOverlay = useCallback(() => {
     setIsVisible(v => {
       const next = !v;
-      writeSessionHidden(projectId, false);
+      writeHiddenUntil(projectId, 0);
       return next;
     });
   }, [projectId]);
 
-  // Dismiss for the rest of this tab's session — persisted so reloads/navigation
-  // don't re-show it, until the host re-shows or the tab closes.
-  const hideForSession = useCallback(() => {
-    writeSessionHidden(projectId, true);
+  // Dismiss for a wall-clock duration ("Hide for 1 hour"). Persisted as an
+  // expiry timestamp so it survives reloads within the window, then the effect
+  // below (or a fresh mount) auto-reveals. C/V also reveal early — see effect.
+  const hideForDuration = useCallback((ms: number) => {
+    writeHiddenUntil(projectId, Date.now() + ms);
     setIsVisible(false);
   }, [projectId]);
+
+  // While the overlay is hidden it (and its keyboard handler) is unmounted, so
+  // reveal lives here: a timed hide auto-expires, and pressing C or V brings it
+  // back (surfaced as the "Press C or V to show" hint in the toolbar menu).
+  useEffect(() => {
+    if (isVisible || !isBrowser()) return;
+    const until = readHiddenUntil(projectId);
+    const timer = until > Date.now()
+      ? window.setTimeout(() => setVisible(true), until - Date.now())
+      : undefined;
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+      const el = ev.target;
+      if (el instanceof HTMLElement &&
+          (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' ||
+           el.tagName === 'SELECT' || el.isContentEditable)) return;
+      // matchesKey also checks the physical key, so C/V reveal works on
+      // non-Latin layouts (e.g. Russian, where they emit "с"/"м").
+      if (matchesKey(ev, 'c') || matchesKey(ev, 'v')) setVisible(true);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [isVisible, projectId, setVisible]);
 
   const signIn = useCallback(
     (email: string, displayName?: string) => auth.signIn(email, displayName),
@@ -448,7 +478,7 @@ export function NoddProvider({
       isVisible,
       toggleOverlay,
       setVisible,
-      hideForSession,
+      hideForDuration,
       theme,
       setTheme,
       urlPath,
@@ -462,7 +492,7 @@ export function NoddProvider({
       navigate,
       pinContainer: pinContainerEl,
     };
-  }, [projectId, user, signIn, signOut, isVisible, toggleOverlay, setVisible, hideForSession, theme, urlPath, auth, writeStatus, retryOnboarding, store, variants, prototypes, activePrototype, navigate, storeReady, pinContainerEl]);
+  }, [projectId, user, signIn, signOut, isVisible, toggleOverlay, setVisible, hideForDuration, theme, urlPath, auth, writeStatus, retryOnboarding, store, variants, prototypes, activePrototype, navigate, storeReady, pinContainerEl]);
 
   if (!ctxValue) {
     return <>{children}</>;

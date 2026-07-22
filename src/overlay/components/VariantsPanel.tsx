@@ -2,7 +2,6 @@ import React, { useEffect, useReducer } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as ScrollArea from '@radix-ui/react-scroll-area';
 import { Close } from '@carbon/icons-react';
-import { PanelSettingsMenu } from './PanelSettingsMenu';
 import type { VariantDefinition, VariantRegistry } from '../../provider/variants';
 
 export type VariantsPanelProps = {
@@ -10,10 +9,6 @@ export type VariantsPanelProps = {
   onClose: () => void;
   registry: VariantRegistry;
   container?: HTMLElement | null;
-  /** Provided when signed in — surfaces the "Exit" item in the settings menu. */
-  onSignOut?: () => void;
-  /** Dismiss the overlay for this tab session (settings menu). */
-  onHideForSession: () => void;
 };
 
 /** Re-render whenever the registry's definitions or selections change. */
@@ -22,7 +17,7 @@ function useRegistrySubscription(registry: VariantRegistry): void {
   useEffect(() => registry.subscribe(force), [registry]);
 }
 
-export function VariantsPanel({ open, onClose, registry, container, onSignOut, onHideForSession }: VariantsPanelProps) {
+export function VariantsPanel({ open, onClose, registry, container }: VariantsPanelProps) {
   useRegistrySubscription(registry);
 
   const defs = registry.getDefinitions();
@@ -52,11 +47,6 @@ export function VariantsPanel({ open, onClose, registry, container, onSignOut, o
           <div className="nodd-sidebar-header">
             <Dialog.Title className="nodd-sidebar-title">Variants</Dialog.Title>
             <div className="nodd-sidebar-header-actions">
-              <PanelSettingsMenu
-                onHideForSession={onHideForSession}
-                onSignOut={onSignOut}
-                container={container}
-              />
               <Dialog.Close asChild>
                 <button className="nodd-btn nodd-btn--close" aria-label="Close variants">
                   <Close size={16} />

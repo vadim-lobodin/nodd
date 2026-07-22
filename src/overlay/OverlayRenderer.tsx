@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { Chat, Layers } from '@carbon/icons-react';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { Chat, Layers, ChevronDown, ViewOff, Logout } from '@carbon/icons-react';
 import { useNoddContext } from '../provider/NoddContext';
 import { PinMarker } from './components/PinMarker';
 import { CaptureLayer } from './components/CaptureLayer';
@@ -11,6 +12,7 @@ import { VariantsPanel } from './components/VariantsPanel';
 import { DOMAnchor, type Pin } from './anchoring/DOMAnchor';
 import { startReanchorLoop } from './anchoring/reanchorLoop';
 import { getStateStackForElement, isStateMatch, stackToKey, keyToStack, activateState, describeAutoSegment } from '../provider/state';
+import { matchesKey } from '../provider/keys';
 import type { Thread, PageSnapshot } from '../store/types';
 
 function resolveSystemTheme(): 'light' | 'dark' {
@@ -20,7 +22,7 @@ function resolveSystemTheme(): 'light' | 'dark' {
 
 export function OverlayRenderer() {
   const ctx = useNoddContext();
-  const { user, urlPath, store, variants, signIn, signOut, hideForSession, theme, pinContainer, activePrototype, navigate } = ctx;
+  const { user, urlPath, store, variants, signIn, signOut, hideForDuration, theme, pinContainer, activePrototype, navigate } = ctx;
   // A viewer who can create/edit comments: signed in with a display name set.
   // Everyone else (logged out, or mid-onboarding) gets read-only comments.
   const canComment = !!user && !ctx.auth.needsDisplayName && ctx.writeStatus === 'ready';
@@ -194,14 +196,15 @@ export function OverlayRenderer() {
     };
     const handler = (ev: KeyboardEvent) => {
       if (ev.metaKey || ev.ctrlKey || ev.altKey || isEditable(ev.target)) return;
-      const key = ev.key.toLowerCase();
-      if (key === 'escape') {
+      // matchesKey checks the physical key too, so shortcuts work on non-Latin
+      // layouts (e.g. Russian, where C/V emit "с"/"м").
+      if (ev.key === 'Escape') {
         if (isCapturing) { ev.preventDefault(); setIsCapturing(false); }
         return;
       }
       // "C" works even when signed out — it surfaces the centered sign-in
       // prompt (the overlay is otherwise hidden by default for guests).
-      if (key === 'c') {
+      if (matchesKey(ev, 'c')) {
         ev.preventDefault();
         setIsCapturing(v => {
           const next = !v;
@@ -213,7 +216,7 @@ export function OverlayRenderer() {
       }
       // Variants are a client-side, per-viewer feature — independent of auth
       // and comment mode — so "V" works for signed-out viewers too.
-      if (key === 'v' && !isCapturing) {
+      if (matchesKey(ev, 'v') && !isCapturing) {
         ev.preventDefault();
         setVariantsOpen(v => {
           if (!v) setSidebarOpen(false); // panels are mutually exclusive
@@ -225,7 +228,7 @@ export function OverlayRenderer() {
       // read by clicking the visible pins (read-only popover); the universal
       // entry to *commenting* is "C", which surfaces the sign-in prompt.
       if (!user) return;
-      if (key === 'm' && !isCapturing) {
+      if (matchesKey(ev, 'm') && !isCapturing) {
         ev.preventDefault();
         setSidebarOpen(v => {
           if (!v) setVariantsOpen(false); // panels are mutually exclusive
@@ -550,8 +553,6 @@ export function OverlayRenderer() {
       onClose={() => setVariantsOpen(false)}
       registry={variants}
       container={portalRootRef.current}
-      onHideForSession={hideForSession}
-      onSignOut={user ? () => void signOut() : undefined}
     />
   );
 
@@ -665,6 +666,49 @@ export function OverlayRenderer() {
         >
           <Chat size={20} />
         </button>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button
+              className="nodd-btn nodd-btn--sidebar nodd-btn--chevron"
+              aria-label="More"
+              title="More"
+            >
+              <ChevronDown size={20} />
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal container={portalRootRef.current}>
+            <DropdownMenu.Content
+              className="nodd-menu"
+              align="end"
+              side="top"
+              sideOffset={6}
+              onCloseAutoFocus={e => e.preventDefault()}
+            >
+              <DropdownMenu.Item
+                className="nodd-menu-item nodd-menu-item--stacked"
+                onSelect={() => hideForDuration(60 * 60 * 1000)}
+              >
+                <ViewOff size={16} />
+                <span className="nodd-menu-item-text">
+                  Hide for 1 hour
+                  <span className="nodd-menu-item-hint">Press C or V to show</span>
+                </span>
+              </DropdownMenu.Item>
+              {user && (
+                <>
+                  <DropdownMenu.Separator className="nodd-menu-separator" />
+                  <DropdownMenu.Item
+                    className="nodd-menu-item nodd-menu-item--danger"
+                    onSelect={() => void signOut()}
+                  >
+                    <Logout size={16} />
+                    <span>Log Out</span>
+                  </DropdownMenu.Item>
+                </>
+              )}
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
       </div>
 
       {/* Pins render into the separate absolute-positioned container so they scroll with the page */}
@@ -751,8 +795,6 @@ export function OverlayRenderer() {
         threadsOtherState={otherStateSummaries}
         onItemDelete={canComment ? handleDeleteThread : undefined}
         userName={user ? (user.displayName ?? user.email.split('@')[0]) : undefined}
-        onSignOut={user ? () => void signOut() : undefined}
-        onHideForSession={hideForSession}
         showResolved={showResolved}
         onToggleShowResolved={() => setShowResolved(v => !v)}
         prototypeLabel={activePrototype ? (activePrototype.label ?? activePrototype.id) : undefined}

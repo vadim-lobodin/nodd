@@ -119,7 +119,7 @@ import {
   Variant,
 } from '@vadim_lobodin/nodd';
 
-const { user, signIn, signOut, toggleOverlay, hideForSession, isVisible } = useNodd();
+const { user, signIn, signOut, toggleOverlay, hideForDuration, isVisible } = useNodd();
 ```
 
 ## How it works

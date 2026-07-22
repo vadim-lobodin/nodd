@@ -15,8 +15,8 @@ export type NoddContextValue = {
   isVisible: boolean;
   toggleOverlay: () => void;
   setVisible: (v: boolean) => void;
-  /** Dismiss the overlay for the rest of this browser tab's session. */
-  hideForSession: () => void;
+  /** Dismiss the overlay for a wall-clock duration in ms (e.g. 1 hour). */
+  hideForDuration: (ms: number) => void;
   theme: NoddTheme;
   setTheme: (theme: NoddTheme) => void;
   urlPath: string;
@@ -50,7 +50,7 @@ export function useNodd(): {
   signIn: (email: string, displayName?: string) => Promise<void>;
   signOut: () => Promise<void>;
   toggleOverlay: () => void;
-  hideForSession: () => void;
+  hideForDuration: (ms: number) => void;
   isVisible: boolean;
   theme: NoddTheme;
   setTheme: (theme: NoddTheme) => void;
@@ -62,7 +62,7 @@ export function useNodd(): {
       signIn: defaultSignIn,
       signOut: defaultSignOut,
       toggleOverlay: noop,
-      hideForSession: noop,
+      hideForDuration: noop,
       isVisible: false,
       theme: 'system',
       setTheme: noop,
@@ -73,7 +73,7 @@ export function useNodd(): {
     signIn: ctx.signIn,
     signOut: ctx.signOut,
     toggleOverlay: ctx.toggleOverlay,
-    hideForSession: ctx.hideForSession,
+    hideForDuration: ctx.hideForDuration,
     isVisible: ctx.isVisible,
     theme: ctx.theme,
     setTheme: ctx.setTheme,

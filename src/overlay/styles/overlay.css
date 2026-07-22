@@ -483,11 +483,18 @@
   transform: translateY(-1px);
 }
 [data-nodd-root] .nodd-btn--active {
-  background: hsl(var(--nodd-primary) / 0.85) !important;
-  color: hsl(var(--nodd-primary-foreground)) !important;
+  background: #000 !important;
+  color: #fff !important;
   border-color: transparent !important;
-  box-shadow: 0 4px 14px -2px hsl(var(--nodd-primary) / 0.45),
+  box-shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.35),
               inset 0 1px 0 0 rgba(255, 255, 255, 0.15) !important;
+}
+[data-nodd-theme="dark"][data-nodd-root] .nodd-btn--active,
+[data-nodd-root][data-nodd-theme="dark"] .nodd-btn--active {
+  background: #fff !important;
+  color: #000 !important;
+  box-shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.35),
+              inset 0 1px 0 0 rgba(255, 255, 255, 0.6) !important;
 }
 
 /* --sidebar trigger inside toolbar */
@@ -1412,6 +1419,24 @@
 [data-nodd-root] .nodd-menu-item[data-highlighted],
 [data-nodd-root] .nodd-menu-item:hover {
   background: hsl(var(--nodd-foreground) / 0.06);
+}
+
+/* Two-line item: title with a muted hint beneath (e.g. a keyboard shortcut). */
+[data-nodd-root] .nodd-menu-item--stacked {
+  align-items: flex-start;
+}
+[data-nodd-root] .nodd-menu-item--stacked > svg {
+  margin-top: 1px;
+}
+[data-nodd-root] .nodd-menu-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+[data-nodd-root] .nodd-menu-item-hint {
+  font-size: 11px;
+  font-weight: 400;
+  color: hsl(var(--nodd-muted-foreground));
 }
 
 [data-nodd-root] .nodd-menu-item--danger {
