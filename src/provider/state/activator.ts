@@ -2,6 +2,8 @@
 // their target `<NoddState>` is unmounted. Hosts call `useNoddActivator(name, fn)`
 // outside their conditional render so the activator is always available.
 
+import { isAutoSegment, findAutoStateElement, findAutoTrigger } from './autoState';
+
 export type Activator = () => void | Promise<void>;
 
 const activators = new Map<string, Activator>();
@@ -27,6 +29,7 @@ export function getActivator(name: string): Activator | undefined {
 }
 
 export function hasActivatorOrTrigger(name: string): boolean {
+  if (isAutoSegment(name)) return findAutoTrigger(name) !== null;
   if (activators.has(name)) return true;
   if (typeof document === 'undefined') return false;
   return document.querySelector(`[data-nodd-open-state="${cssEscape(name)}"]`) !== null;
@@ -55,9 +58,12 @@ function findTrigger(name: string): HTMLElement | null {
   return document.querySelector(`[data-nodd-open-state="${cssEscape(name)}"]`) as HTMLElement | null;
 }
 
-function waitForState(name: string, timeoutMs: number): Promise<Element | null> {
-  const existing = findStateElement(name);
+// Wait until `find()` returns an element, or the timeout elapses. Generic over
+// how the element is located so it serves both explicit and auto states.
+function waitFor(find: () => Element | null, timeoutMs: number): Promise<Element | null> {
+  const existing = find();
   if (existing) return Promise.resolve(existing);
+  if (typeof document === 'undefined') return Promise.resolve(null);
 
   return new Promise(resolve => {
     let done = false;
@@ -69,7 +75,7 @@ function waitForState(name: string, timeoutMs: number): Promise<Element | null> 
     }, timeoutMs);
 
     const mo = new MutationObserver(() => {
-      const el = findStateElement(name);
+      const el = find();
       if (el && !done) {
         done = true;
         clearTimeout(timer);
@@ -87,22 +93,32 @@ export async function activateState(
 ): Promise<boolean> {
   const timeoutMs = opts.timeoutMs ?? 2000;
   for (const segment of stack) {
-    if (findStateElement(segment)) continue; // already mounted
+    const auto = isAutoSegment(segment);
+    const find = () => (auto ? findAutoStateElement(segment) : findStateElement(segment));
+    if (find()) continue; // already mounted
 
-    const fn = activators.get(segment);
-    if (fn) {
-      try {
-        await fn();
-      } catch {
-        return false;
-      }
-    } else {
-      const trigger = findTrigger(segment);
+    if (auto) {
+      // No explicit activator for auto states — reopen via the advertised
+      // trigger. A missing/ambiguous trigger fails closed.
+      const trigger = findAutoTrigger(segment);
       if (!trigger) return false;
       trigger.click();
+    } else {
+      const fn = activators.get(segment);
+      if (fn) {
+        try {
+          await fn();
+        } catch {
+          return false;
+        }
+      } else {
+        const trigger = findTrigger(segment);
+        if (!trigger) return false;
+        trigger.click();
+      }
     }
 
-    const el = await waitForState(segment, timeoutMs);
+    const el = await waitFor(find, timeoutMs);
     if (!el) return false;
   }
   return true;

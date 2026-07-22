@@ -4,3 +4,4 @@ export { useNoddState, stackToKey, keyToStack, isStateMatch } from './useNoddSta
 export { useNoddActivator, useCanActivate } from './useNoddActivator';
 export { activateState, registerActivator, hasActivatorOrTrigger, subscribeActivators } from './activator';
 export type { Activator } from './activator';
+export { describeAutoSegment } from './autoState';
