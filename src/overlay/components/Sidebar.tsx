@@ -1,6 +1,5 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import * as Tabs from '@radix-ui/react-tabs';
 import * as ScrollArea from '@radix-ui/react-scroll-area';
 import * as Separator from '@radix-ui/react-separator';
 import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
@@ -23,10 +22,6 @@ export type ThreadSummary = {
   /** Screen the thread lives on. Set for prototype-inbox items to enable
    *  cross-screen navigation (2c); the current screen opens it in place. */
   urlPath?: string;
-  /** When set, an activator chain is available — sidebar shows a Show me button. */
-  canActivate?: boolean;
-  /** Stack used to activate; passed back to onItemActivate. */
-  stateStack?: readonly string[];
   /** True when the current user authored the thread and may delete it. */
   canDelete?: boolean;
 };
@@ -36,10 +31,20 @@ export type SidebarProps = {
   onClose: () => void;
   threadsOpen: ThreadSummary[];
   threadsOtherState?: ThreadSummary[];
-  fetchResolved: () => Promise<ThreadSummary[]>;
+  /**
+   * Resolved-visibility, driven by the settings menu. Resolved threads are
+   * merged into the live lists (dimmed) by the parent when this is on; the
+   * sidebar only forwards the toggle and its state to the settings menu.
+   */
+  showResolved: boolean;
+  onToggleShowResolved: () => void;
+  /**
+   * Open a thread. Restores the captured interactive state and, for a thread on
+   * another screen (urlPath set), routes there first. One handler for every
+   * entry point — on-page, other-state, and the prototype inbox.
+   */
   onItemOpen: (threadId: string, urlPath?: string) => void;
   onItemHover: (threadId: string | null) => void;
-  onItemActivate?: (threadId: string) => void;
   onItemDelete?: (threadId: string) => Promise<void> | void;
   container?: HTMLElement | null;
   userName?: string;
@@ -64,10 +69,10 @@ export function Sidebar({
   onClose,
   threadsOpen,
   threadsOtherState = [],
-  fetchResolved,
+  showResolved,
+  onToggleShowResolved,
   onItemOpen,
   onItemHover,
-  onItemActivate,
   onItemDelete,
   container,
   userName,
@@ -76,35 +81,32 @@ export function Sidebar({
   prototypeLabel,
   fetchPrototypeThreads,
 }: SidebarProps) {
-  const [activeTab, setActiveTab] = useState<'open' | 'resolved'>('open');
-  const [resolvedItems, setResolvedItems] = useState<ThreadSummary[] | null>(null);
-  const [resolvedStatus, setResolvedStatus] = useState<'idle' | 'loading' | 'error'>('idle');
-
   const scopeEnabled = !!prototypeLabel && !!fetchPrototypeThreads;
   const [scope, setScope] = useState<ScopeView>('screen');
-  const [protoOpen, setProtoOpen] = useState<LoadState>({ status: 'idle', items: [] });
-  const [protoResolved, setProtoResolved] = useState<LoadState>({ status: 'idle', items: [] });
+  const [proto, setProto] = useState<LoadState>({ status: 'idle', items: [] });
 
-  // The prototype inbox is fetch-on-open (not a live subscription), so load the
-  // relevant slice whenever the viewer switches into prototype scope or between
-  // its tabs. A per-slice epoch guards against an out-of-order response landing
-  // after the viewer has moved on. Screen scope keeps using the live props.
+  // The prototype inbox is fetch-on-open (not a live subscription), so load it
+  // whenever the viewer switches into prototype scope or toggles resolved
+  // visibility. Open threads always load; resolved are appended only when
+  // "Show resolved" is on. An epoch guards against an out-of-order response
+  // landing after the viewer has moved on. Screen scope uses the live props.
   const protoEpoch = useRef(0);
   useEffect(() => {
     if (!scopeEnabled || scope !== 'prototype') return;
-    const resolved = activeTab === 'resolved';
-    const setSlice = resolved ? setProtoResolved : setProtoOpen;
     const epoch = ++protoEpoch.current;
-    setSlice(s => ({ status: 'loading', items: s.items }));
+    setProto(s => ({ status: 'loading', items: s.items }));
     void (async () => {
       try {
-        const items = await fetchPrototypeThreads!({ resolved });
-        if (protoEpoch.current === epoch) setSlice({ status: 'idle', items });
+        const openItems = await fetchPrototypeThreads!({ resolved: false });
+        const resolvedItems = showResolved ? await fetchPrototypeThreads!({ resolved: true }) : [];
+        if (protoEpoch.current === epoch) {
+          setProto({ status: 'idle', items: [...openItems, ...resolvedItems] });
+        }
       } catch {
-        if (protoEpoch.current === epoch) setSlice(s => ({ status: 'error', items: s.items }));
+        if (protoEpoch.current === epoch) setProto(s => ({ status: 'error', items: s.items }));
       }
     })();
-  }, [scopeEnabled, scope, activeTab, fetchPrototypeThreads]);
+  }, [scopeEnabled, scope, showResolved, fetchPrototypeThreads]);
 
   // A scope no longer available (e.g. viewer left the prototype) must not strand
   // the sidebar on an empty prototype view.
@@ -112,29 +114,8 @@ export function Sidebar({
     if (!scopeEnabled && scope !== 'screen') setScope('screen');
   }, [scopeEnabled, scope]);
 
-  const handleTabChange = useCallback(async (value: string) => {
-    if (value === 'resolved') {
-      setActiveTab('resolved');
-      // Screen-scope resolved is loaded here; prototype-scope resolved is loaded
-      // by the effect above (keyed on scope + tab).
-      if (scope === 'screen') {
-        setResolvedStatus('loading');
-        try {
-          const items = await fetchResolved();
-          setResolvedItems(items);
-          setResolvedStatus('idle');
-        } catch {
-          setResolvedStatus('error');
-        }
-      }
-    } else {
-      setActiveTab('open');
-    }
-  }, [fetchResolved, scope]);
-
   const isProto = scopeEnabled && scope === 'prototype';
   const groupedOther = groupByBreadcrumb(threadsOtherState);
-  const openCount = isProto ? protoOpen.items.length : threadsOpen.length;
 
   const formatTime = (iso: string) => formatRelativeTime(iso);
 
@@ -154,6 +135,8 @@ export function Sidebar({
               <PanelSettingsMenu
                 onHideForSession={onHideForSession}
                 onSignOut={onSignOut}
+                showResolved={showResolved}
+                onToggleShowResolved={onToggleShowResolved}
                 container={container}
               />
               <Dialog.Close asChild>
@@ -186,82 +169,48 @@ export function Sidebar({
             </div>
           )}
 
-          <Tabs.Root value={activeTab} onValueChange={handleTabChange}>
-            <Tabs.List className="nodd-sidebar-tabs">
-              <Tabs.Trigger value="open" className="nodd-sidebar-tab">
-                Open ({openCount})
-              </Tabs.Trigger>
-              <Tabs.Trigger value="resolved" className="nodd-sidebar-tab">
-                Resolved
-              </Tabs.Trigger>
-            </Tabs.List>
-
-            <Tabs.Content value="open" className="nodd-sidebar-tab-content" forceMount>
-              {activeTab === 'open' && (isProto ? (
-                <PrototypeList
-                  state={protoOpen}
-                  emptyMessage="No open comments in this prototype yet."
+          {/* One list. Resolved threads are merged in (dimmed) by the parent
+              when "Show resolved" is on — no tabs. */}
+          {isProto ? (
+            <PrototypeList
+              state={proto}
+              emptyMessage="No comments in this prototype yet."
+              formatTime={formatTime}
+              onItemOpen={onItemOpen}
+              onItemHover={onItemHover}
+              onItemDelete={onItemDelete}
+            />
+          ) : (
+            <ScrollArea.Root className="nodd-sidebar-list-scroll">
+              <ScrollArea.Viewport className="nodd-sidebar-list">
+                <SidebarSection
+                  heading="On this page"
+                  items={threadsOpen}
+                  emptyMessage={threadsOtherState.length === 0 ? 'No comments on this page yet — add the first one.' : 'No comments visible in your current state.'}
                   formatTime={formatTime}
                   onItemOpen={onItemOpen}
                   onItemHover={onItemHover}
                   onItemDelete={onItemDelete}
                 />
-              ) : (
-                <ScrollArea.Root className="nodd-sidebar-list-scroll">
-                  <ScrollArea.Viewport className="nodd-sidebar-list">
-                    <SidebarSection
-                      heading="On this page"
-                      items={threadsOpen}
-                      emptyMessage={threadsOtherState.length === 0 ? 'No comments on this page yet — add the first one.' : 'No comments visible in your current state.'}
-                      formatTime={formatTime}
-                      onItemOpen={onItemOpen}
-                      onItemHover={onItemHover}
-                      onItemDelete={onItemDelete}
-                    />
-                    {groupedOther.map(([breadcrumb, group]) => (
-                      <SidebarSection
-                        key={breadcrumb || '_'}
-                        heading={breadcrumb}
-                        items={group}
-                        emptyMessage=""
-                        formatTime={formatTime}
-                        onItemOpen={onItemOpen}
-                        onItemHover={onItemHover}
-                        onItemActivate={onItemActivate}
-                        onItemDelete={onItemDelete}
-                        muted
-                      />
-                    ))}
-                  </ScrollArea.Viewport>
-                  <ScrollArea.Scrollbar className="nodd-scrollbar" orientation="vertical">
-                    <ScrollArea.Thumb className="nodd-scrollbar-thumb" />
-                  </ScrollArea.Scrollbar>
-                </ScrollArea.Root>
-              ))}
-            </Tabs.Content>
-            <Tabs.Content value="resolved" className="nodd-sidebar-tab-content" forceMount>
-              {activeTab === 'resolved' && (isProto ? (
-                <PrototypeList
-                  state={protoResolved}
-                  emptyMessage="Nothing resolved in this prototype yet."
-                  formatTime={formatTime}
-                  onItemOpen={onItemOpen}
-                  onItemHover={onItemHover}
-                  onItemDelete={onItemDelete}
-                />
-              ) : (
-                <SidebarList
-                  items={resolvedItems ?? []}
-                  loading={resolvedStatus === 'loading'}
-                  emptyMessage="Nothing here yet."
-                  formatTime={formatTime}
-                  onItemOpen={onItemOpen}
-                  onItemHover={onItemHover}
-                  onItemDelete={onItemDelete}
-                />
-              ))}
-            </Tabs.Content>
-          </Tabs.Root>
+                {groupedOther.map(([breadcrumb, group]) => (
+                  <SidebarSection
+                    key={breadcrumb || '_'}
+                    heading={breadcrumb}
+                    items={group}
+                    emptyMessage=""
+                    formatTime={formatTime}
+                    onItemOpen={onItemOpen}
+                    onItemHover={onItemHover}
+                    onItemDelete={onItemDelete}
+                    muted
+                  />
+                ))}
+              </ScrollArea.Viewport>
+              <ScrollArea.Scrollbar className="nodd-scrollbar" orientation="vertical">
+                <ScrollArea.Thumb className="nodd-scrollbar-thumb" />
+              </ScrollArea.Scrollbar>
+            </ScrollArea.Root>
+          )}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -319,43 +268,6 @@ function PrototypeList({
   );
 }
 
-function SidebarList({
-  items,
-  loading,
-  emptyMessage,
-  formatTime,
-  onItemOpen,
-  onItemHover,
-  onItemDelete,
-}: {
-  items: ThreadSummary[];
-  loading: boolean;
-  emptyMessage: string;
-  formatTime: (iso: string) => string;
-  onItemOpen: (threadId: string, urlPath?: string) => void;
-  onItemHover: (threadId: string | null) => void;
-  onItemDelete?: (threadId: string) => Promise<void> | void;
-}) {
-  return (
-    <ScrollArea.Root className="nodd-sidebar-list-scroll">
-      <ScrollArea.Viewport className="nodd-sidebar-list">
-        {loading && (
-          <div className="nodd-sidebar-loading">Loading...</div>
-        )}
-        {items.length === 0 && !loading && (
-          <div className="nodd-sidebar-empty">{emptyMessage}</div>
-        )}
-        {items.map(item => (
-          <SidebarItem key={item.id} item={item} formatTime={formatTime} onItemOpen={onItemOpen} onItemHover={onItemHover} onItemDelete={onItemDelete} />
-        ))}
-      </ScrollArea.Viewport>
-      <ScrollArea.Scrollbar className="nodd-scrollbar" orientation="vertical">
-        <ScrollArea.Thumb className="nodd-scrollbar-thumb" />
-      </ScrollArea.Scrollbar>
-    </ScrollArea.Root>
-  );
-}
-
 function SidebarSection({
   heading,
   items,
@@ -363,7 +275,6 @@ function SidebarSection({
   formatTime,
   onItemOpen,
   onItemHover,
-  onItemActivate,
   onItemDelete,
   muted,
 }: {
@@ -373,7 +284,6 @@ function SidebarSection({
   formatTime: (iso: string) => string;
   onItemOpen: (threadId: string, urlPath?: string) => void;
   onItemHover: (threadId: string | null) => void;
-  onItemActivate?: (threadId: string) => void;
   onItemDelete?: (threadId: string) => Promise<void> | void;
   muted?: boolean;
 }) {
@@ -391,7 +301,6 @@ function SidebarSection({
             formatTime={formatTime}
             onItemOpen={onItemOpen}
             onItemHover={onItemHover}
-            onItemActivate={onItemActivate}
             onItemDelete={onItemDelete}
           />
         ))
@@ -405,24 +314,19 @@ function SidebarItem({
   formatTime,
   onItemOpen,
   onItemHover,
-  onItemActivate,
   onItemDelete,
 }: {
   item: ThreadSummary;
   formatTime: (iso: string) => string;
   onItemOpen: (threadId: string, urlPath?: string) => void;
   onItemHover: (threadId: string | null) => void;
-  onItemActivate?: (threadId: string) => void;
   onItemDelete?: (threadId: string) => Promise<void> | void;
 }) {
-  const handleOpen = () => {
-    if (onItemActivate && item.canActivate) onItemActivate(item.id);
-    else onItemOpen(item.id, item.urlPath);
-  };
+  const handleOpen = () => onItemOpen(item.id, item.urlPath);
   const showDelete = !!onItemDelete && item.canDelete;
   return (
     <div
-      className={`nodd-sidebar-item${item.unread ? ' nodd-sidebar-item--unread' : ''}`}
+      className={`nodd-sidebar-item${item.unread ? ' nodd-sidebar-item--unread' : ''}${item.resolved ? ' nodd-sidebar-item--resolved' : ''}`}
       onClick={handleOpen}
       onMouseEnter={() => onItemHover(item.id)}
       onMouseLeave={() => onItemHover(null)}
@@ -439,7 +343,7 @@ function SidebarItem({
         />
         <span className="nodd-sidebar-item-author">{item.authorName}</span>
         <div className={`nodd-sidebar-item-meta${showDelete ? ' nodd-sidebar-item-meta--actionable' : ''}`}>
-          <span className="nodd-sidebar-item-time">{formatTime(item.createdAt)}</span>
+          <span className="nodd-sidebar-item-time">{item.resolved ? 'Resolved' : formatTime(item.createdAt)}</span>
           {showDelete && (
             <button
               className="nodd-btn nodd-btn--delete nodd-sidebar-item-delete"

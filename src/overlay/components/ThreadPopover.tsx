@@ -265,7 +265,7 @@ export function ThreadPopover({
             const member = memberMap.get(comment.authorId);
             const canDelete = !readOnly && comment.authorId === currentUserId && !comment.pending;
             return (
-              <div key={comment.id} className={`nodd-comment${comment.pending ? ' nodd-comment--pending' : ''}`}>
+              <div key={comment.id} className={`nodd-comment${comment.pending ? ' nodd-comment--pending' : ''}${resolved ? ' nodd-comment--resolved' : ''}`}>
                 <div className="nodd-comment-header">
                   <UserAvatar
                     name={member?.displayName ?? member?.email ?? '?'}
@@ -273,7 +273,9 @@ export function ThreadPopover({
                     size={24}
                   />
                   <span className="nodd-comment-author">{member?.displayName ?? member?.email ?? 'Unknown'}</span>
-                  <span className="nodd-comment-time">{formatTime(comment.createdAt)}</span>
+                  {/* A resolved thread reads as "Resolved" on its root comment
+                      in place of the timestamp; replies keep their own time. */}
+                  <span className="nodd-comment-time">{resolved && ci === 0 ? 'Resolved' : formatTime(comment.createdAt)}</span>
                   {(ci === 0 || canDelete) && (
                     <div className="nodd-popover-actions">
                       {canDelete && (

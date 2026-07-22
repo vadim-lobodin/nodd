@@ -10,6 +10,8 @@ export type PinMarkerProps = {
   authorName?: string;
   authorAvatarUrl?: string;
   snippet?: string;
+  /** Resolved threads render faded (only shown when "Show resolved" is on). */
+  resolved?: boolean;
   tooltipContainer?: HTMLElement | null;
   onOpen: (threadId: string) => void;
 };
@@ -26,6 +28,7 @@ export function PinMarker({
   authorName,
   authorAvatarUrl,
   snippet,
+  resolved,
   tooltipContainer,
   onOpen,
 }: PinMarkerProps) {
@@ -103,7 +106,7 @@ export function PinMarker({
     <>
       <button
         ref={buttonRef}
-        className={`nodd-pin nodd-pin--${pinState}${hovered ? ' nodd-pin--hovered' : ''}`}
+        className={`nodd-pin nodd-pin--${pinState}${hovered ? ' nodd-pin--hovered' : ''}${resolved ? ' nodd-pin--resolved' : ''}`}
         data-nodd-pin-id={threadId}
         style={{ translate: `${x}px ${y}px` }}
         onClick={handleClick}

@@ -31,6 +31,15 @@ const THREADS: ThreadSummary[] = [
     resolved: false,
     unread: false,
   },
+  {
+    id: 't4',
+    authorName: 'Dan Wu',
+    snippet: 'Fixed the spacing here — closing this out.',
+    createdAt: new Date(Date.now() - 172800 * 1000).toISOString(),
+    replyCount: 0,
+    resolved: true,
+    unread: false,
+  },
 ];
 
 // Sidebar uses Radix Dialog.Portal — it portals into `container`, which must be
@@ -39,19 +48,25 @@ const THREADS: ThreadSummary[] = [
 function SidebarStory({ threads = THREADS }: { threads?: ThreadSummary[] }) {
   const [open, setOpen] = useState(true);
   const [container, setContainer] = useState<HTMLElement | null>(null);
+  const [showResolved, setShowResolved] = useState(true);
 
   useEffect(() => {
     setContainer(document.querySelector<HTMLElement>('[data-nodd-story]'));
   }, []);
+
+  // Resolved threads are merged into the live list by the parent; mirror that
+  // here so the story exercises the dimmed "Resolved" rows.
+  const visible = showResolved ? threads : threads.filter(t => !t.resolved);
 
   return (
     <div style={{ minHeight: 520 }}>
       <Sidebar
         open={open}
         onClose={() => setOpen(false)}
-        threadsOpen={threads}
+        threadsOpen={visible}
         threadsOtherState={[]}
-        fetchResolved={async () => []}
+        showResolved={showResolved}
+        onToggleShowResolved={() => setShowResolved(v => !v)}
         onItemOpen={() => {}}
         onItemHover={() => {}}
         onItemDelete={() => {}}

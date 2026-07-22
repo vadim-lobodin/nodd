@@ -10,7 +10,7 @@ import { Sidebar, type ThreadSummary } from './components/Sidebar';
 import { VariantsPanel } from './components/VariantsPanel';
 import { DOMAnchor, type Pin } from './anchoring/DOMAnchor';
 import { startReanchorLoop } from './anchoring/reanchorLoop';
-import { getStateStackForElement, isStateMatch, stackToKey, keyToStack, hasActivatorOrTrigger, activateState, subscribeActivators } from '../provider/state';
+import { getStateStackForElement, isStateMatch, stackToKey, keyToStack, activateState, describeAutoSegment } from '../provider/state';
 import type { Thread, PageSnapshot } from '../store/types';
 
 function resolveSystemTheme(): 'light' | 'dark' {
@@ -25,6 +25,15 @@ export function OverlayRenderer() {
   // Everyone else (logged out, or mid-onboarding) gets read-only comments.
   const canComment = !!user && !ctx.auth.needsDisplayName && ctx.writeStatus === 'ready';
   const [snapshot, setSnapshot] = useState<PageSnapshot | null>(null);
+  // Resolved threads are excluded from the live snapshot (the store drops them
+  // on resolve). When the viewer opts in via the settings menu we fetch them
+  // separately and merge them into every derived view — dimmed, not hidden.
+  const [showResolved, setShowResolved] = useState(false);
+  const [resolvedThreads, setResolvedThreads] = useState<Thread[]>([]);
+  // Bumped to force a fresh page subscribe (re-fetch of open threads) — used
+  // after reopening a resolved thread, which the store can't fold back into the
+  // live snapshot on its own.
+  const [refreshKey, setRefreshKey] = useState(0);
   const [isCapturing, setIsCapturing] = useState(false);
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -84,17 +93,42 @@ export function OverlayRenderer() {
   useEffect(() => {
     if (!store) return;
     return store.subscribe(urlPath, setSnapshot);
-  }, [store, urlPath, user]);
+  }, [store, urlPath, user, refreshKey]);
+
+  // Fetch the page's resolved threads while "Show resolved" is on. Re-runs on
+  // snapshot changes so a just-resolved thread reappears (dimmed) and a
+  // reopened one drops out. Bounded query; an epoch drops stale responses.
+  const resolvedEpoch = useRef(0);
+  useEffect(() => {
+    if (!store || !showResolved) {
+      setResolvedThreads([]);
+      return;
+    }
+    const epoch = ++resolvedEpoch.current;
+    void (async () => {
+      try {
+        const items = await store.fetchResolved(urlPath);
+        if (resolvedEpoch.current === epoch) setResolvedThreads(items);
+      } catch {
+        if (resolvedEpoch.current === epoch) setResolvedThreads([]);
+      }
+    })();
+  }, [store, showResolved, urlPath, snapshot]);
+
+  // The set every derived view resolves against: live (open) threads plus the
+  // resolved ones when opted in. A live thread wins over its resolved copy, so a
+  // thread reopened during the merge window shows as open, not twice.
+  const allThreads = useMemo<Thread[]>(() => {
+    const base = snapshot?.threads ?? [];
+    if (!showResolved || resolvedThreads.length === 0) return base;
+    const byId = new Map<string, Thread>();
+    for (const t of resolvedThreads) byId.set(t.id, t);
+    for (const t of base) byId.set(t.id, t);
+    return Array.from(byId.values());
+  }, [snapshot, resolvedThreads, showResolved]);
 
   const [stateMatch, setStateMatch] = useState<Map<string, boolean>>(new Map());
   const [domVersion, setDomVersion] = useState(0);
-  const [activatorVersion, setActivatorVersion] = useState(0);
-
-  // Re-render when activator registry changes so the Show me button can
-  // appear/disappear as host state mounts/unmounts new activators.
-  useEffect(() => {
-    return subscribeActivators(() => setActivatorVersion(v => v + 1));
-  }, []);
 
   // Re-render when the variant registry changes so the toolbar's Variants
   // button appears the moment the first variant is declared in the host tree.
@@ -103,11 +137,10 @@ export function OverlayRenderer() {
   const hasVariants = variants.getDefinitions().length > 0;
 
   const resolveAllPins = useCallback(() => {
-    if (!snapshot) return;
     const cache = new Map<string, Element>();
     const positions = new Map<string, { x: number; y: number }>();
     const matches = new Map<string, boolean>();
-    for (const thread of snapshot.threads) {
+    for (const thread of allThreads) {
       const result = DOMAnchor.resolve(thread.pin);
       if (result) {
         cache.set(thread.id, result.element);
@@ -123,7 +156,7 @@ export function OverlayRenderer() {
     pinPositionsRef.current = positions;
     setPinPositions(positions);
     setStateMatch(matches);
-  }, [snapshot]);
+  }, [allThreads]);
 
   // Resolve pins on route change, snapshot change, or DOM mutation
   useLayoutEffect(() => {
@@ -132,10 +165,10 @@ export function OverlayRenderer() {
 
   // Reanchor loop — uses imperative DOM updates for performance
   useEffect(() => {
-    if (!snapshot) return;
+    if (!allThreads.length) return;
     return startReanchorLoop({
       getPins: () =>
-        snapshot.threads
+        allThreads
           .filter(t => anchorCache.current.has(t.id))
           .map(t => ({ id: t.id, pin: t.pin })),
       getElement: (id) => anchorCache.current.get(id) ?? null,
@@ -148,7 +181,7 @@ export function OverlayRenderer() {
       },
       onDOMMutation: () => setDomVersion(v => v + 1),
     });
-  }, [snapshot]);
+  }, [allThreads]);
 
   // Keyboard shortcuts (Figma-style): "C" toggles comment mode, "M" toggles
   // the comments sidebar. Ignored while typing in a field or with a modifier
@@ -204,21 +237,59 @@ export function OverlayRenderer() {
     return () => document.removeEventListener('keydown', handler);
   }, [user, isCapturing, canComment]);
 
+  // A visible pin is already on-screen and state-matched, so a direct click just
+  // toggles its popover. Everything else (sidebar, inbox, deep link) goes
+  // through revealThread, which restores the interactive state first.
   const handlePinOpen = useCallback((threadId: string) => {
     setOpenThreadId(prev => (prev === threadId ? null : threadId));
   }, []);
 
-  // Sidebar inbox item: threads from other screens of the prototype carry their
-  // own urlPath. Same-screen items open in place; cross-screen items navigate to
-  // that screen with a #nodd-thread=<id> fragment the deep-link effect consumes
-  // on arrival to auto-open the thread.
-  const handleInboxItemOpen = useCallback((threadId: string, itemUrlPath?: string) => {
-    if (!itemUrlPath || itemUrlPath === urlPath) {
-      handlePinOpen(threadId);
+  const [revealHint, setRevealHint] = useState<string | null>(null);
+
+  // The one path to open a thread that may live in another screen or interactive
+  // state. Cross-screen items route to their screen (the deep-link arrival
+  // re-reveals); same-screen items restore the captured state, re-anchor, then
+  // open. If the state can't be brought back, surface a hint instead of a dead
+  // click. Supersedes the old split of handlePinOpen / inbox-open / item-activate.
+  const revealThread = useCallback(async (threadId: string, itemUrlPath?: string) => {
+    if (itemUrlPath && itemUrlPath !== urlPath) {
+      navigate(`${itemUrlPath}#nodd-thread=${threadId}`);
       return;
     }
-    navigate(`${itemUrlPath}#nodd-thread=${threadId}`);
-  }, [urlPath, handlePinOpen, navigate]);
+    const thread = allThreads.find(t => t.id === threadId);
+    if (!thread) return;
+
+    // Restore the state the comment was captured in. activateState no-ops per
+    // segment that's already mounted, so this is cheap when already in-state.
+    const stack = keyToStack(thread.stateKey);
+    if (stack.length > 0) {
+      await activateState(stack);
+      // Yield one frame so the MutationObserver-driven resolveAllPins has run.
+      await new Promise<void>(r => requestAnimationFrame(() => r()));
+    }
+
+    const result = DOMAnchor.resolve(thread.pin);
+    if (result && isStateMatch(thread.stateKey, getStateStackForElement(result.element))) {
+      const position = DOMAnchor.reposition(thread.pin, result.element);
+      anchorCache.current.set(threadId, result.element);
+      pinPositionsRef.current.set(threadId, position);
+      setPinPositions(current => new Map(current).set(threadId, position));
+      setStateMatch(current => new Map(current).set(threadId, true));
+      setOpenThreadId(threadId); // the scroll effect brings it into view
+      return;
+    }
+
+    setRevealHint(
+      "This comment was left in a state we couldn't reopen automatically — navigate to it and it'll appear.",
+    );
+  }, [allThreads, urlPath, navigate]);
+
+  // Auto-dismiss the reveal hint.
+  useEffect(() => {
+    if (!revealHint) return;
+    const t = setTimeout(() => setRevealHint(null), 6000);
+    return () => clearTimeout(t);
+  }, [revealHint]);
 
   // When a thread opens (e.g. picked from the sidebar) scroll its anchor into
   // view if it's off-screen, so the pin and popover are actually visible.
@@ -256,6 +327,7 @@ export function OverlayRenderer() {
     setIsCapturing(false);
     setOpenThreadId(null);
     setPendingPin(null);
+    setRevealHint(null);
   }, [urlPath]);
 
   // Deep link (#nodd-thread=<id>): a cross-screen inbox click navigates here
@@ -279,12 +351,12 @@ export function OverlayRenderer() {
 
   useEffect(() => {
     const id = pendingDeepLinkRef.current;
-    if (!id || !snapshot) return;
-    if (snapshot.threads.some(t => t.id === id)) {
+    if (!id) return;
+    if (allThreads.some(t => t.id === id)) {
       pendingDeepLinkRef.current = null;
-      setOpenThreadId(id);
+      void revealThread(id); // restore state + scroll, not just open
     }
-  }, [snapshot]);
+  }, [allThreads, revealThread]);
 
   const handlePinHover = useCallback((_threadId: string | null) => {}, []);
 
@@ -353,19 +425,22 @@ export function OverlayRenderer() {
 
   const handleResolve = useCallback(async () => {
     if (!store || !openThreadId) return;
-    const thread = snapshot?.threads.find(t => t.id === openThreadId);
+    const thread = allThreads.find(t => t.id === openThreadId);
     if (!thread) return;
     if (thread.resolved) {
       await store.reopenThread(openThreadId);
+      // The store can't re-add a thread it already dropped from the live page,
+      // so force a fresh subscribe to pull the now-open thread back in.
+      setRefreshKey(k => k + 1);
     } else {
       await store.resolveThread(openThreadId);
       setOpenThreadId(null);
     }
-  }, [store, openThreadId, snapshot]);
+  }, [store, openThreadId, allThreads]);
 
   const handleDeleteComment = useCallback(async (commentId: string) => {
     if (!store || !openThreadId) return;
-    const thread = snapshot?.threads.find(t => t.id === openThreadId);
+    const thread = allThreads.find(t => t.id === openThreadId);
     // Deleting the root comment removes the whole thread (store handles this);
     // close the popover since there's nothing left to show.
     const isRoot = thread?.comments[0]?.id === commentId;
@@ -378,7 +453,7 @@ export function OverlayRenderer() {
       // the popover so the restored content is visible instead of vanishing.
       if (isRoot) setOpenThreadId(threadId);
     }
-  }, [store, openThreadId, snapshot]);
+  }, [store, openThreadId, allThreads]);
 
   const handleDeleteThread = useCallback(async (threadId: string) => {
     if (!store) return;
@@ -399,7 +474,7 @@ export function OverlayRenderer() {
     const onPage: ThreadSummary[] = [];
     const other: ThreadSummary[] = [];
     if (!snapshot) return { onPageSummaries: onPage, otherStateSummaries: other };
-    snapshot.threads.forEach((t, i) => {
+    allThreads.forEach((t, i) => {
       const member = members?.byId.get(t.createdBy);
       const stack = keyToStack(t.stateKey);
       const summary: ThreadSummary = {
@@ -411,37 +486,15 @@ export function OverlayRenderer() {
         replyCount: Math.max(0, t.comments.length - 1),
         resolved: t.resolved,
         unread: false,
-        breadcrumb: t.stateKey ? stack.join(' · ') : undefined,
-        stateStack: stack,
-        canActivate: stack.length > 0 && stack.every(s => hasActivatorOrTrigger(s)),
+        // Prettify auto-detected segments (auto:dialog:settings → "Settings").
+        breadcrumb: t.stateKey ? stack.map(s => describeAutoSegment(s) ?? s).join(' · ') : undefined,
         canDelete: t.createdBy === user?.id,
       };
       if (stateMatch.get(t.id) ?? true) onPage.push(summary);
       else other.push(summary);
     });
     return { onPageSummaries: onPage, otherStateSummaries: other };
-  }, [snapshot, members, stateMatch, activatorVersion, domVersion]);
-
-  const handleItemActivate = useCallback(async (threadId: string) => {
-    const thread = snapshot?.threads.find(t => t.id === threadId);
-    if (!thread) return;
-    const stack = keyToStack(thread.stateKey);
-    const ok = await activateState(stack);
-    if (!ok) return;
-    // Wait one frame so the MutationObserver-driven resolveAllPins has run.
-    await new Promise<void>(r => requestAnimationFrame(() => r()));
-    const result = DOMAnchor.resolve(thread.pin);
-    if (
-      !result ||
-      !isStateMatch(thread.stateKey, getStateStackForElement(result.element))
-    ) return;
-    const position = DOMAnchor.reposition(thread.pin, result.element);
-    anchorCache.current.set(threadId, result.element);
-    pinPositionsRef.current.set(threadId, position);
-    setPinPositions(current => new Map(current).set(threadId, position));
-    setStateMatch(current => new Map(current).set(threadId, true));
-    setOpenThreadId(threadId);
-  }, [snapshot]);
+  }, [snapshot, allThreads, members, stateMatch, domVersion]);
 
   const handleSignIn = useCallback(async () => {
     const email = authEmail.trim();
@@ -585,7 +638,7 @@ export function OverlayRenderer() {
     </div>
   ) : null;
 
-  const openThread = openThreadId ? snapshot?.threads.find(t => t.id === openThreadId) : null;
+  const openThread = openThreadId ? allThreads.find(t => t.id === openThreadId) : null;
   const openPos = openThreadId ? (pinPositionsRef.current.get(openThreadId) ?? pinPositions.get(openThreadId)) : null;
   const openThreadMatchesState = openThreadId
     ? (stateMatch.get(openThreadId) ?? openThread?.stateKey === '')
@@ -617,7 +670,7 @@ export function OverlayRenderer() {
       {/* Pins render into the separate absolute-positioned container so they scroll with the page */}
       {pinContainer && createPortal(
         <>
-          {snapshot?.threads.map((thread, i) => {
+          {allThreads.map((thread, i) => {
             const pos = pinPositions.get(thread.id);
             if (!pos) return null;
             if (!(stateMatch.get(thread.id) ?? thread.stateKey === '')) return null;
@@ -632,6 +685,7 @@ export function OverlayRenderer() {
                 authorName={author?.displayName ?? author?.email?.split('@')[0]}
                 authorAvatarUrl={author?.avatarUrl ?? undefined}
                 snippet={thread.comments[0]?.body.slice(0, 120)}
+                resolved={thread.resolved}
                 tooltipContainer={portalRootRef.current}
                 onOpen={handlePinOpen}
               />
@@ -695,29 +749,12 @@ export function OverlayRenderer() {
         onClose={() => setSidebarOpen(false)}
         threadsOpen={onPageSummaries}
         threadsOtherState={otherStateSummaries}
-        onItemActivate={handleItemActivate}
         onItemDelete={canComment ? handleDeleteThread : undefined}
         userName={user ? (user.displayName ?? user.email.split('@')[0]) : undefined}
         onSignOut={user ? () => void signOut() : undefined}
         onHideForSession={hideForSession}
-        fetchResolved={async () => {
-          if (!store) return [];
-          const resolved = await store.fetchResolved(urlPath);
-          return resolved.map((t, i) => {
-            const member = members?.byId.get(t.createdBy);
-            return {
-              id: t.id,
-              authorName: member?.displayName ?? member?.email ?? 'Unknown',
-              authorAvatarUrl: member?.avatarUrl ?? undefined,
-              snippet: t.comments[0]?.body.slice(0, 80) ?? '',
-              createdAt: t.createdAt,
-              replyCount: Math.max(0, t.comments.length - 1),
-              resolved: true,
-              unread: false,
-              canDelete: t.createdBy === user?.id,
-            };
-          });
-        }}
+        showResolved={showResolved}
+        onToggleShowResolved={() => setShowResolved(v => !v)}
         prototypeLabel={activePrototype ? (activePrototype.label ?? activePrototype.id) : undefined}
         fetchPrototypeThreads={activePrototype ? async ({ resolved }) => {
           if (!store || !activePrototype) return [];
@@ -740,7 +777,7 @@ export function OverlayRenderer() {
             } satisfies ThreadSummary;
           });
         } : undefined}
-        onItemOpen={handleInboxItemOpen}
+        onItemOpen={revealThread}
         onItemHover={() => {}}
         container={portalRootRef.current}
       />
@@ -751,6 +788,13 @@ export function OverlayRenderer() {
       {/* Sign-in / name prompt — surfaced only when a read-only viewer tries to
           comment (presses "C"). Renders over pins + panels, not instead of them. */}
       {authGate}
+
+      {/* Transient hint when a thread's captured state couldn't be reopened. */}
+      {revealHint && (
+        <div className="nodd-toast" role="status" onClick={() => setRevealHint(null)}>
+          {revealHint}
+        </div>
+      )}
     </Tooltip.Provider>
   );
 }
