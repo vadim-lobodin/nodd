@@ -28,9 +28,11 @@ supabase db reset       # nuke + replay migrations + seed.sql
 Five modules, one-way dependency graph: `provider → {auth, store, overlay} → supabase-js`. The public surface is intentionally tiny — one component + one hook from `src/index.ts`:
 
 ```ts
-<NoddProvider projectId supabaseUrl supabaseAnonKey theme?> ...
+<NoddProvider projectId supabaseUrl supabaseAnonKey theme? gateToPrototypes? onNavigate?> ...
 const { user, signIn, signOut, toggleOverlay, isVisible, ... } = useNodd();
 ```
+
+`onNavigate?: (path: string) => void` lets the host route in-app (e.g. `router.push`) instead of a full reload — used by the sidebar inbox to jump between screens of a prototype. When omitted, cross-screen jumps fall back to `window.location.assign`. `gateToPrototypes` restricts where comments can be created (see `src/provider/variants/` and the consumer's `<NoddPrototype>` scope).
 
 | Module | Role |
 |---|---|
@@ -56,6 +58,7 @@ Each module has its own `README.md` with detailed design notes; consult them bef
 - IndexedDB cache (`src/store/cache.ts`, via `idb-keyval`) keyed by `(projectId, urlPath)` is read first on subscribe, then reconciled with the network response.
 - Optimistic mutations create `temp-<uuid>` IDs and reconcile via `replaceThreadId` / `replaceCommentId` once the server responds. A `recentlyWritten` set (5 s TTL) suppresses Realtime echoes of our own writes — see `createCommentStore.ts:152-155`. If you add new mutations, they must round-trip through `markRecentlyWritten` for both the row id and any child comment id, otherwise the UI will flash duplicates.
 - Realtime channel filters server-side by `project_id`; per-page `url_path` filtering is local. Add tables to `supabase_realtime` publication in a new migration if you create more.
+- **Prototype inbox (Phase 2).** A thread carries a nullable `threads.prototype_id` (a roll-up key *layered on top of* `url_path`, not a replacement — see `0006_prototype_scope.sql`). The sidebar's "This prototype" view calls `fetchPrototypeThreads` (`store/query.ts`), a bounded `project_id + prototype_id + resolved = false` query served by the partial index `threads_project_prototype_idx` — don't drop it. Threads with `prototype_id = null` (pre-scoping, or created outside a `gateToPrototypes` scope) are page-only and never appear in the inbox. The write path stamps `prototype_id` via the `nodd_create_thread` RPC's optional `_prototype_id` arg (only sent when non-null, so unscoped writes still match the pre-0006 8-arg signature). Cross-screen open uses a `#nodd-thread=<id>` fragment + `onNavigate`.
 
 ### DOM anchoring (`src/overlay/anchoring/`)
 
