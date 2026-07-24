@@ -173,7 +173,7 @@ export function NoddProvider({
   children,
 }: NoddProviderProps) {
   const [user, setUser] = useState<CurrentUser | null>(null);
-  // Start hidden if a timed hide ("Hide for 1 hour") is still in effect.
+  // Start hidden if a timed hide ("Hide Nodd for 1 hour") is still in effect.
   const [isVisible, setIsVisible] = useState(() => !(readHiddenUntil(projectId) > Date.now()));
   const [urlPath, setUrlPath] = useState('/');
   const [portalEl, setPortalEl] = useState<HTMLElement | null>(null);
@@ -401,7 +401,7 @@ export function NoddProvider({
   }, [portalEl, pinContainerEl, resolvedTheme]);
 
   // Showing the overlay (toggle-on or explicit) also clears any timed hide,
-  // so the host's own launcher brings it back after "Hide for 1 hour".
+  // so the host's own launcher brings it back after "Hide Nodd for 1 hour".
   const setVisible = useCallback((v: boolean) => {
     writeHiddenUntil(projectId, 0);
     setIsVisible(v);
@@ -415,7 +415,7 @@ export function NoddProvider({
     });
   }, [projectId]);
 
-  // Dismiss for a wall-clock duration ("Hide for 1 hour"). Persisted as an
+  // Dismiss for a wall-clock duration ("Hide Nodd for 1 hour"). Persisted as an
   // expiry timestamp so it survives reloads within the window, then the effect
   // below (or a fresh mount) auto-reveals. C/V also reveal early — see effect.
   const hideForDuration = useCallback((ms: number) => {

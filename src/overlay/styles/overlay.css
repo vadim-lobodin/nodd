@@ -15,7 +15,7 @@
   --nodd-card-foreground: 224 14% 12%;
   --nodd-popover: 0 0% 100%;
   --nodd-popover-foreground: 224 14% 12%;
-  --nodd-primary: 243 75% 59%;
+  --nodd-primary: 224 14% 12%;
   --nodd-primary-foreground: 0 0% 100%;
   /* Comment pin — brand green (#31CB5F), theme-independent */
   --nodd-pin: 138 61% 49%;
@@ -30,7 +30,7 @@
   --nodd-destructive-foreground: 0 0% 100%;
   --nodd-border: 220 13% 91%;
   --nodd-input: 220 13% 91%;
-  --nodd-ring: 243 75% 59%;
+  --nodd-ring: 220 9% 46%;
 
   /* Surface material — light */
   --nodd-glass-surface: hsl(var(--nodd-card));
@@ -66,8 +66,8 @@
   --nodd-card-foreground: 0 0% 98%;
   --nodd-popover: 0 0% 6%;
   --nodd-popover-foreground: 0 0% 98%;
-  --nodd-primary: 243 88% 72%;
-  --nodd-primary-foreground: 0 0% 100%;
+  --nodd-primary: 0 0% 98%;
+  --nodd-primary-foreground: 0 0% 6%;
   --nodd-secondary: 0 0% 12%;
   --nodd-secondary-foreground: 0 0% 98%;
   --nodd-muted: 0 0% 12%;
@@ -78,7 +78,7 @@
   --nodd-destructive-foreground: 0 0% 100%;
   --nodd-border: 0 0% 16%;
   --nodd-input: 0 0% 16%;
-  --nodd-ring: 243 88% 72%;
+  --nodd-ring: 0 0% 60%;
 
   /* Surface material — dark */
   --nodd-glass-surface: hsl(var(--nodd-card));
@@ -104,8 +104,8 @@
     --nodd-card-foreground: 0 0% 98%;
     --nodd-popover: 0 0% 6%;
     --nodd-popover-foreground: 0 0% 98%;
-    --nodd-primary: 243 88% 72%;
-    --nodd-primary-foreground: 0 0% 100%;
+    --nodd-primary: 0 0% 98%;
+    --nodd-primary-foreground: 0 0% 6%;
     --nodd-secondary: 0 0% 12%;
     --nodd-secondary-foreground: 0 0% 98%;
     --nodd-muted: 0 0% 12%;
@@ -116,7 +116,7 @@
     --nodd-destructive-foreground: 0 0% 100%;
     --nodd-border: 0 0% 16%;
     --nodd-input: 0 0% 16%;
-    --nodd-ring: 243 88% 72%;
+    --nodd-ring: 0 0% 60%;
 
     --nodd-glass-surface: hsl(var(--nodd-card));
     --nodd-glass-gradient: none;
@@ -173,18 +173,18 @@
   pointer-events: none;
   overflow: visible;
 
-  --nodd-primary: 243 75% 59%;
+  --nodd-primary: 224 14% 12%;
   --nodd-primary-foreground: 0 0% 100%;
   --nodd-background: 0 0% 100%;
-  --nodd-ring: 243 75% 59%;
+  --nodd-ring: 220 9% 46%;
   --nodd-pin-size: 28px;
   --nodd-shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.15), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 }
 [data-nodd-pin-container][data-nodd-theme="dark"] {
-  --nodd-primary: 243 88% 72%;
-  --nodd-primary-foreground: 0 0% 100%;
+  --nodd-primary: 0 0% 98%;
+  --nodd-primary-foreground: 0 0% 6%;
   --nodd-background: 0 0% 6%;
-  --nodd-ring: 243 88% 72%;
+  --nodd-ring: 0 0% 60%;
 }
 
 /* ==========================================================================
@@ -375,20 +375,102 @@
   opacity: 0.45;
 }
 
-/* --primary — neutral solid CTA (auth modal), inverts across themes */
-[data-nodd-root] .nodd-btn--primary {
+/* Minimal form primitives — grayscale, compact, and deliberately flat. */
+[data-nodd-root] .nodd-input,
+[data-nodd-root] .nodd-button {
+  box-sizing: border-box;
+  min-height: 36px;
+  border-radius: var(--nodd-radius-sm);
+  border: 1px solid hsl(var(--nodd-foreground) / 0.2);
+  box-shadow: none;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  outline: none;
+  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+[data-nodd-root] .nodd-input {
+  appearance: none;
+  -webkit-appearance: none;
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  color: hsl(var(--nodd-foreground));
+}
+
+[data-nodd-root] .nodd-input::placeholder {
+  color: hsl(var(--nodd-muted-foreground));
+}
+
+[data-nodd-root] .nodd-input:hover {
+  border-color: hsl(var(--nodd-foreground) / 0.35);
+}
+
+[data-nodd-root] .nodd-input:focus,
+[data-nodd-root] .nodd-input:focus-visible,
+[data-nodd-root] .nodd-input:invalid,
+[data-nodd-root] .nodd-input:user-invalid {
+  border-color: hsl(var(--nodd-foreground) / 0.5);
+  outline: none;
+  box-shadow: none;
+}
+
+[data-nodd-root] .nodd-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 500;
+  user-select: none;
+}
+
+[data-nodd-root] .nodd-button--primary {
   background: hsl(var(--nodd-foreground));
   color: hsl(var(--nodd-background));
   border-color: hsl(var(--nodd-foreground));
-  box-shadow: 0 4px 12px -2px hsl(var(--nodd-foreground) / 0.2),
-              inset 0 1px 0 0 rgba(255, 255, 255, 0.15);
 }
-[data-nodd-root] .nodd-btn--primary:hover {
-  background: hsl(var(--nodd-foreground) / 0.88);
-  border-color: hsl(var(--nodd-foreground) / 0.88);
-  color: hsl(var(--nodd-background));
-  box-shadow: 0 6px 16px -2px hsl(var(--nodd-foreground) / 0.28),
-              inset 0 1px 0 0 rgba(255, 255, 255, 0.18);
+
+[data-nodd-root] .nodd-button--primary:hover {
+  background: hsl(var(--nodd-foreground) / 0.86);
+  border-color: hsl(var(--nodd-foreground) / 0.86);
+}
+
+[data-nodd-root] .nodd-button--secondary {
+  background: transparent;
+  color: hsl(var(--nodd-foreground));
+}
+
+[data-nodd-root] .nodd-button--secondary:hover {
+  background: hsl(var(--nodd-foreground) / 0.06);
+}
+
+[data-nodd-root] .nodd-button:focus-visible {
+  outline: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+[data-nodd-root] .nodd-button--primary:focus-visible {
+  background: hsl(var(--nodd-foreground));
+  border-color: hsl(var(--nodd-foreground));
+}
+
+[data-nodd-root] .nodd-button--secondary:focus-visible {
+  background: hsl(var(--nodd-foreground) / 0.06);
+  border-color: hsl(var(--nodd-foreground) / 0.5);
+}
+
+[data-nodd-root] .nodd-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+[data-nodd-root] .nodd-button--full {
+  width: 100%;
 }
 
 /* --secondary */
@@ -969,7 +1051,7 @@
 [data-nodd-root] .nodd-sidebar-header-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 [data-nodd-root] .nodd-sidebar-title {
@@ -1252,6 +1334,26 @@
   flex: 1 1 auto;
 }
 
+[data-nodd-root] .nodd-variant-option:not(.nodd-variant-option--selected) {
+  background: hsl(var(--nodd-foreground) / 0.035);
+}
+
+[data-nodd-root] .nodd-variant-option:not(.nodd-variant-option--selected):hover {
+  background: hsl(var(--nodd-foreground) / 0.06);
+}
+
+[data-nodd-root] .nodd-variant-option--selected,
+[data-nodd-root] .nodd-variant-option--selected:hover {
+  color: hsl(var(--nodd-background));
+  background: hsl(var(--nodd-foreground));
+  border-color: hsl(var(--nodd-foreground));
+}
+
+[data-nodd-root] .nodd-variant-option--selected:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 [data-nodd-root] .nodd-sidebar-item-footer {
   display: flex;
   justify-content: space-between;
@@ -1280,46 +1382,18 @@
 }
 
 /* ==========================================================================
-   Auth gate
+   Inline auth section — lives inside the comments sidebar
    ========================================================================== */
-[data-nodd-root] .nodd-auth-gate {
-  pointer-events: auto;
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  background: var(--nodd-glass-gradient), var(--nodd-glass-surface);
-  backdrop-filter: var(--nodd-blur);
-  -webkit-backdrop-filter: var(--nodd-blur);
-  color: hsl(var(--nodd-card-foreground));
-  border-radius: var(--nodd-radius-lg);
-  border: 1px solid var(--nodd-glass-border);
-  box-shadow: var(--nodd-shadow-xl), var(--nodd-shadow-inset);
-  padding: 22px;
-  width: 300px;
-}
-
-/* Centered variant: a full-viewport backdrop that centers the card. Used
-   for the sign-in / name prompts, surfaced when the viewer presses "C". */
-[data-nodd-root] .nodd-auth-backdrop {
-  pointer-events: auto;
-  position: fixed;
-  inset: 0;
-  z-index: 2147483000;
+[data-nodd-root] .nodd-sidebar-auth {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: hsl(0 0% 0% / 0.35);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-}
-
-[data-nodd-root] .nodd-auth-gate--center {
-  position: static;
-  bottom: auto;
-  right: auto;
-  width: 340px;
-  max-width: 100%;
+  flex-direction: column;
+  gap: 12px;
+  flex-shrink: 0;
+  margin: 0 var(--nodd-sidebar-pad-x) 12px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
 [data-nodd-root] .nodd-auth-title {
@@ -1344,30 +1418,17 @@
   color: hsl(var(--nodd-foreground));
 }
 
-[data-nodd-root] .nodd-auth-input {
-  padding: 10px 14px;
-  border: 1px solid var(--nodd-glass-border);
-  border-radius: var(--nodd-radius-pill);
-  font-size: 13px;
-  font-family: inherit;
-  outline: none;
-  background: hsl(var(--nodd-foreground) / 0.03);
-  color: hsl(var(--nodd-foreground));
-  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
-}
-
-[data-nodd-root] .nodd-auth-input::placeholder {
+[data-nodd-root] .nodd-auth-description,
+[data-nodd-root] .nodd-auth-form .nodd-auth-description {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
   color: hsl(var(--nodd-muted-foreground));
 }
 
-[data-nodd-root] .nodd-auth-input:focus {
-  border-color: hsl(var(--nodd-ring) / 0.5);
-  background: hsl(var(--nodd-foreground) / 0.05);
-  box-shadow: 0 0 0 3px hsl(var(--nodd-ring) / 0.15);
-}
-
 [data-nodd-root] .nodd-auth-sent {
-  text-align: center;
+  text-align: left;
 }
 
 [data-nodd-root] .nodd-auth-sent p {
@@ -1379,7 +1440,7 @@
   margin: 8px 0 0;
   font-size: 12px;
   line-height: 1.4;
-  color: #e5484d;
+  color: hsl(var(--nodd-muted-foreground));
 }
 
 /* ==========================================================================

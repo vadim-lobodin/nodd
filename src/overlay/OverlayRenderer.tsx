@@ -2,13 +2,14 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMe
 import { createPortal } from 'react-dom';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { Chat, Layers, ChevronDown, ViewOff, Logout } from '@carbon/icons-react';
+import { Chat, Layers, ChevronDown, View, ViewOff, Logout } from '@carbon/icons-react';
 import { useNoddContext } from '../provider/NoddContext';
 import { PinMarker } from './components/PinMarker';
 import { CaptureLayer } from './components/CaptureLayer';
 import { ThreadPopover } from './components/ThreadPopover';
 import { Sidebar, type ThreadSummary } from './components/Sidebar';
 import { VariantsPanel } from './components/VariantsPanel';
+import { NoddButton, NoddInput } from './components/FormControls';
 import { DOMAnchor, type Pin } from './anchoring/DOMAnchor';
 import { startReanchorLoop } from './anchoring/reanchorLoop';
 import { getStateStackForElement, isStateMatch, stackToKey, keyToStack, activateState, describeAutoSegment } from '../provider/state';
@@ -36,6 +37,10 @@ export function OverlayRenderer() {
   // after reopening a resolved thread, which the store can't fold back into the
   // live snapshot on its own.
   const [refreshKey, setRefreshKey] = useState(0);
+  // Independent from NoddProvider's global `isVisible`: this only controls
+  // comment UI (pins, popovers, sidebar, capture) while leaving the toolbar
+  // and variants available.
+  const [commentsVisible, setCommentsVisible] = useState(true);
   const [isCapturing, setIsCapturing] = useState(false);
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -49,6 +54,7 @@ export function OverlayRenderer() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSending, setAuthSending] = useState(false);
   const [authName, setAuthName] = useState('');
+  const [authPanelOpen, setAuthPanelOpen] = useState(false);
   const [pendingPin, setPendingPin] = useState<{
     pin: Pin;
     x: number;
@@ -57,6 +63,38 @@ export function OverlayRenderer() {
     urlPath: string;
     prototypeId: string | null;
   } | null>(null);
+
+  const toggleCommentsPanel = useCallback(() => {
+    setCommentsVisible(true);
+    setVariantsOpen(false);
+    setIsCapturing(false);
+    setAuthPanelOpen(false);
+    setSidebarOpen(open => !open);
+  }, []);
+
+  const requestAddComment = useCallback(() => {
+    setCommentsVisible(true);
+    setVariantsOpen(false);
+    setSidebarOpen(true);
+    if (canComment) {
+      setAuthPanelOpen(false);
+      setIsCapturing(true);
+    } else {
+      setAuthPanelOpen(true);
+      setIsCapturing(false);
+    }
+  }, [canComment]);
+
+  // Hiding comments is intentionally transient. Close every comment surface,
+  // but keep the Nodd toolbar mounted so the viewer can restore them.
+  useEffect(() => {
+    if (commentsVisible) return;
+    setIsCapturing(false);
+    setSidebarOpen(false);
+    setOpenThreadId(null);
+    setPendingPin(null);
+    setAuthPanelOpen(false);
+  }, [commentsVisible]);
 
   // Resolve effective theme
   const effectiveTheme = theme === 'system' ? resolveSystemTheme() : theme;
@@ -162,12 +200,19 @@ export function OverlayRenderer() {
 
   // Resolve pins on route change, snapshot change, or DOM mutation
   useLayoutEffect(() => {
+    if (!commentsVisible) {
+      anchorCache.current = new Map();
+      pinPositionsRef.current = new Map();
+      setPinPositions(new Map());
+      setStateMatch(new Map());
+      return;
+    }
     resolveAllPins();
-  }, [resolveAllPins, urlPath, domVersion]);
+  }, [commentsVisible, resolveAllPins, urlPath, domVersion]);
 
   // Reanchor loop — uses imperative DOM updates for performance
   useEffect(() => {
-    if (!allThreads.length) return;
+    if (!commentsVisible || !allThreads.length) return;
     return startReanchorLoop({
       getPins: () =>
         allThreads
@@ -183,7 +228,7 @@ export function OverlayRenderer() {
       },
       onDOMMutation: () => setDomVersion(v => v + 1),
     });
-  }, [allThreads]);
+  }, [allThreads, commentsVisible]);
 
   // Keyboard shortcuts (Figma-style): "C" toggles comment mode, "M" toggles
   // the comments sidebar. Ignored while typing in a field or with a modifier
@@ -195,23 +240,26 @@ export function OverlayRenderer() {
       return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
     };
     const handler = (ev: KeyboardEvent) => {
-      if (ev.metaKey || ev.ctrlKey || ev.altKey || isEditable(ev.target)) return;
+      if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
       // matchesKey checks the physical key too, so shortcuts work on non-Latin
       // layouts (e.g. Russian, where C/V emit "с"/"м").
       if (ev.key === 'Escape') {
-        if (isCapturing) { ev.preventDefault(); setIsCapturing(false); }
+        if (authPanelOpen) {
+          ev.preventDefault();
+          setAuthPanelOpen(false);
+        } else if (isCapturing) {
+          ev.preventDefault();
+          setIsCapturing(false);
+        }
         return;
       }
-      // "C" works even when signed out — it surfaces the centered sign-in
-      // prompt (the overlay is otherwise hidden by default for guests).
+      if (isEditable(ev.target)) return;
+      // "C" is the explicit add-comment action. Read-only viewers are asked
+      // to sign in here, rather than when they merely open the comments list.
       if (matchesKey(ev, 'c')) {
         ev.preventDefault();
-        setIsCapturing(v => {
-          const next = !v;
-          setVariantsOpen(false);             // variants panel never coexists with comment mode
-          setSidebarOpen(next && canComment); // comment mode opens the comments panel alongside it (signed-in only)
-          return next;
-        });
+        if (isCapturing) setIsCapturing(false);
+        else requestAddComment();
         return;
       }
       // Variants are a client-side, per-viewer feature — independent of auth
@@ -219,26 +267,24 @@ export function OverlayRenderer() {
       if (matchesKey(ev, 'v') && !isCapturing) {
         ev.preventDefault();
         setVariantsOpen(v => {
-          if (!v) setSidebarOpen(false); // panels are mutually exclusive
+          if (!v) {
+            setSidebarOpen(false);
+            setAuthPanelOpen(false);
+          } // panels are mutually exclusive
           return !v;
         });
         return;
       }
-      // The comments sidebar is a signed-in convenience. Logged-out viewers
-      // read by clicking the visible pins (read-only popover); the universal
-      // entry to *commenting* is "C", which surfaces the sign-in prompt.
-      if (!user) return;
+      // The comments list is available to everyone. RLS determines whether a
+      // logged-out viewer receives public threads or an empty read-only list.
       if (matchesKey(ev, 'm') && !isCapturing) {
         ev.preventDefault();
-        setSidebarOpen(v => {
-          if (!v) setVariantsOpen(false); // panels are mutually exclusive
-          return !v;
-        });
+        toggleCommentsPanel();
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [user, isCapturing, canComment]);
+  }, [authPanelOpen, isCapturing, requestAddComment, toggleCommentsPanel]);
 
   // A visible pin is already on-screen and state-matched, so a direct click just
   // toggles its popover. Everything else (sidebar, inbox, deep link) goes
@@ -503,8 +549,16 @@ export function OverlayRenderer() {
     const email = authEmail.trim();
     const name = authName.trim();
     if (authSending) return;
-    if (!name || !email) {
-      setAuthError('Enter your name and email address.');
+    if (!name) {
+      setAuthError('Enter your name.');
+      return;
+    }
+    if (!email) {
+      setAuthError('Enter your email address.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setAuthError('Enter a valid email address.');
       return;
     }
     setAuthError(null);
@@ -536,7 +590,11 @@ export function OverlayRenderer() {
       className={`nodd-btn nodd-btn--sidebar nodd-btn--variants${variantsOpen ? ' nodd-btn--active' : ''}`}
       onClick={() => setVariantsOpen(o => {
         const next = !o;
-        if (next) { setIsCapturing(false); setSidebarOpen(false); } // panel is exclusive with comment mode + comments panel
+        if (next) {
+          setIsCapturing(false);
+          setSidebarOpen(false);
+          setAuthPanelOpen(false);
+        } // panel is exclusive with comment mode + comments panel
         return next;
       })}
       disabled={!hasVariants}
@@ -556,87 +614,106 @@ export function OverlayRenderer() {
     />
   );
 
-  // The overlay now renders for everyone (see subscribe effect): commenters get
-  // the full flow; logged-out / mid-onboarding viewers get read-only comments by
-  // clicking the visible pins. The sign-in / name prompt is a modal surfaced only
-  // when a read-only viewer tries to comment (presses "C" → isCapturing), not an
-  // early return that would hide pins and the variants panel.
-  const authGate = !canComment && isCapturing ? (
-    <div className="nodd-auth-backdrop" onClick={() => setIsCapturing(false)}>
-      <div className="nodd-auth-gate nodd-auth-gate--center" onClick={e => e.stopPropagation()}>
-        {!user ? (
+  // Read-only viewers see a compact explanation in the comments panel. The
+  // form expands in place only after they choose Log in (or press C).
+  const authSection = !canComment ? (
+    <section className="nodd-sidebar-auth" aria-label="Comment access">
+      {!user ? (
+        authPanelOpen ? (
           authSent ? (
-            <div className="nodd-auth-sent">
+            <div className="nodd-auth-sent" role="status">
               <p>Check your email for a sign-in link.</p>
-              <button className="nodd-btn" onClick={() => setAuthSent(false)}>Try again</button>
+              <NoddButton variant="secondary" onClick={() => setAuthSent(false)}>
+                Try again
+              </NoddButton>
             </div>
           ) : (
             <form
               className="nodd-auth-form"
+              noValidate
               onSubmit={e => { e.preventDefault(); void handleSignIn(); }}
             >
-              <h2 className="nodd-auth-title">Log in to leave comments</h2>
-              <input
-                className="nodd-auth-input"
+              <div>
+                <div className="nodd-auth-title">Log in</div>
+                <p className="nodd-auth-description">Enter your details to leave comments.</p>
+              </div>
+              <NoddInput
                 type="text"
                 name="name"
                 autoComplete="name"
                 placeholder="Your name"
                 value={authName}
                 onChange={e => { setAuthName(e.target.value); setAuthError(null); }}
+                aria-invalid={authError ? true : undefined}
+                aria-describedby={authError ? 'nodd-auth-error' : undefined}
                 autoFocus
-                required
               />
-              <input
-                className="nodd-auth-input"
+              <NoddInput
                 type="email"
                 name="email"
                 autoComplete="email"
                 placeholder="you@example.com"
                 value={authEmail}
                 onChange={e => { setAuthEmail(e.target.value); setAuthError(null); }}
-                required
+                aria-invalid={authError ? true : undefined}
+                aria-describedby={authError ? 'nodd-auth-error' : undefined}
               />
-              <button
-                className="nodd-btn nodd-btn--primary"
+              <NoddButton
                 type="submit"
+                fullWidth
                 disabled={authSending}
               >
                 {authSending ? 'Sending…' : 'Send magic link'}
-              </button>
-              {authError && <p className="nodd-auth-error" role="alert">{authError}</p>}
+              </NoddButton>
+              {authError ? (
+                <p id="nodd-auth-error" className="nodd-auth-error" role="alert">
+                  {authError}
+                </p>
+              ) : null}
             </form>
           )
-        ) : ctx.auth.needsDisplayName ? (
-          <div className="nodd-auth-form">
-            <h2 className="nodd-auth-title">Welcome! What should we call you?</h2>
-            <input
-              className="nodd-auth-input"
-              type="text"
-              placeholder="Your name"
-              value={authName}
-              onChange={e => setAuthName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSetName()}
-              autoFocus
-            />
-            <button className="nodd-btn nodd-btn--primary" onClick={handleSetName}>
-              Continue
-            </button>
-          </div>
         ) : (
-          <div className="nodd-auth-form">
-            <h2 className="nodd-auth-title">
-              {ctx.writeStatus === 'joining' ? 'Preparing comments…' : 'Couldn’t enable comments'}
-            </h2>
-            {ctx.writeStatus === 'error' && (
-              <button className="nodd-btn nodd-btn--primary" onClick={ctx.retryOnboarding}>
-                Try again
-              </button>
-            )}
+          <>
+            <div>
+              <div className="nodd-auth-title">Log in to leave comments</div>
+              <p className="nodd-auth-description">You can read existing comments without an account.</p>
+            </div>
+            <NoddButton
+              fullWidth
+              onClick={() => setAuthPanelOpen(true)}
+            >
+              Log in
+            </NoddButton>
+          </>
+        )
+      ) : ctx.auth.needsDisplayName ? (
+        <div className="nodd-auth-form">
+          <div className="nodd-auth-title">Welcome! What should we call you?</div>
+          <NoddInput
+            type="text"
+            placeholder="Your name"
+            value={authName}
+            onChange={e => setAuthName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSetName()}
+            autoFocus
+          />
+          <NoddButton fullWidth onClick={handleSetName}>
+            Continue
+          </NoddButton>
+        </div>
+      ) : (
+        <div className="nodd-auth-form">
+          <div className="nodd-auth-title">
+            {ctx.writeStatus === 'joining' ? 'Preparing comments…' : 'Couldn’t enable comments'}
           </div>
-        )}
-      </div>
-    </div>
+          {ctx.writeStatus === 'error' ? (
+            <NoddButton fullWidth onClick={ctx.retryOnboarding}>
+              Try again
+            </NoddButton>
+          ) : null}
+        </div>
+      )}
+    </section>
   ) : null;
 
   const openThread = openThreadId ? allThreads.find(t => t.id === openThreadId) : null;
@@ -648,21 +725,15 @@ export function OverlayRenderer() {
   return (
     <Tooltip.Provider delayDuration={400}>
       {/* Toolbar — always visible, with both entry points. Variants (disabled
-          when the page has none) toggles the variants panel. Comments enters
-          comment mode and opens the comments panel together; clicking again
-          (or Esc / "C") exits. */}
+          when the page has none) toggles the variants panel. Comments opens
+          the read-only-capable list; adding a comment is a separate action. */}
       <div className={`nodd-toolbar${panelOpen ? ' nodd-toolbar--shifted' : ''}`}>
         {variantsButton}
         <button
-          className={`nodd-btn nodd-btn--sidebar${isCapturing ? ' nodd-btn--active' : ''}`}
-          onClick={() => setIsCapturing(v => {
-            const next = !v;
-            setVariantsOpen(false);
-            setSidebarOpen(next && canComment); // signed-in commenters get the panel; guests get the auth gate
-            return next;
-          })}
-          aria-label={isCapturing ? 'Exit comment mode' : 'Comment'}
-          title={isCapturing ? 'Exit comment mode' : 'Comment'}
+          className={`nodd-btn nodd-btn--sidebar${sidebarOpen ? ' nodd-btn--active' : ''}`}
+          onClick={toggleCommentsPanel}
+          aria-label={sidebarOpen ? 'Close comments' : 'Open comments'}
+          title={sidebarOpen ? 'Close comments' : 'Open comments'}
         >
           <Chat size={20} />
         </button>
@@ -685,12 +756,20 @@ export function OverlayRenderer() {
               onCloseAutoFocus={e => e.preventDefault()}
             >
               <DropdownMenu.Item
+                className="nodd-menu-item"
+                onSelect={() => setCommentsVisible(visible => !visible)}
+              >
+                {commentsVisible ? <ViewOff size={16} /> : <View size={16} />}
+                <span>{commentsVisible ? 'Hide comments' : 'Show comments'}</span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator className="nodd-menu-separator" />
+              <DropdownMenu.Item
                 className="nodd-menu-item nodd-menu-item--stacked"
                 onSelect={() => hideForDuration(60 * 60 * 1000)}
               >
                 <ViewOff size={16} />
                 <span className="nodd-menu-item-text">
-                  Hide for 1 hour
+                  Hide Nodd for 1 hour
                   <span className="nodd-menu-item-hint">Press C or V to show</span>
                 </span>
               </DropdownMenu.Item>
@@ -712,7 +791,7 @@ export function OverlayRenderer() {
       </div>
 
       {/* Pins render into the separate absolute-positioned container so they scroll with the page */}
-      {pinContainer && createPortal(
+      {commentsVisible && pinContainer && createPortal(
         <>
           {allThreads.map((thread, i) => {
             const pos = pinPositions.get(thread.id);
@@ -740,7 +819,7 @@ export function OverlayRenderer() {
       )}
 
       {/* Capture layer — only commenters can place pins */}
-      {canComment && isCapturing && (
+      {commentsVisible && canComment && isCapturing && (
         <CaptureLayer
           onCreate={handleCaptureCreate}
           onCancel={() => setIsCapturing(false)}
@@ -751,7 +830,7 @@ export function OverlayRenderer() {
       {/* Thread popover — read-only (no composer/resolve/delete) for viewers
           who can't comment. Portals into the absolute pin container so it
           scrolls with the page, anchored to the pin. */}
-      {pinContainer && openThread && openPos && openThreadMatchesState && createPortal(
+      {commentsVisible && pinContainer && openThread && openPos && openThreadMatchesState && createPortal(
         <ThreadPopover
           threadId={openThread.id}
           anchorX={openPos.x}
@@ -770,7 +849,7 @@ export function OverlayRenderer() {
       )}
 
       {/* New thread popover — commenters only */}
-      {canComment && pinContainer && pendingPin && createPortal(
+      {commentsVisible && canComment && pinContainer && pendingPin && createPortal(
         <ThreadPopover
           threadId="new"
           anchorX={pendingPin.x}
@@ -790,13 +869,17 @@ export function OverlayRenderer() {
       {/* Sidebar — read-only when the viewer can't comment (no delete/sign-out) */}
       <Sidebar
         open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
+        onClose={() => {
+          setSidebarOpen(false);
+          setAuthPanelOpen(false);
+        }}
         threadsOpen={onPageSummaries}
         threadsOtherState={otherStateSummaries}
         onItemDelete={canComment ? handleDeleteThread : undefined}
         userName={user ? (user.displayName ?? user.email.split('@')[0]) : undefined}
         showResolved={showResolved}
         onToggleShowResolved={() => setShowResolved(v => !v)}
+        authSection={authSection}
         prototypeLabel={activePrototype ? (activePrototype.label ?? activePrototype.id) : undefined}
         fetchPrototypeThreads={activePrototype ? async ({ resolved }) => {
           if (!store || !activePrototype) return [];
@@ -826,10 +909,6 @@ export function OverlayRenderer() {
 
       {/* Variants panel — shares the right-side region with the sidebar */}
       {variantsPanel}
-
-      {/* Sign-in / name prompt — surfaced only when a read-only viewer tries to
-          comment (presses "C"). Renders over pins + panels, not instead of them. */}
-      {authGate}
 
       {/* Transient hint when a thread's captured state couldn't be reopened. */}
       {revealHint && (

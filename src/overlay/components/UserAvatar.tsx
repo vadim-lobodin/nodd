@@ -1,7 +1,7 @@
 import React from 'react';
 import BoringAvatar from 'boring-avatars';
 
-const PALETTE = ['#4f46e5', '#7c3aed', '#2563eb', '#0891b2', '#059669'];
+const PALETTE = ['#171717', '#404040', '#737373', '#a3a3a3', '#d4d4d4'];
 
 export type UserAvatarProps = {
   name: string;

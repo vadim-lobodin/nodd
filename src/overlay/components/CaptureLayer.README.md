@@ -6,7 +6,7 @@ Related: [OverlayRenderer](../README.md) · [DOM Anchoring](../anchoring/README.
 
 ## 1. Purpose
 
-When the user clicks "Add comment" in the toolbar, Nodd must capture the **next** click on the host page and convert it into a pin attached to the underlying host element. This is non-trivial because the Nodd overlay sits on top of the host DOM at `z-index: 2147483000` — naïvely calling `document.elementFromPoint(x, y)` returns the overlay itself, never the host element the user actually clicked.
+When a signed-in commenter presses `C`, Nodd must capture the **next** click on the host page and convert it into a pin attached to the underlying host element. Opening the comments list does not start capture mode, so read-only guests can browse it and use its inline login section without a modal. This is non-trivial because the Nodd overlay sits on top of the host DOM at `z-index: 2147483000` — naïvely calling `document.elementFromPoint(x, y)` returns the overlay itself, never the host element the user actually clicked.
 
 `CaptureLayer` solves this with a **single-frame visibility toggle + `requestAnimationFrame` + `elementFromPoint`** trick. It also owns the visual affordances of capture mode (crosshair cursor, faint backdrop) and its cancel paths (click on empty area, `Esc`).
 

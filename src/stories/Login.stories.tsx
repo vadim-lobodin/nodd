@@ -1,23 +1,52 @@
 import React, { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
+import { NoddButton, NoddInput } from '../overlay/components/FormControls';
 
 /**
- * Presentational reproduction of the auth gate rendered inline in
- * `OverlayRenderer` (`src/overlay/OverlayRenderer.tsx`, the `if (!user)` and
- * `needsDisplayName` branches). Kept in sync with that markup so the login UI
- * can be previewed and themed without booting a live Supabase session.
+ * Presentational reproduction of the inline sidebar auth section rendered by
+ * `OverlayRenderer`. Kept in sync so the login UI can be previewed and themed
+ * without booting a live Supabase session.
  */
 
-function SignInGate({ initialSent = false }: { initialSent?: boolean }) {
+function PanelShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="nodd-sidebar"
+      style={{ position: 'relative', inset: 'auto', height: 520, margin: 0 }}
+    >
+      <div className="nodd-sidebar-header">
+        <div className="nodd-sidebar-title">Comments</div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function SignInGate({
+  initialExpanded = false,
+  initialSent = false,
+}: {
+  initialExpanded?: boolean;
+  initialSent?: boolean;
+}) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(initialSent);
+  const [expanded, setExpanded] = useState(initialExpanded || initialSent);
   const [error, setError] = useState<string | null>(null);
 
   const handleSignIn = () => {
-    if (!name.trim() || !email.trim()) {
-      setError('Enter your name and email address.');
+    if (!name.trim()) {
+      setError('Enter your name.');
+      return;
+    }
+    if (!email.trim()) {
+      setError('Enter your email address.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError('Enter a valid email address.');
       return;
     }
     setError(null);
@@ -30,74 +59,96 @@ function SignInGate({ initialSent = false }: { initialSent?: boolean }) {
   };
 
   return (
-    <div className="nodd-auth-backdrop">
-      <div className="nodd-auth-gate nodd-auth-gate--center" onClick={e => e.stopPropagation()}>
-        {sent ? (
-          <div className="nodd-auth-sent">
-            <p>Check your email for a sign-in link.</p>
-            <button className="nodd-btn" onClick={() => setSent(false)}>Try again</button>
-          </div>
-        ) : (
-          <form
-            className="nodd-auth-form"
-            onSubmit={e => { e.preventDefault(); handleSignIn(); }}
-          >
-            <h2 className="nodd-auth-title">Log in to leave comments</h2>
-            <input
-              className="nodd-auth-input"
-              type="text"
-              name="name"
-              autoComplete="name"
-              placeholder="Your name"
-              value={name}
-              onChange={e => { setName(e.target.value); setError(null); }}
-              autoFocus
-              required
-            />
-            <input
-              className="nodd-auth-input"
-              type="email"
-              name="email"
-              autoComplete="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={e => { setEmail(e.target.value); setError(null); }}
-              required
-            />
-            <button
-              className="nodd-btn nodd-btn--primary"
-              type="submit"
-              disabled={sending}
+    <PanelShell>
+      <section className="nodd-sidebar-auth" aria-label="Comment access">
+        {expanded ? (
+          sent ? (
+            <div className="nodd-auth-sent" role="status">
+              <p>Check your email for a sign-in link.</p>
+              <NoddButton variant="secondary" onClick={() => setSent(false)}>
+                Try again
+              </NoddButton>
+            </div>
+          ) : (
+            <form
+              className="nodd-auth-form"
+              noValidate
+              onSubmit={e => { e.preventDefault(); handleSignIn(); }}
             >
-              {sending ? 'Sending…' : 'Send magic link'}
-            </button>
-            {error && <p className="nodd-auth-error" role="alert">{error}</p>}
-          </form>
+              <div>
+                <div className="nodd-auth-title">Log in</div>
+                <p className="nodd-auth-description">Enter your details to leave comments.</p>
+              </div>
+              <NoddInput
+                type="text"
+                name="name"
+                autoComplete="name"
+                placeholder="Your name"
+                value={name}
+                onChange={e => { setName(e.target.value); setError(null); }}
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? 'story-auth-error' : undefined}
+                autoFocus
+              />
+              <NoddInput
+                type="email"
+                name="email"
+                autoComplete="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={e => { setEmail(e.target.value); setError(null); }}
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? 'story-auth-error' : undefined}
+              />
+              <NoddButton
+                type="submit"
+                fullWidth
+                disabled={sending}
+              >
+                {sending ? 'Sending…' : 'Send magic link'}
+              </NoddButton>
+              {error ? (
+                <p id="story-auth-error" className="nodd-auth-error" role="alert">{error}</p>
+              ) : null}
+            </form>
+          )
+        ) : (
+          <>
+            <div>
+              <div className="nodd-auth-title">Log in to leave comments</div>
+              <p className="nodd-auth-description">You can read existing comments without an account.</p>
+            </div>
+            <NoddButton
+              fullWidth
+              onClick={() => setExpanded(true)}
+            >
+              Log in
+            </NoddButton>
+          </>
         )}
-      </div>
-    </div>
+      </section>
+    </PanelShell>
   );
 }
 
 function NamePrompt() {
   const [name, setName] = useState('');
   return (
-    <div className="nodd-auth-backdrop">
-      <div className="nodd-auth-gate nodd-auth-gate--center" onClick={e => e.stopPropagation()}>
+    <PanelShell>
+      <section className="nodd-sidebar-auth" aria-label="Comment access">
         <div className="nodd-auth-form">
-          <h2 className="nodd-auth-title">Welcome! What should we call you?</h2>
-          <input
-            className="nodd-auth-input"
+          <div className="nodd-auth-title">Welcome! What should we call you?</div>
+          <NoddInput
             type="text"
             placeholder="Your name"
             value={name}
             onChange={e => setName(e.target.value)}
             autoFocus
           />
-          <button className="nodd-btn nodd-btn--primary">Continue</button>
+          <NoddButton fullWidth>Continue</NoddButton>
         </div>
-      </div>
-    </div>
+      </section>
+    </PanelShell>
   );
 }
 
@@ -108,8 +159,13 @@ const meta: Meta<typeof SignInGate> = {
 export default meta;
 type Story = StoryObj<typeof SignInGate>;
 
-/** Name + email entry → "Send magic link". */
-export const SignIn: Story = {};
+/** Read-only viewer prompt before they choose to log in. */
+export const LogInPrompt: Story = {};
+
+/** Name + email entry, expanded in place after clicking "Log in". */
+export const SignIn: Story = {
+  args: { initialExpanded: true },
+};
 
 /** Confirmation state after the magic link has been sent. */
 export const MagicLinkSent: Story = {

@@ -74,6 +74,7 @@ src/overlay/
 │   ├── HoverHighlight.tsx     ← element outline rect, follows hovered pin
 │   ├── Sidebar.tsx            ← slide-out list of all threads on current page
 │   ├── ThreadPopover.tsx      ← anchored popover with comments + reply input
+│   ├── FormControls.tsx       ← flat grayscale input/button primitives
 │   └── MentionPicker.tsx      ← @-trigger autocomplete over project members
 ├── anchoring/
 │   ├── DOMAnchor.ts           ← create / resolve pins (3-tier strategy)
@@ -115,7 +116,7 @@ All overlay CSS rules live under `[data-nodd-root]` to prevent any leakage. Host
 
 ## 7. Capture-Mode Click Flow
 
-When the user clicks "Add comment" in the toolbar, the overlay enters *capture mode*. Implementing click-to-pin is non-trivial because the overlay sits on top of the host DOM — naïvely, `elementFromPoint` would always return the overlay itself.
+When a signed-in commenter presses `C`, the overlay enters *capture mode*. Opening the comments toolbar button itself is read-only-safe and only opens the list. Logged-out viewers see an inline login section in that list; pressing `C` expands the same form instead of opening a modal. Implementing click-to-pin is non-trivial because the overlay sits on top of the host DOM — naïvely, `elementFromPoint` would always return the overlay itself.
 
 Algorithm (in `CaptureLayer.tsx`):
 

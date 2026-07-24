@@ -43,7 +43,9 @@ Every component reads from `useNoddContext()` (store, auth, route) and emits via
 | `ThreadPopover.tsx` | Anchored popover with comments, reply box, resolve toggle | placement, draft text, submit state |
 | `MentionPicker.tsx` | Listbox triggered by `@` in a textarea | spec'd separately — see [MentionPicker.README.md](MentionPicker.README.md) |
 | `CaptureLayer.tsx` | Full-viewport click interceptor for capture mode | spec'd separately — see [CaptureLayer.README.md](CaptureLayer.README.md) |
-| `index.ts` | Barrel; re-exports the five components above | — |
+| `FormControls.tsx` | Stateless grayscale `NoddInput` and `NoddButton` primitives for Nodd-owned forms | native input/button state |
+| `VariantSelector.tsx` | Controlled grayscale radiogroup for selecting a prototype variant | selected option |
+| `index.ts` | Barrel; re-exports the overlay components and UI primitives above | — |
 
 ## 4. PinMarker
 
@@ -454,7 +456,7 @@ The most common end-to-end flows, listed for test design and engineering hand-of
 ### 10.1 Create a comment
 
 ```
-Toolbar "Add comment" click
+Signed-in viewer presses "C"
   → useCaptureMode().beginCapture()
   → CaptureLayer mounts; portal pointer-events:auto; crosshair cursor
 User clicks a paragraph

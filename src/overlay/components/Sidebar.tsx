@@ -38,6 +38,8 @@ export type SidebarProps = {
    */
   showResolved: boolean;
   onToggleShowResolved: () => void;
+  /** Optional inline login/onboarding UI for read-only viewers. */
+  authSection?: React.ReactNode;
   /**
    * Open a thread. Restores the captured interactive state and, for a thread on
    * another screen (urlPath set), routes there first. One handler for every
@@ -67,6 +69,7 @@ export function Sidebar({
   threadsOtherState = [],
   showResolved,
   onToggleShowResolved,
+  authSection,
   onItemOpen,
   onItemHover,
   onItemDelete,
@@ -138,6 +141,8 @@ export function Sidebar({
               </Dialog.Close>
             </div>
           </div>
+
+          {authSection}
 
           {scopeEnabled && (
             <div className="nodd-sidebar-scope" role="tablist" aria-label="Comment scope">

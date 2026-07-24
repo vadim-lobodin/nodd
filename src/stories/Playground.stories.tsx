@@ -17,7 +17,7 @@ import type {
  * Full commenting/panel UX playground. Wires the real `OverlayRenderer` against
  * an in-memory store + mock auth — no Supabase — so the whole flow can be
  * exercised: drop pins (press "C"), reply, resolve, delete, the sidebar,
- * the variants panel, the settings menu, hide-for-session, and every auth
+ * the variants panel, independent comment visibility, timed Nodd hiding, and every auth
  * state (logged-out / legacy name prompt / signed-in). Public-reads is
  * simulated: when logged out, comments are visible+read-only only if enabled.
  */
@@ -150,7 +150,7 @@ function PlaygroundPage() {
       <h1 data-pin-seed style={{ fontSize: 28, margin: '0 0 8px' }}>Checkout</h1>
       <p style={{ color: '#555', margin: '0 0 24px' }}>
         A live host page. Press <kbd>C</kbd> and click anywhere to leave a comment,
-        <kbd>V</kbd> for variants, <kbd>M</kbd> for the comments sidebar (signed in).
+        <kbd>V</kbd> for variants, <kbd>M</kbd> for the comments sidebar.
       </p>
 
       <Variant
@@ -164,7 +164,7 @@ function PlaygroundPage() {
             </section>
           ),
           Bold: (
-            <section style={{ padding: 32, background: 'linear-gradient(135deg,#6366f1,#0891b2)', color: '#fff', borderRadius: 12, marginBottom: 16 }}>
+            <section style={{ padding: 32, background: 'linear-gradient(135deg,#262626,#737373)', color: '#fff', borderRadius: 12, marginBottom: 16 }}>
               <h2 style={{ margin: 0 }}>Bold hero</h2>
               <p style={{ opacity: 0.9 }}>A punchy, colorful header.</p>
             </section>

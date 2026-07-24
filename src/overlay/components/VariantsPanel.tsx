@@ -3,6 +3,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import * as ScrollArea from '@radix-ui/react-scroll-area';
 import { Close } from '@carbon/icons-react';
 import type { VariantDefinition, VariantRegistry } from '../../provider/variants';
+import { VariantSelector } from './VariantSelector';
 
 export type VariantsPanelProps = {
   open: boolean;
@@ -100,27 +101,12 @@ function VariantsSection({
 }
 
 function VariantCard({ def, registry }: { def: VariantDefinition; registry: VariantRegistry }) {
-  const active = registry.getValue(def.key);
   return (
-    <div className="nodd-variant-card">
-      <div className="nodd-variant-label">{def.label ?? def.key}</div>
-      <div className="nodd-variant-options" role="radiogroup" aria-label={def.label ?? def.key}>
-        {def.options.map(option => {
-          const isActive = option === active;
-          return (
-            <button
-              key={option}
-              type="button"
-              role="radio"
-              aria-checked={isActive}
-              className={`nodd-sidebar-tab nodd-variant-option${isActive ? ' nodd-sidebar-tab--active' : ''}`}
-              onClick={() => registry.setSelection(def.key, option)}
-            >
-              {option}
-            </button>
-          );
-        })}
-      </div>
-    </div>
+    <VariantSelector
+      label={def.label ?? def.key}
+      options={def.options}
+      value={registry.getValue(def.key)}
+      onValueChange={value => registry.setSelection(def.key, value)}
+    />
   );
 }
