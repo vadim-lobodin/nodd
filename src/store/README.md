@@ -296,7 +296,7 @@ On factory init (before the first `subscribe(urlPath)`), the store issues:
 ```ts
 const { data } = await supabase
   .from('project_members')
-  .select('user_id, role, profile:profiles(id, email, display_name, avatar_url)')
+  .select('user_id, role, profile:profiles(id, display_name, avatar_url)')
   .eq('project_id', projectId);
 ```
 
@@ -306,7 +306,6 @@ Result is keyed into a `Map<UserId, MemberProfile>`:
 type MemberProfile = {
   userId: UserId;
   role: 'member' | 'admin';
-  email: string;
   displayName: string | null;
   avatarUrl: string | null;
 };

@@ -4,8 +4,8 @@ import { ThreadPopover, type ThreadComment } from '../overlay/components/ThreadP
 import type { MemberProfile } from '../store/types';
 
 const MEMBERS: MemberProfile[] = [
-  { userId: 'u1', displayName: 'Alice Chen', email: 'alice@example.com', avatarUrl: null, role: 'member' },
-  { userId: 'u2', displayName: 'Bob Smith', email: 'bob@example.com', avatarUrl: null, role: 'member' },
+  { userId: 'u1', displayName: 'Alice Chen', avatarUrl: null, role: 'member' },
+  { userId: 'u2', displayName: 'Bob Smith', avatarUrl: null, role: 'member' },
 ];
 
 const BASE_COMMENT: ThreadComment = {

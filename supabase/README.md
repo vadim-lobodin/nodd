@@ -50,7 +50,7 @@ This module exposes a **SQL surface**, not a JS/TS surface. Its consumers are:
 | `project_members` | table | Membership: which `auth.users` belong to which project, with role. |
 | `threads` | table | Top-level comment thread; carries the DOM-anchor `pin` jsonb and `url_path`. |
 | `comments` | table | Individual messages within a thread; `mentions[]` references `auth.users.id`. |
-| `profiles` | view | `id, email, display_name, avatar_url` extracted from `auth.users` for safe client read. |
+| `profiles` | view | `id, display_name, avatar_url` extracted from `auth.users` for safe client read. |
 | `is_project_member(project_id)` | function | `SECURITY DEFINER` helper used by every RLS policy. |
 | `threads_project_path_idx` | index | `(project_id, url_path) WHERE resolved = false` — drives the sub-200ms page query. |
 | `comments_thread_idx` | index | `(thread_id, created_at)` — orders messages within a thread. |
@@ -142,18 +142,31 @@ alter table comments enable row level security;
 ## 7. The `profiles` View
 
 ```sql
-create or replace view profiles as
+create view profiles
+with (security_barrier = true)
+as
 select
   u.id,
-  u.email,
   coalesce(u.raw_user_meta_data ->> 'display_name', split_part(u.email, '@', 1)) as display_name,
   u.raw_user_meta_data ->> 'avatar_url' as avatar_url
-from auth.users u;
+from auth.users u
+-- SECURITY-CRITICAL — see below.
+where u.id in (
+  select pm.user_id from project_members pm
+  where pm.project_id in (
+    select pm2.project_id from project_members pm2 where pm2.user_id = auth.uid()
+  )
+);
 
+revoke all on profiles from public;
 grant select on profiles to authenticated;
 ```
 
-The view never exposes `auth.users` columns the client shouldn't see (encrypted password, confirmation tokens). Access is gated to `authenticated` so the anon role cannot enumerate users.
+The view exposes no sensitive `auth.users` column — no encrypted password, no confirmation tokens, and (since migration `0007`) no email either. The address is read only to *derive* `display_name` when the user hasn't set one; that derivation happens server-side, so the full address never crosses the API boundary. Access is gated to `authenticated` so the anon role cannot enumerate users; logged-out readers of a public-reads project go through the `nodd_public_members` RPC instead (§`0004`).
+
+**The `where` clause is the only access control.** The view cannot be `security_invoker` — `authenticated` has no grant on `auth.users`, so an invoker-run view would return nothing. It therefore executes as its owner and bypasses RLS on `project_members`; the `auth.uid()` predicate is what scopes rows to the caller's co-members. Widening or removing it turns the view into a full dump of the project's users. `security_barrier` prevents the planner from pushing a user-supplied leaky function beneath that predicate to probe rows it filtered out.
+
+> Supabase's `auth_users_exposed` advisor fires on this view. It is a false positive: the lint matches any `public` view selecting from `auth.users` that is granted to `anon` or `authenticated`, without inspecting the predicate or the column list. Acknowledge it in the dashboard.
 
 ## 8. Membership Helper Function
 

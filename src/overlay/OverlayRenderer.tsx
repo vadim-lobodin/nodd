@@ -528,7 +528,7 @@ export function OverlayRenderer() {
       const stack = keyToStack(t.stateKey);
       const summary: ThreadSummary = {
         id: t.id,
-        authorName: member?.displayName ?? member?.email ?? 'Unknown',
+        authorName: member?.displayName ?? 'Unknown',
         authorAvatarUrl: member?.avatarUrl ?? undefined,
         snippet: t.comments[0]?.body.slice(0, 80) ?? '',
         createdAt: t.createdAt,
@@ -805,7 +805,7 @@ export function OverlayRenderer() {
                 x={pos.x}
                 y={pos.y}
                 state={openThreadId === thread.id ? 'active' : 'idle'}
-                authorName={author?.displayName ?? author?.email?.split('@')[0]}
+                authorName={author?.displayName ?? undefined}
                 authorAvatarUrl={author?.avatarUrl ?? undefined}
                 snippet={thread.comments[0]?.body.slice(0, 120)}
                 resolved={thread.resolved}
@@ -888,7 +888,7 @@ export function OverlayRenderer() {
             const member = members?.byId.get(t.createdBy);
             return {
               id: t.id,
-              authorName: member?.displayName ?? member?.email ?? 'Unknown',
+              authorName: member?.displayName ?? 'Unknown',
               authorAvatarUrl: member?.avatarUrl ?? undefined,
               snippet: t.comments[0]?.body.slice(0, 80) ?? '',
               createdAt: t.createdAt,

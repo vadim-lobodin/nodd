@@ -37,7 +37,7 @@ function createMemoryStore(): CommentStore {
   const listeners = new Map<string, Set<(s: PageSnapshot) => void>>();
 
   const members: MemberProfile[] = [
-    { userId: 'me', role: 'admin', email: 'you@example.com', displayName: 'You', avatarUrl: null },
+    { userId: 'me', role: 'admin', displayName: 'You', avatarUrl: null },
   ];
   const memberCache: MemberCache = {
     byId: new Map(members.map(m => [m.userId, m])),

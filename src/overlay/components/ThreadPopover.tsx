@@ -111,8 +111,7 @@ export function ThreadPopover({
   const memberMap = new Map(members.map(m => [m.userId, m]));
   const pickerMembers: ProjectMember[] = members.map(m => ({
     id: m.userId,
-    display_name: m.displayName ?? m.email,
-    email: m.email,
+    display_name: m.displayName ?? 'Unknown',
     avatar_url: m.avatarUrl ?? undefined,
   }));
 
@@ -268,11 +267,11 @@ export function ThreadPopover({
               <div key={comment.id} className={`nodd-comment${comment.pending ? ' nodd-comment--pending' : ''}${resolved ? ' nodd-comment--resolved' : ''}`}>
                 <div className="nodd-comment-header">
                   <UserAvatar
-                    name={member?.displayName ?? member?.email ?? '?'}
+                    name={member?.displayName ?? '?'}
                     avatarUrl={member?.avatarUrl}
                     size={24}
                   />
-                  <span className="nodd-comment-author">{member?.displayName ?? member?.email ?? 'Unknown'}</span>
+                  <span className="nodd-comment-author">{member?.displayName ?? 'Unknown'}</span>
                   {/* A resolved thread reads as "Resolved" on its root comment
                       in place of the timestamp; replies keep their own time. */}
                   <span className="nodd-comment-time">{resolved && ci === 0 ? 'Resolved' : formatTime(comment.createdAt)}</span>

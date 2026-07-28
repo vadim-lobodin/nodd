@@ -107,7 +107,7 @@ create table comments (
 create index comments_thread_idx on comments(thread_id, created_at);
 ```
 
-Users come from `auth.users` (managed by Supabase). A `profiles` view exposes `id, email, display_name, avatar_url`.
+Users come from `auth.users` (managed by Supabase). A `profiles` view exposes `id, display_name, avatar_url` — no email; see migration `0007`.
 
 ### Pin (DOM anchor) JSON
 Stored in `threads.pin` as a single jsonb blob:

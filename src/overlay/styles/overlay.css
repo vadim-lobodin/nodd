@@ -1001,12 +1001,6 @@
   color: hsl(var(--nodd-foreground));
 }
 
-[data-nodd-root] .nodd-mention-email {
-  font-size: 11px;
-  font-family: var(--nodd-font-mono);
-  color: hsl(var(--nodd-muted-foreground));
-}
-
 /* ==========================================================================
    Sidebar
    ========================================================================== */

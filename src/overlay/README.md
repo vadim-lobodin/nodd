@@ -199,7 +199,7 @@ Only one popover may be open at a time; opening a new one closes the previous.
 
 - Trigger: typing `@` at a word boundary.
 - Source: `CommentStore.getProjectMembers()` (cached for the session — see DESIGN_DOC §8.5).
-- Filtering: substring match on `display_name` and `email`, ranked by recent collaboration on the same project.
+- Filtering: substring match on `display_name` (the `profiles` view no longer exposes `email` — see migration `0007`), ranked by recent collaboration on the same project.
 - Keyboard: ↑/↓ to navigate, Enter/Tab to select, Esc to close.
 - On select: replaces `@partial` in textarea with `@displayName` (visual chip) and pushes the user's `id` to the comment's `mentions[]` array (per schema in DESIGN_DOC §3).
 - Positioned above or below the caret using a textarea-mirror DOM (or `getClientRects()` of a `Range` if a contenteditable is used).

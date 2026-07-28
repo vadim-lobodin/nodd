@@ -3,10 +3,10 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { MentionPicker, type ProjectMember } from '../overlay/components/MentionPicker';
 
 const MEMBERS: ProjectMember[] = [
-  { id: 'u1', display_name: 'Alice Chen', email: 'alice@example.com' },
-  { id: 'u2', display_name: 'Bob Smith', email: 'bob@example.com' },
-  { id: 'u3', display_name: 'Carol Jones', email: 'carol@example.com' },
-  { id: 'u4', display_name: 'Dan Lee', email: 'dan@example.com' },
+  { id: 'u1', display_name: 'Alice Chen' },
+  { id: 'u2', display_name: 'Bob Smith' },
+  { id: 'u3', display_name: 'Carol Jones' },
+  { id: 'u4', display_name: 'Dan Lee' },
 ];
 
 const CARET_RECT = new DOMRect(80, 120, 1, 16);

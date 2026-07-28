@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { UserAvatar } from './UserAvatar';
 
+// No email field: the `profiles` view stopped exposing addresses in migration
+// 0007. `display_name` already falls back to the address' local part
+// server-side, so name matching still catches an "@alice"-style query.
 export interface ProjectMember {
   id: string;
   display_name: string;
-  email: string;
   avatar_url?: string;
 }
 
@@ -66,10 +68,9 @@ function filterAndRank(
   const scored: Array<{ m: ProjectMember; bucket: number; recencyRank: number }> = [];
   for (const m of members) {
     const name = m.display_name.toLowerCase();
-    const email = m.email.toLowerCase();
     let bucket: number;
-    if (name.startsWith(q) || email.startsWith(q)) bucket = 0;
-    else if (name.includes(q) || email.includes(q)) bucket = 1;
+    if (name.startsWith(q)) bucket = 0;
+    else if (name.includes(q)) bucket = 1;
     else continue;
     scored.push({ m, bucket, recencyRank: recentIds.indexOf(m.id) });
   }
@@ -182,15 +183,12 @@ export function MentionPicker({
           onMouseEnter={() => setHighlightedIndex(i)}
         >
           <UserAvatar
-            name={member.display_name || member.email}
+            name={member.display_name}
             avatarUrl={member.avatar_url}
             size={24}
             className="nodd-mention-avatar"
           />
-          <span className="nodd-mention-name">{member.display_name || member.email}</span>
-          {member.display_name && (
-            <span className="nodd-mention-email">{member.email}</span>
-          )}
+          <span className="nodd-mention-name">{member.display_name}</span>
         </div>
       ))}
     </div>

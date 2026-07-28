@@ -384,11 +384,10 @@ This avoids contenteditable's accessibility and IME complexity (see MentionPicke
 
 ### 8.3 Ranking (summary)
 
-`MentionPicker` ranks `members` filtered by case-insensitive substring of `displayName` or `email`:
+`MentionPicker` ranks `members` filtered by case-insensitive substring of `displayName`. There is no email matching — migration `0007` dropped `email` from the `profiles` view, and `display_name` already falls back to the address' local part server-side, so an `@alice` query still resolves.
 
 ```
 score(m) = (startsWith(displayName, query) ? 100 : 0)
-        + (startsWith(email, query)        ? 50  : 0)
         + (recentCollaborators.indexOf(m.id) === -1 ? 0 : (10 - min(9, idx)))
         − (containsAt(displayName, query) ? 0 : 1)   // tiebreak against pure substring
 ```

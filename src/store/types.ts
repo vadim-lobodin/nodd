@@ -66,7 +66,6 @@ export type StoreError =
 export type MemberProfile = {
   userId: UserId;
   role: 'member' | 'admin';
-  email: string;
   displayName: string | null;
   avatarUrl: string | null;
 };
