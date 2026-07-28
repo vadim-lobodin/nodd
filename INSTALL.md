@@ -133,6 +133,23 @@ Common errors in the browser console:
 
 ---
 
+## Upgrading
+
+Migrations and the package are versioned together. **Bump the npm package first, then apply migrations** — a newer client works against an older schema, but an older client can break against a newer one.
+
+### 0.3.x → 0.4.0
+
+Requires `0007_profiles_drop_email.sql`, which removes the `email` column from the `profiles` view (see `supabase/README.md` §7 for why).
+
+Order matters here: `0.3.x` selects `profiles(id, email, …)`, so once `0007` is applied, an app still on `0.3.x` fails to load member names. It degrades rather than crashes — the store falls back to the `nodd_public_members` RPC — but on a project without `allow_public_reads`, every comment renders as "Unknown" and `@`-mentions stop resolving.
+
+```bash
+npm i @vadim_lobodin/nodd@^0.4.0
+npx nodd init --reconfigure     # or apply 0007 via the SQL editor
+```
+
+---
+
 ## Architecture quick reference
 
 | Concern | Answer |
