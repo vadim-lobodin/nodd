@@ -127,8 +127,10 @@ export class AuthClient {
     const profile = await fetchProfile(this.supabase, id);
     if (profile) {
       this._currentUser = {
+        // The view is email-free since 0007; the session is the only source
+        // for the caller's own address.
         id,
-        email: profile.email || email,
+        email,
         displayName: profile.display_name,
         avatarUrl: profile.avatar_url,
       };

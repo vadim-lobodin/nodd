@@ -1,8 +1,10 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 
+// Mirrors the `profiles` view. No `email`: 0007 dropped that column, and
+// selecting it answers 400 `column profiles.email does not exist`. The
+// caller's own address comes from the session instead.
 export type ProfileData = {
   id: string;
-  email: string;
   display_name: string | null;
   avatar_url: string | null;
 };
@@ -19,7 +21,7 @@ export async function fetchProfile(
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, email, display_name, avatar_url')
+    .select('id, display_name, avatar_url')
     .eq('id', userId)
     .single();
 
