@@ -3,6 +3,7 @@ import { DOMAnchor, type Pin } from '../anchoring/DOMAnchor';
 
 export type CaptureLayerProps = {
   onCreate: (pin: Pin) => void;
+  /** Esc — an explicit exit from comment mode. Not fired by unanchorable clicks. */
   onCancel: () => void;
   portalRootRef: React.RefObject<HTMLElement | null>;
 };
@@ -33,12 +34,27 @@ export function CaptureLayer({ onCreate, onCancel, portalRootRef }: CaptureLayer
       ev.stopImmediatePropagation();
 
       const { clientX, clientY } = ev;
-      // Hide both portals so elementFromPoint returns the host element under
-      // the cursor, never Nodd's own pins/popover in the pin container.
+      // Hit-test in two passes, hiding one portal at a time: the first sees Nodd's
+      // own pins (so a click on one reaches it), the second sees only the host
+      // element under the cursor.
       const pinContainer = document.querySelector<HTMLElement>('[data-nodd-pin-container]');
 
       try {
         portalRoot.style.visibility = 'hidden';
+        // First pass with the pin container still visible. Comment mode now
+        // outlives a single pin, so existing pins are under the crosshair for
+        // whole sessions — and this layer lives in the fixed root, which paints
+        // above the pin container, so those pins never receive the click. Forward
+        // it to the pin instead of stacking a second pin on top of the first.
+        await new Promise<void>(r => requestAnimationFrame(() => r()));
+        const pinEl = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[data-nodd-pin-id]');
+        if (pinEl) {
+          portalRoot.style.visibility = '';
+          activeRef.current = true;
+          pinEl.click();
+          return;
+        }
+
         if (pinContainer) pinContainer.style.visibility = 'hidden';
         await new Promise<void>(r => requestAnimationFrame(() => r()));
         const hit = document.elementFromPoint(clientX, clientY);
@@ -46,7 +62,10 @@ export function CaptureLayer({ onCreate, onCancel, portalRootRef }: CaptureLayer
         if (pinContainer) pinContainer.style.visibility = '';
 
         if (!hit || hit === document.body || hit === document.documentElement) {
-          onCancel();
+          // Nothing anchorable under the cursor. Comment mode is a mode now, not
+          // a one-shot, so an unusable click is a no-op — re-arm and wait for the
+          // next one rather than dropping the viewer out of it.
+          activeRef.current = true;
         } else {
           const pin = DOMAnchor.create(hit, clientX, clientY);
           onCreate(pin);
@@ -54,7 +73,7 @@ export function CaptureLayer({ onCreate, onCancel, portalRootRef }: CaptureLayer
       } catch {
         portalRoot.style.visibility = '';
         if (pinContainer) pinContainer.style.visibility = '';
-        onCancel();
+        activeRef.current = true;
       }
     },
     [onCreate, onCancel, portalRootRef],
@@ -82,7 +101,7 @@ export function CaptureLayer({ onCreate, onCancel, portalRootRef }: CaptureLayer
   return (
     <div className="nodd-capture-layer">
       <div className="nodd-capture-toast">
-        Click anywhere to leave a comment — press C or Esc to cancel
+        Click anywhere to leave a comment — press Esc or C to exit comment mode
       </div>
     </div>
   );

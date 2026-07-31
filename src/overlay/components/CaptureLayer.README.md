@@ -8,7 +8,9 @@ Related: [OverlayRenderer](../README.md) · [DOM Anchoring](../anchoring/README.
 
 When a signed-in commenter presses `C`, Nodd must capture the **next** click on the host page and convert it into a pin attached to the underlying host element. Opening the comments list does not start capture mode, so read-only guests can browse it and use its inline login section without a modal. This is non-trivial because the Nodd overlay sits on top of the host DOM at `z-index: 2147483000` — naïvely calling `document.elementFromPoint(x, y)` returns the overlay itself, never the host element the user actually clicked.
 
-`CaptureLayer` solves this with a **single-frame visibility toggle + `requestAnimationFrame` + `elementFromPoint`** trick. It also owns the visual affordances of capture mode (crosshair cursor, faint backdrop) and its cancel paths (click on empty area, `Esc`).
+`CaptureLayer` solves this with a **single-frame visibility toggle + `requestAnimationFrame` + `elementFromPoint`** trick. It also owns the visual affordances of capture mode (crosshair cursor, faint backdrop) and its exit path (`Esc` → `onCancel`).
+
+> **Superseded by the sticky comment mode.** Comment mode is now the resting state of an open comments panel (see the parent README §7), not a one-shot armed by `C`. Two rules below no longer hold: a click on an empty area is a **no-op that stays armed** rather than a cancel, and `onCancel` fires only for `Esc`. A click landing on an existing pin is forwarded to that pin (`pinEl.click()`) instead of placing a second one, which costs a first `elementFromPoint` pass with the pin container still visible.
 
 It exists as a dedicated sub-module because the algorithm is **non-obvious enough that a future engineer reading the parent `OverlayRenderer` spec will want a focused reference**, and because every step (visibility flag, rAF wait, hit-test, restore, pin construction) has subtle correctness and performance constraints that deserve dedicated documentation.
 
@@ -148,7 +150,7 @@ Per the design decision (§9 below), capture mode shows:
 
 1. **Crosshair cursor** on the entire viewport via `[data-nodd-capture] [data-nodd-root] { cursor: crosshair !important; }` and on the host body too via a top-level `cursor: crosshair` on `<html>` while capturing — this avoids the cursor flickering between crosshair and default as the user moves between overlay-capture-area and host elements.
 2. **Faint backdrop** (`background: rgba(0,0,0,0.04)`) on the portal root while `[data-nodd-capture]` is set — signals "you're commenting" without obscuring page content. Disabled when `prefers-reduced-motion: reduce` (no fade transition).
-3. **Top toast** with text `"Click anywhere to leave a comment — press Esc to cancel"` appearing in the top-center of the viewport. Anchored to the portal root, `pointer-events: none`. Slide-in 120 ms; respects reduced motion.
+3. **Top toast** with text `"Click anywhere to leave a comment — press Esc or C to exit comment mode"` appearing in the top-center of the viewport. Anchored to the portal root, `pointer-events: none`. Slide-in 120 ms; respects reduced motion.
 
 ## 8. File Layout
 

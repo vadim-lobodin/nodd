@@ -380,7 +380,8 @@ export default meta;
 
 type Story = StoryObj<PlaygroundArgs>;
 
-/** Signed in — full commenting: press C to drop a pin, reply, resolve, delete. */
+/** Signed in — full commenting: opening the comments panel arms comment mode
+ *  (C also works), then click to drop a pin, reply, resolve, delete. */
 export const SignedIn: Story = {};
 
 /** Logged out with public reads ON — pins are visible and read-only; C prompts sign-in. */

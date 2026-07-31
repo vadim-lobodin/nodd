@@ -1509,6 +1509,49 @@
   background: var(--nodd-glass-border);
 }
 
+/* Keyboard reference block. Presentational rows, so deliberately without the
+   hover/highlight affordances of .nodd-menu-item — nothing here is clickable. */
+[data-nodd-root] .nodd-menu-label {
+  padding: 4px 10px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: hsl(var(--nodd-muted-foreground));
+}
+
+[data-nodd-root] .nodd-menu-shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 10px 6px;
+}
+
+[data-nodd-root] .nodd-menu-shortcut {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 12px;
+  color: hsl(var(--nodd-muted-foreground));
+  user-select: none;
+}
+
+[data-nodd-root] .nodd-kbd {
+  flex: none;
+  min-width: 20px;
+  padding: 1px 5px;
+  border: 1px solid var(--nodd-glass-border);
+  border-radius: 4px;
+  background: hsl(var(--nodd-foreground) / 0.05);
+  color: hsl(var(--nodd-foreground) / 0.75);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+}
+
 /* ==========================================================================
    Radix overrides
    ========================================================================== */
