@@ -52,17 +52,23 @@ export function createCommentStore(deps: {
   // session. notifyAll() on success re-renders subscribed pages so names that
   // arrive after the first paint fill in.
   //
-  // The authenticated member query returns [] under RLS for a logged-out (or
-  // non-member) viewer, so we fall back to the email-free public-members RPC —
-  // which only yields rows when the project has `allow_public_reads` on. This
-  // also covers the window before auth resolves at store-creation time: the
-  // empty result triggers a retry, and once signed in the rich fetch wins.
-  async function loadMembersOnce(): Promise<MemberCache | null> {
-    try {
-      const cache = await fetchMembers(supabase, projectId);
-      if (cache.list.length > 0) return cache;
-    } catch {
-      // fall through to the public-members attempt
+  // Which of the two queries we may issue depends on the session, so the load
+  // is driven by auth transitions rather than started eagerly here — see
+  // loadMembersForSession() below.
+  async function loadMembersOnce(signedIn: boolean): Promise<MemberCache | null> {
+    // The `profiles` view is granted to `authenticated` only (0007 revoked the
+    // Supabase-default grant anon had inherited), so the embed query answers
+    // 401 `permission denied for view profiles` when it goes out as anon.
+    // Never send it without a session: a logged-out viewer's only path to
+    // author names is the email-free public-members RPC, which yields rows
+    // solely when the project has `allow_public_reads` on.
+    if (signedIn) {
+      try {
+        const cache = await fetchMembers(supabase, projectId);
+        if (cache.list.length > 0) return cache;
+      } catch {
+        // non-member of this project under RLS — try the public path instead
+      }
     }
     try {
       const pub = await fetchPublicMembers(supabase, projectId);
@@ -73,27 +79,76 @@ export function createCommentStore(deps: {
     return null;
   }
 
+  // A member load belongs to the auth state that started it. Each transition
+  // bumps the epoch so a retry chain queued for the previous state resolves
+  // into a no-op instead of racing the current one.
   let memberFetchAttempts = 0;
-  function loadMembers() {
-    loadMembersOnce()
+  let memberLoadEpoch = 0;
+  let memberRetryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function loadMembers(epoch: number, signedIn: boolean) {
+    loadMembersOnce(signedIn)
       .then(cache => {
-        if (disposed) return;
+        if (disposed || epoch !== memberLoadEpoch) return;
         if (cache) {
           memberCache = cache;
           notifyAll();
           return;
         }
-        if (memberFetchAttempts >= 3) return;
-        memberFetchAttempts++;
-        setTimeout(loadMembers, 1000 * memberFetchAttempts);
+        scheduleMemberRetry(epoch, signedIn);
       })
       .catch(() => {
-        if (disposed || memberFetchAttempts >= 3) return;
-        memberFetchAttempts++;
-        setTimeout(loadMembers, 1000 * memberFetchAttempts);
+        if (disposed || epoch !== memberLoadEpoch) return;
+        scheduleMemberRetry(epoch, signedIn);
       });
   }
-  loadMembers();
+
+  function scheduleMemberRetry(epoch: number, signedIn: boolean) {
+    if (memberFetchAttempts >= 3) return;
+    memberFetchAttempts++;
+    memberRetryTimer = setTimeout(
+      () => loadMembers(epoch, signedIn),
+      1000 * memberFetchAttempts,
+    );
+  }
+
+  function loadMembersForSession(signedIn: boolean) {
+    if (disposed) return;
+    memberLoadEpoch++;
+    memberFetchAttempts = 0;
+    if (memberRetryTimer) {
+      clearTimeout(memberRetryTimer);
+      memberRetryTimer = null;
+    }
+    // Keep any existing cache in place until the new load lands, so a sign-in
+    // or sign-out doesn't flash "Unknown" across every rendered comment.
+    loadMembers(memberLoadEpoch, signedIn);
+  }
+
+  // The first load rides on 'INITIAL_SESSION', which supabase-js emits exactly
+  // once per listener registration whether or not a session was persisted (the
+  // same guarantee AuthClient relies on instead of calling restoreSession()).
+  // That removes the pre-auth window in which the old eager call fired the
+  // authenticated query as anon. Later sign-in / sign-out re-runs the load so a
+  // viewer who authenticates after the retries ran still gets member names.
+  //
+  // 'SIGNED_IN' can repeat for the same identity (session recovery on tab
+  // focus), so a load is skipped when the viewer is unchanged and we already
+  // hold a cache. `undefined` means "never loaded", distinct from a logged-out
+  // `null`.
+  let memberLoadUserId: string | null | undefined = undefined;
+  const { data: { subscription: memberAuthSubscription } } =
+    supabase.auth.onAuthStateChange((event, session) => {
+      if (
+        event !== 'INITIAL_SESSION' &&
+        event !== 'SIGNED_IN' &&
+        event !== 'SIGNED_OUT'
+      ) return;
+      const userId = session?.user?.id ?? null;
+      if (userId === memberLoadUserId && memberCache) return;
+      memberLoadUserId = userId;
+      loadMembersForSession(userId !== null);
+    });
 
   function notify(urlPath: UrlPath) {
     const page = state.byPath.get(urlPath);
@@ -612,6 +667,11 @@ export function createCommentStore(deps: {
       if (disposed) return;
       disposed = true;
       realtime.dispose();
+      memberAuthSubscription.unsubscribe();
+      if (memberRetryTimer) {
+        clearTimeout(memberRetryTimer);
+        memberRetryTimer = null;
+      }
       listeners.clear();
       loadEpochByPath.clear();
       for (const timer of recentlyWrittenTimers.values()) clearTimeout(timer);

@@ -291,7 +291,7 @@ On `channel.subscribe` callbacks `CHANNEL_ERROR` or `TIMED_OUT`:
 Per DESIGN_DOC §8 point 5, comment rendering must **never** block on user lookups. The store therefore prefetches the `project_members ⨝ profiles` set once per `NoddProvider` mount and caches it in memory for the lifetime of the session.
 
 ### Fetch
-On factory init (before the first `subscribe(urlPath)`), the store issues:
+As soon as auth resolves (normally before the first `subscribe(urlPath)` completes — see *Session gating* below), the store issues:
 
 ```ts
 const { data } = await supabase
@@ -317,8 +317,13 @@ type MemberCache = {
 };
 ```
 
+### Session gating (required)
+The embed above reads the `profiles` view, which is granted to `authenticated` only — `0007_profiles_drop_email.sql` revoked the grant `anon` had inherited from Supabase's default privileges. Sent as `anon` it answers `401 permission denied for view profiles`, so the store issues it **only when a session exists**; a logged-out viewer goes straight to the email-free `nodd_public_members` RPC (0004), which returns rows only for `allow_public_reads` projects.
+
+The load is therefore driven by `supabase.auth.onAuthStateChange` rather than started eagerly at factory init: `INITIAL_SESSION` (emitted once per listener, session or not) triggers the first attempt, and `SIGNED_IN` / `SIGNED_OUT` re-run it — so a viewer who authenticates after the retry chain has given up still gets member names. Repeat `SIGNED_IN` events for the same user id are ignored while a cache is held. Each transition bumps an epoch so a retry queued for the previous auth state can't clobber the current one.
+
 ### Lifecycle
-- **Single fetch per session.** No periodic refresh — membership churn during a session is rare. A manual `refreshMembers()` is exposed for admin flows (out of v1 UI but trivial to wire later).
+- **One load per auth state**, not per session; see above. No periodic refresh — membership churn during a session is rare. A manual `refreshMembers()` is exposed for admin flows (out of v1 UI but trivial to wire later).
 - **Realtime patch.** The same `align:project:${projectId}` channel listens for `postgres_changes` on `project_members`; INSERT/DELETE patches `byId` and `list` in place, so a freshly invited collaborator can be `@`-mentioned without a reload.
 - **Profile edits** (display name, avatar) are picked up via a `profiles` table delta on the same channel, scoped to the union of member ids.
 - **Disposed** alongside the rest of the store on `dispose()`.

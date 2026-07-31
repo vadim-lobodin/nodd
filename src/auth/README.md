@@ -54,6 +54,8 @@ export class AuthClient {
 
 `CurrentUser` is **derived** from `auth.users` plus the `profiles` view (DESIGN_DOC §3). On every emission, `AuthClient` joins the Supabase-supplied `User` with cached profile fields (`display_name`, `avatar_url`) it fetched once from `profiles` at first sign-in. If the profile lookup has not yet completed, `displayName` and `avatarUrl` are `null` — the overlay falls back to email + colour-from-name avatar (architecture §8).
 
+`CurrentUser.email` comes from the **session**, never from the view: `0007_profiles_drop_email.sql` dropped `profiles.email`, so selecting it answers `400 column profiles.email does not exist` — which used to fail the whole lookup and leave `displayName`/`avatarUrl` permanently null. `fetchProfile` selects `id, display_name, avatar_url` only; don't add `email` back.
+
 ## 3. Supabase `signInWithOtp` Configuration
 
 Magic-link is configured with the redirect target and, for the combined onboarding form, display-name metadata.
