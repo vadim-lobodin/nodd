@@ -27,6 +27,16 @@ const API = 'https://api.supabase.com/v1';
 const PKG_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MIGRATIONS_DIR = join(PKG_DIR, 'supabase', 'migrations');
 
+// The bin is named `nodd` but the package is scoped, so a bare `npx nodd` only
+// resolves once the package is installed locally — before that npm looks for an
+// unscoped `nodd` on the registry and 404s. Every command we print for the user
+// to copy therefore spells out the full package name. Read it from our own
+// manifest rather than hardcoding, so a rename can't leave stale instructions.
+const PKG_NAME = JSON.parse(
+  readFileSync(join(PKG_DIR, 'package.json'), 'utf8')
+).name;
+const NPX = `npx ${PKG_NAME}`;
+
 // Discover migrations from the bundled directory rather than a hardcoded list,
 // so a new numbered file is picked up automatically. Lexicographic sort matches
 // the numeric prefix order (0001…0006…). Every migration is written to be
@@ -132,7 +142,7 @@ function getToken() {
   console.error('[nodd] Generate a Personal Access Token at:');
   console.error('[nodd]   https://supabase.com/dashboard/account/tokens');
   console.error('[nodd] Then re-run:');
-  console.error('[nodd]   SUPABASE_ACCESS_TOKEN=<your-token> npx nodd init');
+  console.error(`[nodd]   SUPABASE_ACCESS_TOKEN=<your-token> ${NPX} init`);
   process.exit(1);
 }
 
@@ -463,7 +473,7 @@ async function cmdInit(argv) {
           `  → This org has likely reached its free-project limit. Either:\n` +
           `      • delete an unused project in that org, or\n` +
           `      • re-run and pick a different org, or\n` +
-          `      • create the project manually and use "npx nodd init --reconfigure"\n` +
+          `      • create the project manually and use "${NPX} init --reconfigure"\n` +
           `        (see the "Manual setup" section of INSTALL.md).\n` +
           `  Original error: ${e.detail || e.message}`
       );
@@ -510,18 +520,18 @@ async function cmdInit(argv) {
   console.log('');
   log('next:');
   log('  1. start your dev server, sign in with the admin email');
-  log(`  2. after deploy: SUPABASE_ACCESS_TOKEN=… npx nodd add-origin https://yourapp.example.com`);
+  log(`  2. after deploy: SUPABASE_ACCESS_TOKEN=… ${NPX} add-origin https://yourapp.example.com`);
 }
 
 async function cmdAddOrigin(argv) {
   const { positional } = parseFlags(argv);
   const url = positional[0];
-  if (!url) fail('usage: nodd add-origin <url>');
+  if (!url) fail(`usage: ${NPX} add-origin <url>`);
 
   const cwd = process.cwd();
   const configPath = join(cwd, '.nodd', 'config.json');
   if (!existsSync(configPath)) {
-    fail('no .nodd/config.json — run `npx nodd init` first');
+    fail(`no .nodd/config.json — run \`${NPX} init\` first`);
   }
   const cfg = JSON.parse(readFileSync(configPath, 'utf8'));
   const token = getToken();
@@ -555,12 +565,12 @@ function printHelp() {
   console.log(`Nodd CLI
 
 Usage:
-  npx nodd init [--name <x>] [--region <x>] [--reconfigure] [--force]
+  ${NPX} init [--name <x>] [--region <x>] [--reconfigure] [--force]
       Create a Supabase project, apply migrations, configure auth,
       and write .env.local + .nodd/config.json.
       Name defaults to package.json#name; region is auto-picked from your timezone.
 
-  npx nodd add-origin <url>
+  ${NPX} add-origin <url>
       Set a concrete deploy URL as the auth site URL and allow redirects from
       every route under it. Wildcard preview URLs are allowlisted only.
 

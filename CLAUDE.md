@@ -83,4 +83,4 @@ Magic link via `supabase.auth.signInWithOtp({ email })` with `emailRedirectTo: w
 
 ### Build output
 
-`dist/` contains `index.js` (CJS), `index.mjs` (ESM), `index.d.ts`, sourcemaps, and `style.css` (copied from `src/overlay/styles/overlay.css` by the tsup `onSuccess` hook). Consumers import `nodd` and `nodd/style.css`.
+`dist/` contains `index.js` (CJS), `index.mjs` (ESM), `index.d.ts`, sourcemaps, and `style.css` (copied from `src/overlay/styles/overlay.css` by the tsup `onSuccess` hook). Consumers import `@vadim_lobodin/nodd` and `@vadim_lobodin/nodd/style.css`.

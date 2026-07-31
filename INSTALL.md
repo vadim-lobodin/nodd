@@ -43,8 +43,12 @@ The token is only used by the CLI — it is **not** stored on disk and not embed
 ## Step 3 — Run `init`
 
 ```bash
-npx nodd init
+npx @vadim_lobodin/nodd init
 ```
+
+> The package name is spelled out because the published package is scoped. Once
+> Step 1 has run, `node_modules/.bin/nodd` exists in your project and the
+> shorthand `npx nodd init` works too — but only from inside that project.
 
 This will:
 
@@ -93,13 +97,13 @@ import '@vadim_lobodin/nodd/style.css';
 After your first deploy, register the production origin:
 
 ```bash
-npx nodd add-origin https://myapp.vercel.app
+npx @vadim_lobodin/nodd add-origin https://myapp.vercel.app
 ```
 
 For preview deploys with rotating URLs (Vercel/Netlify), use a wildcard:
 
 ```bash
-npx nodd add-origin "https://*.vercel.app"
+npx @vadim_lobodin/nodd add-origin "https://*.vercel.app"
 ```
 
 The CLI sets a concrete deploy origin as Supabase's Site URL and allowlists every route under it. Wildcard preview origins are added to the allowlist without replacing the Site URL. Without this configuration, magic-link emails can redirect to `localhost` and fail.
@@ -127,9 +131,9 @@ Common errors in the browser console:
 
 | Situation | Command |
 |---|---|
-| Apply newer migrations / re-fix auth on existing project | `npx nodd init --reconfigure` |
-| Throw away config and create a fresh project | `npx nodd init --force` |
-| Add a new deploy origin | `npx nodd add-origin <url>` |
+| Apply newer migrations / re-fix auth on existing project | `npx @vadim_lobodin/nodd init --reconfigure` |
+| Throw away config and create a fresh project | `npx @vadim_lobodin/nodd init --force` |
+| Add a new deploy origin | `npx @vadim_lobodin/nodd add-origin <url>` |
 
 ---
 
@@ -145,7 +149,7 @@ Order matters here: `0.3.x` selects `profiles(id, email, …)`, so once `0007` i
 
 ```bash
 npm i @vadim_lobodin/nodd@^0.4.0
-npx nodd init --reconfigure     # or apply 0007 via the SQL editor
+npx @vadim_lobodin/nodd init --reconfigure     # or apply 0007 via the SQL editor
 ```
 
 ---
@@ -164,7 +168,7 @@ npx nodd init --reconfigure     # or apply 0007 via the SQL editor
 
 ## Manual setup (without the CLI)
 
-Use this only if you can't run `npx nodd init` (e.g. agent-restricted environment, shared Supabase project, or self-hosted Supabase).
+Use this only if you can't run `npx @vadim_lobodin/nodd init` (e.g. agent-restricted environment, shared Supabase project, or self-hosted Supabase).
 
 1. **Create a Supabase project** at <https://supabase.com/dashboard>. Copy the **Project URL** and **anon public key** from Settings → API.
 2. **Apply migrations** via the SQL editor: open `node_modules/@vadim_lobodin/nodd/supabase/migrations/` and run every numbered `.sql` file in ascending order.

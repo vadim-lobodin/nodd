@@ -15,7 +15,7 @@ The backend is **your own** [Supabase](https://supabase.com) project — there i
 npm install @vadim_lobodin/nodd
 ```
 
-`react` and `react-dom` (18+) are peer dependencies. See **[INSTALL.md](./INSTALL.md)** for the full 2-minute setup — the `npx nodd init` CLI provisions the Supabase project, applies migrations, and prints a ready-to-paste snippet.
+`react` and `react-dom` (18+) are peer dependencies. See **[INSTALL.md](./INSTALL.md)** for the full 2-minute setup — the `npx @vadim_lobodin/nodd init` CLI provisions the Supabase project, applies migrations, and prints a ready-to-paste snippet.
 
 ## Quick start
 
