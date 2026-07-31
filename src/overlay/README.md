@@ -116,7 +116,11 @@ All overlay CSS rules live under `[data-nodd-root]` to prevent any leakage. Host
 
 ## 7. Capture-Mode Click Flow
 
-When a signed-in commenter presses `C`, the overlay enters *capture mode*. Opening the comments toolbar button itself is read-only-safe and only opens the list. Logged-out viewers see an inline login section in that list; pressing `C` expands the same form instead of opening a modal. Implementing click-to-pin is non-trivial because the overlay sits on top of the host DOM — naïvely, `elementFromPoint` would always return the overlay itself.
+*Capture mode* (a.k.a. comment mode) is the **resting state of an open comments panel** for a signed-in commenter: `OverlayRenderer` arms it whenever the panel is open and the viewer can write, so leaving a comment never depends on discovering `C`. Pressing `C` also arms it directly. Logged-out viewers see an inline login section in the panel instead; pressing `C` expands the same form rather than opening a modal.
+
+The mode is **sticky** — placing a pin, navigating between screens, and clicking somewhere unanchorable all leave it armed. It ends only on an explicit exit (`Esc`, `C` again, closing the panel, or opening the variants panel), and an explicit exit is remembered for the rest of that panel session so the arming effect can't immediately undo it. Two surfaces temporarily suspend the layer without leaving the mode: an open thread popover and an open new-thread composer, both of which live in the pin container *below* the fixed root and would otherwise have their clicks and focus swallowed. The shortcuts are listed in the toolbar's More menu, since a sticky mode needs a documented way out.
+
+Implementing click-to-pin is non-trivial because the overlay sits on top of the host DOM — naïvely, `elementFromPoint` would always return the overlay itself.
 
 Algorithm (in `CaptureLayer.tsx`):
 
@@ -125,19 +129,24 @@ Algorithm (in `CaptureLayer.tsx`):
 2. Listen for the next `click` event on document.
 3. On click:
    a. Record (clientX, clientY).
-   b. Set `visibility: hidden` on the portal root.
+   b. Set `visibility: hidden` on the portal root (pin container still visible).
    c. await one animation frame (requestAnimationFrame).
-   d. const target = document.elementFromPoint(x, y);
-   e. Restore `visibility: visible`.
-   f. If target is null or === document.body:
-        emit pin.dismissed and exit capture mode.
+   d. If elementFromPoint(x, y) is inside an existing pin: restore, forward the
+      click to that pin (`pinEl.click()`), stay armed, done. The layer paints
+      above the pin container, so without this a sticky mode would make every
+      existing pin unclickable.
+   e. Otherwise hide the pin container too, await one more frame.
+   f. const target = document.elementFromPoint(x, y);
+   g. Restore `visibility: visible` on both.
+   h. If target is null or === document.body:
+        no-op — stay armed (nothing anchorable was clicked).
       else:
         const pin = DOMAnchor.create(target, x, y);
         emit pin.created(pin).
 4. preventDefault() + stopPropagation() so the host never receives the click.
 ```
 
-`visibility:hidden` (rather than `display:none`) is used because it preserves layout — the overlay does not flicker in/out and there is no reflow cost. One frame is sufficient; the browser's hit-testing uses the most recent paint.
+`visibility:hidden` (rather than `display:none`) is used because it preserves layout — the overlay does not flicker in/out and there is no reflow cost. One frame per pass is sufficient; the browser's hit-testing uses the most recent paint. A click that lands on a pin costs one frame, a click that places a pin two.
 
 The `await rAF` step is wrapped in a try/finally so visibility is always restored even if `DOMAnchor.create` throws.
 

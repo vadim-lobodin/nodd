@@ -21,6 +21,17 @@ function resolveSystemTheme(): 'light' | 'dark' {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
+// Keyboard reference for the toolbar's More menu. Comment mode is armed by
+// opening the comments panel and left with Esc or C, so the shortcuts need a
+// home the viewer can find at rest — not only the capture toast, which is
+// visible exactly when they already know where they are.
+const SHORTCUTS: ReadonlyArray<{ keys: string; label: string }> = [
+  { keys: 'C', label: 'Comment mode' },
+  { keys: 'Esc', label: 'Exit comment mode' },
+  { keys: 'M', label: 'Comments panel' },
+  { keys: 'V', label: 'Variants' },
+];
+
 export function OverlayRenderer() {
   const ctx = useNoddContext();
   const { user, urlPath, store, variants, signIn, signOut, hideForDuration, theme, pinContainer, activePrototype, navigate } = ctx;
@@ -64,12 +75,23 @@ export function OverlayRenderer() {
     prototypeId: string | null;
   } | null>(null);
 
+  // A deliberate exit from comment mode (Esc, or C again) has to stick for as
+  // long as the panel stays open — otherwise the arming effect below would put
+  // the viewer straight back into a mode they just dismissed. Cleared when the
+  // panel closes, so the next open arms again.
+  const captureDisarmedRef = useRef(false);
+
   const toggleCommentsPanel = useCallback(() => {
     setCommentsVisible(true);
     setVariantsOpen(false);
-    setIsCapturing(false);
     setAuthPanelOpen(false);
     setSidebarOpen(open => !open);
+  }, []);
+
+  /** Manual exit from comment mode — remembered for this panel session. */
+  const disarmCapture = useCallback(() => {
+    captureDisarmedRef.current = true;
+    setIsCapturing(false);
   }, []);
 
   const requestAddComment = useCallback(() => {
@@ -78,12 +100,32 @@ export function OverlayRenderer() {
     setSidebarOpen(true);
     if (canComment) {
       setAuthPanelOpen(false);
+      captureDisarmedRef.current = false;
       setIsCapturing(true);
     } else {
       setAuthPanelOpen(true);
       setIsCapturing(false);
     }
   }, [canComment]);
+
+  // For a signed-in viewer the comments panel and the ability to place a pin are
+  // one state: opening the panel arms comment mode, so leaving a comment no
+  // longer depends on discovering "C". This lives in an effect rather than in
+  // toggleCommentsPanel because every path that opens the panel should arm it
+  // (deep link, requestAddComment), and because write access can land *after*
+  // the panel is open — session restore and project join both resolve async.
+  useEffect(() => {
+    if (!sidebarOpen || !commentsVisible || !canComment) return;
+    if (captureDisarmedRef.current) return;
+    setIsCapturing(true);
+  }, [sidebarOpen, commentsVisible, canComment]);
+
+  // Closing the panel leaves comment mode and forgets a manual exit.
+  useEffect(() => {
+    if (sidebarOpen) return;
+    captureDisarmedRef.current = false;
+    setIsCapturing(false);
+  }, [sidebarOpen]);
 
   // Hiding comments is intentionally transient. Close every comment surface,
   // but keep the Nodd toolbar mounted so the viewer can restore them.
@@ -232,7 +274,9 @@ export function OverlayRenderer() {
 
   // Keyboard shortcuts (Figma-style): "C" toggles comment mode, "M" toggles
   // the comments sidebar. Ignored while typing in a field or with a modifier
-  // held, so host-app and browser shortcuts keep working.
+  // held, so host-app and browser shortcuts keep working. None of them are
+  // gated on comment mode being off — for a signed-in viewer with the panel
+  // open that is now the resting state, so gating would disable M and V.
   useEffect(() => {
     const isEditable = (el: EventTarget | null): boolean => {
       if (!(el instanceof HTMLElement)) return false;
@@ -247,9 +291,13 @@ export function OverlayRenderer() {
         if (authPanelOpen) {
           ev.preventDefault();
           setAuthPanelOpen(false);
+        } else if (pendingPin || openThreadId) {
+          // An open popover owns Esc (its own handler closes it), so the first
+          // press closes the thread and only the next one leaves comment mode.
+          // Placing or reading a pin doesn't end the session.
         } else if (isCapturing) {
           ev.preventDefault();
-          setIsCapturing(false);
+          disarmCapture();
         }
         return;
       }
@@ -258,13 +306,13 @@ export function OverlayRenderer() {
       // to sign in here, rather than when they merely open the comments list.
       if (matchesKey(ev, 'c')) {
         ev.preventDefault();
-        if (isCapturing) setIsCapturing(false);
+        if (isCapturing) disarmCapture();
         else requestAddComment();
         return;
       }
       // Variants are a client-side, per-viewer feature — independent of auth
       // and comment mode — so "V" works for signed-out viewers too.
-      if (matchesKey(ev, 'v') && !isCapturing) {
+      if (matchesKey(ev, 'v')) {
         ev.preventDefault();
         setVariantsOpen(v => {
           if (!v) {
@@ -277,14 +325,14 @@ export function OverlayRenderer() {
       }
       // The comments list is available to everyone. RLS determines whether a
       // logged-out viewer receives public threads or an empty read-only list.
-      if (matchesKey(ev, 'm') && !isCapturing) {
+      if (matchesKey(ev, 'm')) {
         ev.preventDefault();
         toggleCommentsPanel();
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [authPanelOpen, isCapturing, requestAddComment, toggleCommentsPanel]);
+  }, [authPanelOpen, isCapturing, pendingPin, openThreadId, disarmCapture, requestAddComment, toggleCommentsPanel]);
 
   // A visible pin is already on-screen and state-matched, so a direct click just
   // toggles its popover. Everything else (sidebar, inbox, deep link) goes
@@ -371,9 +419,12 @@ export function OverlayRenderer() {
   }, [openThreadId, stateMatch]);
 
   // Route changes invalidate all transient UI. In particular, never let a pin
-  // captured on route A be submitted under route B by a still-open composer.
+  // captured on route A be submitted under route B by a still-open composer —
+  // that invariant is about the captured pin, so it's `pendingPin` that must go.
+  // `isCapturing` deliberately survives: comment mode is bound to the panel, and
+  // silently dropping it on navigation would leave the viewer clicking at a
+  // screen that no longer takes pins.
   useEffect(() => {
-    setIsCapturing(false);
     setOpenThreadId(null);
     setPendingPin(null);
     setRevealHint(null);
@@ -409,9 +460,11 @@ export function OverlayRenderer() {
 
   const handlePinHover = useCallback((_threadId: string | null) => {}, []);
 
+  // Placing a pin does not leave comment mode — a reviewer usually has several
+  // things to say about a screen. The capture layer is suppressed while the
+  // composer is open (see its render site) and comes back when it closes.
   const handleCaptureCreate = useCallback(
     async (pin: Pin) => {
-      setIsCapturing(false);
       if (!store || !user) return;
       // Open a new thread popover at the pin location
       const result = DOMAnchor.resolve(pin);
@@ -770,9 +823,21 @@ export function OverlayRenderer() {
                 <ViewOff size={16} />
                 <span className="nodd-menu-item-text">
                   Hide Nodd for 1 hour
-                  <span className="nodd-menu-item-hint">Press C or V to show</span>
+                  <span className="nodd-menu-item-hint">Press C or V to bring it back</span>
                 </span>
               </DropdownMenu.Item>
+              <DropdownMenu.Separator className="nodd-menu-separator" />
+              {/* Reference rows, not actions — plain children so Radix keeps them
+                  out of the menu's keyboard navigation. */}
+              <DropdownMenu.Label className="nodd-menu-label">Shortcuts</DropdownMenu.Label>
+              <div className="nodd-menu-shortcuts">
+                {SHORTCUTS.map(({ keys, label }) => (
+                  <div className="nodd-menu-shortcut" key={keys}>
+                    <span>{label}</span>
+                    <kbd className="nodd-kbd">{keys}</kbd>
+                  </div>
+                ))}
+              </div>
               {user && (
                 <>
                   <DropdownMenu.Separator className="nodd-menu-separator" />
@@ -818,11 +883,16 @@ export function OverlayRenderer() {
         pinContainer,
       )}
 
-      {/* Capture layer — only commenters can place pins */}
-      {commentsVisible && canComment && isCapturing && (
+      {/* Capture layer — only commenters can place pins. Suspended while any
+          thread popover is open (new or existing): comment mode stays armed, but
+          the layer lives in the fixed root (z 2147483000) above the pin container
+          that holds the popovers, so leaving it mounted would swallow the clicks
+          and focus that the composer and reply box need. It comes back when the
+          popover closes, ready for the next pin. */}
+      {commentsVisible && canComment && isCapturing && !pendingPin && !openThreadId && (
         <CaptureLayer
           onCreate={handleCaptureCreate}
-          onCancel={() => setIsCapturing(false)}
+          onCancel={disarmCapture}
           portalRootRef={portalRootRef}
         />
       )}
