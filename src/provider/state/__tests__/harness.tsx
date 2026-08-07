@@ -21,12 +21,27 @@ Element.prototype.scrollIntoView ??= () => {};
 (Element.prototype as any).releasePointerCapture ??= () => {};
 (Element.prototype as any).setPointerCapture ??= () => {};
 
+// The previous test's root has to be unmounted, not just overwritten. Wiping
+// `document.body` leaves it mounted and holding torn-out nodes — including any
+// portal it put directly on the body, which is every open overlay here. The
+// next render flushes that stale root's pending work and React tries to remove
+// a child of a parent that no longer has one: "The node to be removed is not a
+// child of this node", raised from whichever test happened to render next.
+let currentRoot: ReturnType<typeof createRoot> | null = null;
+
 export function render(ui: React.ReactElement): void {
+  if (currentRoot) {
+    const stale = currentRoot;
+    act(() => stale.unmount());
+    currentRoot = null;
+  }
   document.body.innerHTML = '';
   const host = document.createElement('div');
   document.body.appendChild(host);
+  const root = createRoot(host);
+  currentRoot = root;
   act(() => {
-    createRoot(host).render(ui);
+    root.render(ui);
   });
 }
 

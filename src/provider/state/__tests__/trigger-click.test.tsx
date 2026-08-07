@@ -11,7 +11,7 @@ import { act } from 'react';
 import * as RadixMenu from '@radix-ui/react-dropdown-menu';
 import * as RadixDialog from '@radix-ui/react-dialog';
 import { render } from './harness';
-import { pressTrigger } from '../reopen';
+import { pressTrigger, findOpeningTrigger } from '../reopen';
 import { activateState } from '../activator';
 
 describe('pressTrigger vs. a bare click', () => {
@@ -109,5 +109,71 @@ describe('activateState reopens real overlays', () => {
     const result = await activateState(['auto:dialog:settings'], { timeoutMs: 1000 });
     expect(result.ok).toBe(true);
     expect(document.querySelector('[role=dialog]')).not.toBeNull();
+  });
+
+  // The shape design-system wrappers actually ship: the dialog is driven by an
+  // `open` prop and renders no trigger of its own, so nothing in the DOM links
+  // it to the button that opened it — unless that button says so. Two standard
+  // ARIA attributes are the whole contract, and consumers are told to add them
+  // (jcp-prototyping AGENTS.md, "Dialogs and overlays"), so it is tested here
+  // rather than left to the unit-level tier-2 case with a hand-written div.
+  it('records and reopens a controlled dialog whose opener is marked with ARIA', async () => {
+    function ControlledDialog() {
+      const [open, setOpen] = React.useState(true);
+      return (
+        <>
+          <button aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
+            Invite people
+          </button>
+          <RadixDialog.Root open={open} onOpenChange={setOpen}>
+            <RadixDialog.Portal>
+              <RadixDialog.Content>
+                <RadixDialog.Title>Invite people</RadixDialog.Title>
+              </RadixDialog.Content>
+            </RadixDialog.Portal>
+          </RadixDialog.Root>
+        </>
+      );
+    }
+    render(<ControlledDialog />);
+
+    // Capture time: the state is open, so the opener is discoverable.
+    const segment = 'auto:dialog:invite-people';
+    const recorded = findOpeningTrigger(segment);
+    expect(recorded?.textContent).toBe('Invite people');
+
+    // Close it the way a viewer would, then reveal the comment later.
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(document.querySelector('[role=dialog]')).toBeNull();
+
+    const result = await activateState([segment], {
+      timeoutMs: 1000,
+      recordedTrigger: () => recorded,
+    });
+    expect(result.ok).toBe(true);
+    expect(document.querySelector('[role=dialog]')).not.toBeNull();
+  });
+
+  it('cannot reopen the same dialog when the opener carries no ARIA', async () => {
+    function BareDialog() {
+      const [open, setOpen] = React.useState(true);
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>Invite people</button>
+          <RadixDialog.Root open={open} onOpenChange={setOpen}>
+            <RadixDialog.Portal>
+              <RadixDialog.Content>
+                <RadixDialog.Title>Invite people</RadixDialog.Title>
+              </RadixDialog.Content>
+            </RadixDialog.Portal>
+          </RadixDialog.Root>
+        </>
+      );
+    }
+    render(<BareDialog />);
+    // Nothing to record — which is what the composer warns the author about.
+    expect(findOpeningTrigger('auto:dialog:invite-people')).toBeNull();
   });
 });
