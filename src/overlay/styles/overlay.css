@@ -240,6 +240,33 @@
   opacity: 0.6;
 }
 
+/* ==========================================================================
+   Reveal highlight — rings the control that opens an interactive state Nodd
+   couldn't reopen on the viewer's behalf. Purely indicative: never intercepts
+   the click it is asking for.
+   ========================================================================== */
+[data-nodd-pin-container] .nodd-reveal-highlight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  border-radius: 6px;
+  box-shadow:
+    0 0 0 2px hsl(var(--nodd-pin, 138 61% 49%)),
+    0 0 0 6px hsl(var(--nodd-pin, 138 61% 49%) / 0.25);
+  animation: nodd-reveal-pulse 1400ms ease-out 2;
+}
+
+@keyframes nodd-reveal-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
 [data-nodd-pin-container] .nodd-pin--unread::after {
   content: '';
   position: absolute;
@@ -892,6 +919,37 @@
   background: hsl(var(--nodd-primary) / 0.1);
   padding: 1px 6px;
   border-radius: var(--nodd-radius-sm);
+}
+
+/* ---------- Composer notice (detected scope / won't be reopenable) ---------- */
+[data-nodd-root] .nodd-popover-notice {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 12px 12px 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: hsl(var(--nodd-foreground) / 0.8);
+  background: hsl(var(--nodd-foreground) / 0.06);
+  border-left: 2px solid hsl(var(--nodd-pin));
+  border-radius: var(--nodd-radius-sm);
+}
+
+[data-nodd-root] .nodd-popover-notice-action {
+  flex: none;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: hsl(var(--nodd-foreground) / 0.6);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+[data-nodd-root] .nodd-popover-notice-action:hover {
+  color: hsl(var(--nodd-foreground));
 }
 
 /* ---------- Reply error ---------- */

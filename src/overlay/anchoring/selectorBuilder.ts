@@ -1,6 +1,18 @@
 const MAX_WALK_DEPTH = 8;
 const HASH_LIKE_REGEX = /^[a-z0-9_-]{6,}$/;
 
+/**
+ * `CSS.escape` is missing in older WebViews and in DOM implementations that
+ * skip the CSSOM. Calling it unguarded made `DOMAnchor.create` throw outright,
+ * which loses the pin rather than degrading — so fall back to escaping every
+ * character CSS treats as special.
+ */
+function escapeIdent(value: string): string {
+  return typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+    ? CSS.escape(value)
+    : value.replace(/[^a-zA-Z0-9_-]/g, c => `\\${c}`);
+}
+
 function hasVowels(s: string): boolean {
   return /[aeiouy]/i.test(s);
 }
@@ -20,8 +32,8 @@ function getSegment(el: Element): string {
 
   // Priority 3: unique id
   const id = el.id;
-  if (id && document.querySelectorAll(`#${CSS.escape(id)}`).length === 1) {
-    return `#${CSS.escape(id)}`;
+  if (id && document.querySelectorAll(`#${escapeIdent(id)}`).length === 1) {
+    return `#${escapeIdent(id)}`;
   }
 
   // Priority 4: role
@@ -31,7 +43,7 @@ function getSegment(el: Element): string {
   const tag = el.tagName.toLowerCase();
   const classes = [...el.classList]
     .filter(c => !isHashLikeClass(c))
-    .map(c => `.${CSS.escape(c)}`)
+    .map(c => `.${escapeIdent(c)}`)
     .join('');
 
   const parent = el.parentElement;
@@ -53,6 +65,12 @@ function getSegment(el: Element): string {
 }
 
 export function buildSelector(target: Element): string {
+  // The page itself is a legitimate anchor for a comment left on empty space.
+  // The walk below deliberately stops *before* these, so without this it would
+  // return an empty selector and the pin could never resolve again.
+  if (target === document.body) return 'body';
+  if (target === document.documentElement) return 'html';
+
   const segments: string[] = [];
   let el: Element | null = target;
   let depth = 0;

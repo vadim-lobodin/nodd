@@ -1,11 +1,11 @@
+import { DOMAnchor, type Pin } from './DOMAnchor';
+
 export type ReanchorOpts = {
-  getPins: () => Array<{ id: string; pin: { offsetX: number; offsetY: number } }>;
+  getPins: () => Array<{ id: string; pin: Pin }>;
   getElement: (pinId: string) => Element | null;
   setPinPosition: (pinId: string, x: number, y: number) => void;
   onDOMMutation?: () => void;
 };
-
-const PIN_RADIUS = 14;
 
 function isInsideAlign(node: Node | null): boolean {
   let cur: Node | null = node;
@@ -31,11 +31,14 @@ export function startReanchorLoop(opts: ReanchorOpts): () => void {
       for (const { id, pin } of pins) {
         const el = opts.getElement(id);
         if (!el || !el.isConnected) continue;
-        const r = el.getBoundingClientRect();
-        // Page-absolute coords — pins are in a position:absolute container
-        // so they scroll with the document natively, no JS scroll handler needed
-        const x = r.left + window.scrollX + pin.offsetX * r.width - PIN_RADIUS;
-        const y = r.top + window.scrollY + pin.offsetY * r.height - PIN_RADIUS;
+        // Page-absolute coords — pins live in a position:absolute container, so
+        // they scroll with the document natively, no JS scroll handler needed.
+        //
+        // Delegated rather than recomputed inline: this loop used to carry its
+        // own copy of the arithmetic, which silently ignored page anchors and
+        // flung those pins to the document origin on the next resize tick. One
+        // definition, one behaviour.
+        const { x, y } = DOMAnchor.reposition(pin, el);
         opts.setPinPosition(id, x, y);
       }
     });

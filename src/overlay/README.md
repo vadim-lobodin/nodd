@@ -68,6 +68,7 @@ src/overlay/
 ├── README.md                  ← this document
 ├── index.ts                   ← exports OverlayRenderer, useCaptureMode
 ├── OverlayRenderer.tsx        ← top-level portal component, orchestrator
+├── stateTriggers.ts           ← record/re-resolve how each interactive state reopens
 ├── components/
 │   ├── CaptureLayer.tsx       ← full-viewport click interceptor (capture mode)
 │   ├── PinMarker.tsx          ← single numbered pin; click → opens ThreadPopover
@@ -114,6 +115,8 @@ The portal root is the only element Nodd ever appends to `document.body`:
 
 All overlay CSS rules live under `[data-nodd-root]` to prevent any leakage. Host page styles cannot affect Nodd because Nodd uses fixed positioning and explicit values for every property that could inherit.
 
+**Focus isolation.** Nodd's UI sits outside the host's focus model, and modal overlays enforce theirs aggressively: a focus trap (Radix `FocusScope`) listens for `focusin`/`focusout` on the document and pulls focus back into itself whenever it lands anywhere else. A composer rendered over an open menu therefore took focus for one frame and immediately lost it. `OverlayRenderer` shields both events whenever the `target` or `relatedTarget` is inside a Nodd container, so the host never learns that focus moved into ours. *Where* it stops them matters: on `document` in the **bubble** phase, by which point every element-level listener has already run — React's delegated `onFocus`/`onBlur` on the root and portal containers, Radix primitives inside Nodd, and host `onBlur` validation on the field being left. Only document-level listeners are cut off, and a focus trap is exactly that; stopping earlier (at `window`, or in the capture phase) silences React's focus events along with the trap. Match on `relatedTarget` for `focusout` — its `target` is the *host* element losing focus.
+
 ## 7. Capture-Mode Click Flow
 
 *Capture mode* (a.k.a. comment mode) is the **resting state of an open comments panel** for a signed-in commenter: `OverlayRenderer` arms it whenever the panel is open and the viewer can write, so leaving a comment never depends on discovering `C`. Pressing `C` also arms it directly. Logged-out viewers see an inline login section in the panel instead; pressing `C` expands the same form rather than opening a modal.
@@ -122,11 +125,15 @@ The mode is **sticky** — placing a pin, navigating between screens, and clicki
 
 Implementing click-to-pin is non-trivial because the overlay sits on top of the host DOM — naïvely, `elementFromPoint` would always return the overlay itself.
 
+**The host must be inert for the whole press, not just the click.** A modal overlay decides it has been dismissed on an outside **`pointerdown`** — Radix registers `document.addEventListener('pointerdown', …)` for this. The capture layer covers the viewport, so every press aimed at an element *inside* a dialog is, as far as that dialog can tell, a press outside it. Intercepting only `click` therefore closed the dialog on the way to placing the pin, unmounting the very anchor being captured.
+
+So `CaptureLayer` swallows `pointerdown`, `mousedown`, `pointerup`, `mouseup`, `contextmenu` and `dblclick` (`preventDefault` + `stopImmediatePropagation`) for anything that isn't Nodd chrome, and acts only on the `click`. These are bound on **`window` in the capture phase**: that runs ahead of any `document` listener no matter who registered first, which matters because the overlay is always mounted before comment mode starts.
+
 Algorithm (in `CaptureLayer.tsx`):
 
 ```
 1. Set pointer-events:auto on the portal root and show a crosshair cursor.
-2. Listen for the next `click` event on document.
+2. Swallow every press event on the host; listen for the next `click`.
 3. On click:
    a. Record (clientX, clientY).
    b. Set `visibility: hidden` on the portal root (pin container still visible).
@@ -138,9 +145,9 @@ Algorithm (in `CaptureLayer.tsx`):
    e. Otherwise hide the pin container too, await one more frame.
    f. const target = document.elementFromPoint(x, y);
    g. Restore `visibility: visible` on both.
-   h. If target is null or === document.body:
-        no-op — stay armed (nothing anchorable was clicked).
-      else:
+   h. If target is null (nothing was hit at all):
+        no-op — stay armed.
+      else:  // includes <body>/<html> — see anchoring README §2b
         const pin = DOMAnchor.create(target, x, y);
         emit pin.created(pin).
 4. preventDefault() + stopPropagation() so the host never receives the click.

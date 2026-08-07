@@ -5,12 +5,34 @@ export type UserId = string;
 export type UrlPath = string;
 export type TempId = string;
 
+export type ElementRef = {
+  selector: string;
+  fingerprint: string;
+  /** Ancestor fingerprints, nearest first — tells identical controls apart. */
+  context?: string[];
+  /** Lower-cased tag name, for re-searching when the selector drifts. */
+  tag?: string;
+};
+
 export type Pin = {
   selector: string;
   offsetX: number;
   offsetY: number;
   fingerprint: string;
   viewportWidth: number;
+  /**
+   * Per interactive-state segment, the control that opened it — recorded when
+   * the comment was written, so reopening the thread can click that exact
+   * control. Optional: pins written before this shipped simply don't have it.
+   * See `src/overlay/anchoring/DOMAnchor.ts`.
+   */
+  stateTriggers?: Record<string, ElementRef>;
+  /**
+   * Absolute document coordinates for a comment left on empty space, where
+   * there is no element to anchor to. Supersedes `offsetX`/`offsetY` when set.
+   * See `src/overlay/anchoring/DOMAnchor.ts`.
+   */
+  page?: { x: number; y: number };
 };
 
 export type Comment = {

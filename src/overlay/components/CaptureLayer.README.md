@@ -10,7 +10,9 @@ When a signed-in commenter presses `C`, Nodd must capture the **next** click on 
 
 `CaptureLayer` solves this with a **single-frame visibility toggle + `requestAnimationFrame` + `elementFromPoint`** trick. It also owns the visual affordances of capture mode (crosshair cursor, faint backdrop) and its exit path (`Esc` → `onCancel`).
 
-> **Superseded by the sticky comment mode.** Comment mode is now the resting state of an open comments panel (see the parent README §7), not a one-shot armed by `C`. Two rules below no longer hold: a click on an empty area is a **no-op that stays armed** rather than a cancel, and `onCancel` fires only for `Esc`. A click landing on an existing pin is forwarded to that pin (`pinEl.click()`) instead of placing a second one, which costs a first `elementFromPoint` pass with the pin container still visible.
+> **Superseded by the sticky comment mode.** Comment mode is now the resting state of an open comments panel (see the parent README §7), not a one-shot armed by `C`. Two rules below no longer hold: an unusable click is a **no-op that stays armed** rather than a cancel, and `onCancel` fires only for `Esc`. A click landing on an existing pin is forwarded to that pin (`pinEl.click()`) instead of placing a second one, which costs a first `elementFromPoint` pass with the pin container still visible.
+>
+> A click on *empty page space* is not even unusable any more: it hit-tests to `<body>` and anchors to the page — see [anchoring README §2b](../anchoring/README.md). Only a hit-test that finds nothing at all is a no-op.
 
 It exists as a dedicated sub-module because the algorithm is **non-obvious enough that a future engineer reading the parent `OverlayRenderer` spec will want a focused reference**, and because every step (visibility flag, rAF wait, hit-test, restore, pin construction) has subtle correctness and performance constraints that deserve dedicated documentation.
 

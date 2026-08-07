@@ -12,7 +12,8 @@ import { VariantsPanel } from './components/VariantsPanel';
 import { NoddButton, NoddInput } from './components/FormControls';
 import { DOMAnchor, type Pin } from './anchoring/DOMAnchor';
 import { startReanchorLoop } from './anchoring/reanchorLoop';
-import { getStateStackForElement, isStateMatch, stackToKey, keyToStack, activateState, describeAutoSegment } from '../provider/state';
+import { getStateStackForElement, isStateMatch, stackToKey, keyToStack, activateState, describeSegment, isFloatSegment } from '../provider/state';
+import { captureStateTriggers, makeTriggerResolver } from './stateTriggers';
 import { matchesKey } from '../provider/keys';
 import type { Thread, PageSnapshot } from '../store/types';
 
@@ -31,6 +32,36 @@ const SHORTCUTS: ReadonlyArray<{ keys: string; label: string }> = [
   { keys: 'M', label: 'Comments panel' },
   { keys: 'V', label: 'Variants' },
 ];
+
+/**
+ * How long reveal keeps re-trying the anchor after its state has mounted.
+ * A state element appears as soon as it mounts, but its contents can lag by a
+ * few frames — enter animations, lazily-rendered children, a virtualised list
+ * filling in. One frame of grace turned that into a spurious "the anchor isn't
+ * on this screen"; a few hundred milliseconds covers it and still feels instant.
+ */
+const ANCHOR_SETTLE_MS = 400;
+
+/**
+ * Resolve `pin` to an element that is genuinely in scope, retrying each frame
+ * until the budget runs out. Returns on the first success, so the common case
+ * (already settled) costs one attempt.
+ */
+async function resolveWhenSettled(
+  pin: Pin,
+  stateKey: string,
+  budgetMs: number,
+): Promise<{ element: Element; position: { x: number; y: number } } | null> {
+  const deadline = Date.now() + budgetMs;
+  for (;;) {
+    const result = DOMAnchor.resolve(pin);
+    if (result && isStateMatch(stateKey, getStateStackForElement(result.element))) {
+      return { element: result.element, position: DOMAnchor.reposition(pin, result.element) };
+    }
+    if (Date.now() >= deadline) return null;
+    await new Promise<void>(r => requestAnimationFrame(() => r()));
+  }
+}
 
 export function OverlayRenderer() {
   const ctx = useNoddContext();
@@ -73,7 +104,23 @@ export function OverlayRenderer() {
     stateKey: string;
     urlPath: string;
     prototypeId: string | null;
+    /** Set when the state this pin sits in has no known way back — see below. */
+    reopenWarning: string | null;
+    /**
+     * Present when the scope came from the structural signal rather than ARIA
+     * or host markup. That signal reads layout, so the author gets to see what
+     * it concluded and drop it — `scopeDropped` reverts this thread to the
+     * unscoped behaviour it would have had before the signal existed.
+     */
+    detectedScope: string | null;
+    scopeDropped: boolean;
   } | null>(null);
+  const [revealHint, setRevealHint] = useState<string | null>(null);
+  // Page-absolute box drawn around the control that opens a state we couldn't
+  // reopen ourselves, so a failed reveal still points somewhere.
+  const [revealHighlight, setRevealHighlight] = useState<
+    { x: number; y: number; width: number; height: number } | null
+  >(null);
 
   // A deliberate exit from comment mode (Esc, or C again) has to stick for as
   // long as the panel stays open — otherwise the arming effect below would put
@@ -136,6 +183,7 @@ export function OverlayRenderer() {
     setOpenThreadId(null);
     setPendingPin(null);
     setAuthPanelOpen(false);
+    setRevealHighlight(null);
   }, [commentsVisible]);
 
   // Resolve effective theme
@@ -149,6 +197,41 @@ export function OverlayRenderer() {
       el.setAttribute('data-nodd-theme', effectiveTheme);
     }
   }, [effectiveTheme]);
+
+  // Host overlays trap focus. Radix's FocusScope listens for `focusin`/`focusout`
+  // on the document and, whenever focus lands outside its container, pulls it
+  // straight back in. Nodd's UI *is* outside it — so a composer opened over an
+  // open menu takes focus for a single frame and immediately loses it again, and
+  // the viewer types into nothing.
+  //
+  // Nodd's surfaces aren't part of the host's focus model, so a focus trap must
+  // not see focus entering them. The delicate part is *where* to stop the event.
+  // `document` in the **bubble** phase is the one place that works: by then it
+  // has already passed every listener attached to an element — React's delegated
+  // `onFocus`/`onBlur` (bound to the root and portal containers), Nodd's own
+  // handlers, Radix primitives inside Nodd, and host `onBlur` validation on the
+  // field being left. Only document-level listeners are cut off, and a focus
+  // trap is exactly that. Stopping earlier — at `window`, or in the capture
+  // phase — would silence React's focus events along with the trap.
+  //
+  // `focusout` has to be matched on `relatedTarget`: its `target` is the host
+  // element losing focus, and the destination is what makes the event ours.
+  useEffect(() => {
+    const shield = (ev: FocusEvent) => {
+      const touchesNodd = [ev.target, ev.relatedTarget].some(
+        n => n instanceof Element && n.closest('[data-nodd-root], [data-nodd-pin-container]'),
+      );
+      if (touchesNodd) ev.stopImmediatePropagation();
+    };
+    // Registered on mount, so it precedes any trap that arms itself when its
+    // overlay opens — which is every one of them, since the overlay lives longer.
+    document.addEventListener('focusin', shield);
+    document.addEventListener('focusout', shield);
+    return () => {
+      document.removeEventListener('focusin', shield);
+      document.removeEventListener('focusout', shield);
+    };
+  }, []);
 
   // The panels overlay the host without mutating its layout. Keep this derived
   // flag only for moving the toolbar clear of whichever panel is open.
@@ -341,13 +424,27 @@ export function OverlayRenderer() {
     setOpenThreadId(prev => (prev === threadId ? null : threadId));
   }, []);
 
-  const [revealHint, setRevealHint] = useState<string | null>(null);
+  // Scroll an element into view and ring it. Used when we can't finish the job
+  // for the viewer but do know where they need to click.
+  const highlightElement = useCallback((el: Element) => {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    // Measure before the smooth scroll lands: the rect is converted to page
+    // coordinates, which the scroll doesn't change.
+    const r = el.getBoundingClientRect();
+    setRevealHighlight({
+      x: r.left + window.scrollX,
+      y: r.top + window.scrollY,
+      width: r.width,
+      height: r.height,
+    });
+  }, []);
 
   // The one path to open a thread that may live in another screen or interactive
   // state. Cross-screen items route to their screen (the deep-link arrival
   // re-reveals); same-screen items restore the captured state, re-anchor, then
-  // open. If the state can't be brought back, surface a hint instead of a dead
-  // click. Supersedes the old split of handlePinOpen / inbox-open / item-activate.
+  // open. When that can't be done, degrade to pointing at the way in rather
+  // than a dead click. Supersedes the old split of handlePinOpen /
+  // inbox-open / item-activate.
   const revealThread = useCallback(async (threadId: string, itemUrlPath?: string) => {
     if (itemUrlPath && itemUrlPath !== urlPath) {
       navigate(`${itemUrlPath}#nodd-thread=${threadId}`);
@@ -355,36 +452,63 @@ export function OverlayRenderer() {
     }
     const thread = allThreads.find(t => t.id === threadId);
     if (!thread) return;
+    setRevealHighlight(null);
 
-    // Restore the state the comment was captured in. activateState no-ops per
-    // segment that's already mounted, so this is cheap when already in-state.
+    // Restore the state the comment was captured in, preferring the trigger
+    // recorded alongside the pin. activateState no-ops per segment that's
+    // already mounted, so this is cheap when already in-state.
+    const recordedTrigger = makeTriggerResolver(thread.pin);
     const stack = keyToStack(thread.stateKey);
+    let failedSegment: string | null = null;
     if (stack.length > 0) {
-      await activateState(stack);
-      // Yield one frame so the MutationObserver-driven resolveAllPins has run.
-      await new Promise<void>(r => requestAnimationFrame(() => r()));
+      failedSegment = (await activateState(stack, { recordedTrigger })).failedSegment;
     }
 
-    const result = DOMAnchor.resolve(thread.pin);
-    if (result && isStateMatch(thread.stateKey, getStateStackForElement(result.element))) {
-      const position = DOMAnchor.reposition(thread.pin, result.element);
-      anchorCache.current.set(threadId, result.element);
-      pinPositionsRef.current.set(threadId, position);
-      setPinPositions(current => new Map(current).set(threadId, position));
+    // Give the anchor a few frames to settle — the state mounts before its
+    // contents finish arriving. Threads with no state to restore are already
+    // settled, so they get a single attempt.
+    const settled = await resolveWhenSettled(
+      thread.pin,
+      thread.stateKey,
+      stack.length > 0 && !failedSegment ? ANCHOR_SETTLE_MS : 0,
+    );
+    if (settled) {
+      anchorCache.current.set(threadId, settled.element);
+      pinPositionsRef.current.set(threadId, settled.position);
+      setPinPositions(current => new Map(current).set(threadId, settled.position));
       setStateMatch(current => new Map(current).set(threadId, true));
       setOpenThreadId(threadId); // the scroll effect brings it into view
       return;
     }
 
-    setRevealHint(
-      "This comment was left in a state we couldn't reopen automatically — navigate to it and it'll appear.",
-    );
-  }, [allThreads, urlPath, navigate]);
+    if (!failedSegment) {
+      // The state came back but the anchor didn't — the element the pin hangs
+      // off has been removed or rewritten. Nothing to point at.
+      setRevealHint(
+        "This comment's anchor isn't on this screen right now — it may have moved or been removed.",
+      );
+      return;
+    }
 
-  // Auto-dismiss the reveal hint.
+    // We know which state blocked us. Name it, and if its opening control is on
+    // the page, take the viewer to it so the next click is theirs to make.
+    const label = describeSegment(failedSegment);
+    const opener = recordedTrigger(failedSegment);
+    if (opener) {
+      highlightElement(opener);
+      setRevealHint(`This comment is inside “${label}” — we've highlighted what opens it.`);
+    } else {
+      setRevealHint(`This comment is inside “${label}” — open it and the comment will appear.`);
+    }
+  }, [allThreads, urlPath, navigate, highlightElement]);
+
+  // Auto-dismiss the reveal hint and its highlight together.
   useEffect(() => {
     if (!revealHint) return;
-    const t = setTimeout(() => setRevealHint(null), 6000);
+    const t = setTimeout(() => {
+      setRevealHint(null);
+      setRevealHighlight(null);
+    }, 6000);
     return () => clearTimeout(t);
   }, [revealHint]);
 
@@ -428,6 +552,7 @@ export function OverlayRenderer() {
     setOpenThreadId(null);
     setPendingPin(null);
     setRevealHint(null);
+    setRevealHighlight(null);
   }, [urlPath]);
 
   // Deep link (#nodd-thread=<id>): a cross-screen inbox click navigates here
@@ -468,13 +593,39 @@ export function OverlayRenderer() {
       if (!store || !user) return;
       // Open a new thread popover at the pin location
       const result = DOMAnchor.resolve(pin);
-      if (result) {
-        const pos = DOMAnchor.reposition(pin, result.element);
-        const stateKey = stackToKey(getStateStackForElement(result.element));
-        // Snapshot the active prototype at capture time — same guard as urlPath,
-        // so a scope change between click and submit can't mis-stamp the thread.
-        setPendingPin({ pin, x: pos.x, y: pos.y, stateKey, urlPath, prototypeId: activePrototype?.id ?? null });
-      }
+      if (!result) return;
+      const pos = DOMAnchor.reposition(pin, result.element);
+      const stack = getStateStackForElement(result.element);
+
+      // Record how to get back into every state this pin sits under. This is
+      // the only moment it can be done: the states are open, so their triggers
+      // still advertise the link to them. Days later, when someone opens this
+      // comment from the feed, that link is gone.
+      const { triggers, unreopenable } = captureStateTriggers(stack);
+      const pinWithTriggers: Pin =
+        Object.keys(triggers).length > 0 ? { ...pin, stateTriggers: triggers } : pin;
+
+      // Tell the author now, while they can still move the comment somewhere
+      // reachable, rather than letting it fail silently for the next reader.
+      const reopenWarning = unreopenable.length
+        ? `Nodd can’t reopen ${unreopenable
+            .map(s => `“${describeSegment(s)}”`)
+            .join(' › ')} on its own, so this comment won’t be clickable from the sidebar — only visible when you’re back in that state.`
+        : null;
+
+      // Snapshot the active prototype at capture time — same guard as urlPath,
+      // so a scope change between click and submit can't mis-stamp the thread.
+      setPendingPin({
+        pin: pinWithTriggers,
+        x: pos.x,
+        y: pos.y,
+        stateKey: stackToKey(stack),
+        urlPath,
+        prototypeId: activePrototype?.id ?? null,
+        reopenWarning,
+        detectedScope: stack.length === 1 && isFloatSegment(stack[0]) ? describeSegment(stack[0]) : null,
+        scopeDropped: false,
+      });
     },
     [store, user, urlPath, activePrototype],
   );
@@ -504,10 +655,14 @@ export function OverlayRenderer() {
   const handleNewThreadSubmit = useCallback(
     async (body: string, mentions: string[]) => {
       if (!store || !pendingPin) return;
+      // Dropping a detected scope stores an empty key and no recorded triggers —
+      // exactly the thread this would have been before the structural signal.
+      const dropped = pendingPin.scopeDropped;
+      const { stateTriggers: _omit, ...bare } = pendingPin.pin;
       await store.addThread({
         urlPath: pendingPin.urlPath,
-        pin: pendingPin.pin,
-        stateKey: pendingPin.stateKey,
+        pin: dropped ? bare : pendingPin.pin,
+        stateKey: dropped ? '' : pendingPin.stateKey,
         prototypeId: pendingPin.prototypeId,
         body,
         mentions,
@@ -589,7 +744,7 @@ export function OverlayRenderer() {
         resolved: t.resolved,
         unread: false,
         // Prettify auto-detected segments (auto:dialog:settings → "Settings").
-        breadcrumb: t.stateKey ? stack.map(s => describeAutoSegment(s) ?? s).join(' · ') : undefined,
+        breadcrumb: t.stateKey ? stack.map(describeSegment).join(' · ') : undefined,
         canDelete: t.createdBy === user?.id,
       };
       if (stateMatch.get(t.id) ?? true) onPage.push(summary);
@@ -883,6 +1038,22 @@ export function OverlayRenderer() {
         pinContainer,
       )}
 
+      {/* Ring around the control that opens a state we couldn't reopen for the
+          viewer. Lives in the absolute pin container so it tracks the page as
+          it scrolls, and is inert to pointer events. */}
+      {commentsVisible && pinContainer && revealHighlight && createPortal(
+        <div
+          className="nodd-reveal-highlight"
+          aria-hidden="true"
+          style={{
+            transform: `translate(${revealHighlight.x}px, ${revealHighlight.y}px)`,
+            width: revealHighlight.width,
+            height: revealHighlight.height,
+          }}
+        />,
+        pinContainer,
+      )}
+
       {/* Capture layer — only commenters can place pins. Suspended while any
           thread popover is open (new or existing): comment mode stays armed, but
           the layer lives in the fixed root (z 2147483000) above the pin container
@@ -932,6 +1103,27 @@ export function OverlayRenderer() {
           onToggleResolved={async () => {}}
           onDeleteComment={async () => {}}
           onClose={() => setPendingPin(null)}
+          notice={
+            pendingPin.scopeDropped
+              ? 'Not scoped — this comment will show on the whole screen.'
+              : pendingPin.detectedScope
+                // A structurally-detected scope usually can't be reopened either
+                // (no ARIA means nothing to click), so say both things at once
+                // rather than letting the scope message hide the warning.
+                ? `Scoped to “${pendingPin.detectedScope}” — it’ll show only when that’s open${
+                    pendingPin.reopenWarning ? ', and can’t be reopened from the sidebar' : ''
+                  }.`
+                : (pendingPin.reopenWarning ?? undefined)
+          }
+          noticeAction={
+            pendingPin.detectedScope && !pendingPin.scopeDropped
+              ? {
+                  label: 'Not a popup?',
+                  onClick: () =>
+                    setPendingPin(current => (current ? { ...current, scopeDropped: true } : null)),
+                }
+              : undefined
+          }
         />,
         pinContainer,
       )}
@@ -982,7 +1174,11 @@ export function OverlayRenderer() {
 
       {/* Transient hint when a thread's captured state couldn't be reopened. */}
       {revealHint && (
-        <div className="nodd-toast" role="status" onClick={() => setRevealHint(null)}>
+        <div
+          className="nodd-toast"
+          role="status"
+          onClick={() => { setRevealHint(null); setRevealHighlight(null); }}
+        >
           {revealHint}
         </div>
       )}

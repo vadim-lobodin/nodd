@@ -32,6 +32,14 @@ export type ThreadPopoverProps = {
   onClose: () => void;
   /** Read-only viewer (logged out): no composer, resolve, or delete. */
   readOnly?: boolean;
+  /**
+   * Advisory shown above the composer: that this comment sits in an interactive
+   * state Nodd won't be able to reopen from the sidebar, or which state it was
+   * detected to be in.
+   */
+  notice?: string;
+  /** Optional action rendered beside the notice, e.g. to undo a detected scope. */
+  noticeAction?: { label: string; onClick: () => void };
 };
 
 const GAP = 8;
@@ -90,6 +98,8 @@ export function ThreadPopover({
   onDeleteComment,
   onClose,
   readOnly = false,
+  notice,
+  noticeAction,
 }: ThreadPopoverProps) {
   const [draft, setDraft] = useState('');
   const [draftMentions, setDraftMentions] = useState<string[]>([]);
@@ -163,6 +173,24 @@ export function ThreadPopover({
       window.removeEventListener('resize', onChange);
     };
   }, []);
+
+  // Overlays restore focus to their trigger when they close — Radix does it via
+  // `onCloseAutoFocus`, and placing a comment inside a menu closes that menu. The
+  // restore lands a frame or two *after* this composer mounts, so `autoFocus`
+  // alone leaves the viewer typing into nothing. Re-assert briefly, bounded to a
+  // few frames so a deliberate click elsewhere still wins.
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta || readOnly) return;
+    let frames = 0;
+    let raf = 0;
+    const claim = () => {
+      if (document.activeElement !== ta) ta.focus({ preventScroll: true });
+      if (++frames < 4) raf = requestAnimationFrame(claim);
+    };
+    raf = requestAnimationFrame(claim);
+    return () => cancelAnimationFrame(raf);
+  }, [readOnly]);
 
   // Outside click
   useEffect(() => {
@@ -344,6 +372,21 @@ export function ThreadPopover({
           <ScrollArea.Thumb className="nodd-scrollbar-thumb" />
         </ScrollArea.Scrollbar>
       </ScrollArea.Root>
+      )}
+
+      {!readOnly && notice && (
+        <div className="nodd-popover-notice" role="status">
+          <span>{notice}</span>
+          {noticeAction && (
+            <button
+              type="button"
+              className="nodd-popover-notice-action"
+              onClick={noticeAction.onClick}
+            >
+              {noticeAction.label}
+            </button>
+          )}
+        </div>
       )}
 
       {!readOnly && submitError && (

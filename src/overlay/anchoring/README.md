@@ -19,24 +19,70 @@ In short, this submodule deserves its own document because it contains the **onl
 The submodule exports a single facade, `DOMAnchor`, plus the `Pin` type. Internals (`selectorBuilder`, `fingerprint`, `resolver`, `reanchorLoop`) are not re-exported from `overlay/index.ts`.
 
 ```ts
+export type ElementRef = {
+  selector: string;        // CSS path, as for a pin
+  fingerprint: string;     // the element's own identity
+  context?: string[];      // nearest-ancestor fingerprints, closest first — see §2a
+  tag?: string;            // for re-searching when the selector drifts
+};
+
 export type Pin = {
   selector: string;        // CSS path, see §3
   offsetX: number;         // 0..1, normalised within element's bbox
   offsetY: number;         // 0..1
   fingerprint: string;     // sha1 hex (40 chars), see §4
   viewportWidth: number;   // window.innerWidth at creation time
+  stateTriggers?: Record<string, ElementRef>;  // see §2a
+  page?: { x: number; y: number };             // absolute doc coords, see §2b
 };
 
 export const DOMAnchor: {
   create(target: Element, clientX: number, clientY: number): Pin;
   resolve(pin: Pin): { element: Element; tier: 1 | 2 | 3 } | null;
   reposition(pin: Pin, cachedElement: Element): { x: number; y: number };
+  createRef(target: Element): ElementRef;
+  resolveRef(ref: ElementRef): Element | null;
 };
 
 export const startReanchorLoop(opts: ReanchorOpts): () => void;  // returns disposer
 ```
 
 `create` is called by `CaptureLayer` once per click. `resolve` is called by the runtime once per pin per route change. `reposition` is called by `reanchorLoop` once per pin per animation frame during layout activity. The asymmetry of these call frequencies is the central performance insight that drives the rest of this design (§7).
+
+## 2a. `stateTriggers` — remembering the way back in
+
+A pin also carries, per interactive-state segment it lives under, an `ElementRef` for the control that opened that state. It is recorded at capture time (while the state is open and its ARIA trigger→content link still exists) by `src/overlay/stateTriggers.ts`, and consumed on reveal by `activateState`, which clicks that exact control instead of hunting for an unambiguous one page-wide. See [`src/provider/state/README.md` §4a](../../provider/state/README.md) for why the hunt alone isn't enough.
+
+An `ElementRef` is **stricter than a pin's anchor**, because being wrong costs more: a mis-resolved pin renders in an odd place, but a mis-resolved *control* gets pressed — opening some other row's menu. Position alone cannot carry that weight. The motivating case is a list where every row renders the same "More" button: the fingerprints are identical and the selector leans on `:nth-of-type`, so sorting or filtering the list aims it confidently at the wrong row.
+
+So a ref also records **identity**: `context`, the fingerprints of its nearest ancestors (closest first), and `tag`. Resolution then works like this:
+
+1. Try the selector; keep only elements whose own fingerprint matches.
+2. Require the **nearest ancestor** to match `context[0]`. That is the identity gate — a candidate failing it is a *different* row, not a moved one. Outer ancestors only break ties, since a container's fingerprint changes whenever any sibling does.
+3. If that yields nothing, search every element of the same `tag` and apply the same gate. This is what recovers a control that genuinely moved.
+4. Anything still ambiguous resolves to `null`, and the caller falls back to its own search — which also fails closed.
+
+A ref with no `context` (recorded before this existed) is declined outright rather than trusted.
+
+The whole field is optional. Pins written before it shipped simply lack it, and reveal behaves as it did before.
+
+## 2b. Page anchors — comments on empty space
+
+A click on blank space hit-tests to `<body>` (or `<html>`), and those are anchored differently from everything else.
+
+They have to be. The selector walk in §3 deliberately stops *before* the root elements, so it returned an empty string for them and the pin could never resolve again — which is why `CaptureLayer` used to treat an empty-area click as *cancel*. That read as a product decision but was really the anchoring layer admitting it had no way to represent the page.
+
+Three adjustments make it work:
+
+- `buildSelector` short-circuits to `body` / `html`.
+- The fingerprint for a root element is **tag-only**. Its text is the entire page, so hashing it would invalidate the pin on any edit anywhere; and since there is exactly one of each, the tag identifies it unambiguously.
+- Position is stored as **absolute document coordinates** in `pin.page`, which supersedes `offsetX`/`offsetY` — there is nothing meaningful for those to be relative to. `<body>`'s box ends where the content ends, so measuring against it would clamp a click in the blank area below to the bottom edge.
+
+**Why absolute and not a fraction of the document.** The first attempt normalised against `documentElement.scrollHeight`, which is unstable in two ways. It differs between capture and render, so the same pin resolved to 800px, 1600px or 427px depending purely on when it was measured. Worse, it is self-referential: `#nodd-pins` is `position: absolute`, so a pin low on the page *extends* the scrollable area — the very number being divided by — and the pin chases its own tail. Fixed coordinates have neither problem.
+
+The honest trade-off: a page anchor does not reflow. If the layout changes responsively, a pin on empty space stays at its document coordinates rather than following anything — which is the only defensible behaviour, since it was never attached to anything. Anything with an element under it still anchors to that element.
+
+> **One definition of position.** `DOMAnchor.reposition` is the only place that decides where a pin goes. `reanchorLoop` previously inlined its own copy of the arithmetic, which silently ignored `page` and threw those pins to the document origin on the first layout tick. It now delegates.
 
 ## 3. Selector Walk-Up Algorithm
 

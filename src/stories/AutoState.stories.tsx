@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Meta, StoryObj } from '@storybook/react';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -15,18 +16,23 @@ import type { Thread, PageSnapshot, MemberCache, MemberProfile } from '../store/
  *
  * The page holds a standard Radix Dialog and Dropdown Menu, neither wrapped in
  * `<NoddState>`. Steps to verify:
- *   1. Open the dialog (or menu), press "C", and drop a comment on an element
- *      inside it. The comment is scoped to a synthesized `auto:dialog:<name>`
- *      (or `auto:menu:<name>`) segment — check the sidebar breadcrumb.
+ *   1. Open the dialog (or menu), start a comment, and drop it on an element
+ *      inside. The comment is scoped to a synthesized `auto:dialog:<name>` (or
+ *      `auto:menu:<name>`) segment — check the sidebar breadcrumb.
  *   2. Close the overlay. The pin disappears from the base page instead of
  *      floating over it (capture-scoping — the whole point).
- *   3. Reopen the thread from the comments sidebar. `revealThread` finds the
- *      overlay's ARIA trigger (`aria-haspopup` + `aria-expanded="false"`),
- *      clicks it to reopen the overlay, re-anchors, and scrolls the pin in.
+ *   3. Reopen the thread from the comments sidebar. `revealThread` presses the
+ *      trigger recorded when the comment was written, re-anchors, and scrolls
+ *      the pin in.
  *
  * Radix primitives emit exactly the ARIA the detector keys on: the content gets
  * `role="dialog"|"menu"` + `data-state="open"`, and the trigger advertises
  * `aria-haspopup` + `aria-expanded`. No host instrumentation required.
+ *
+ * Note the dialog autofocuses a text field, which is what real dialogs do — so
+ * "C" types into it instead of starting comment mode. Click the dialog's
+ * background first. There is currently no pointer alternative to "C"; see
+ * `src/overlay/__tests__/capture.test.tsx`.
  */
 
 // ---------------------------------------------------------------------------
@@ -133,7 +139,9 @@ function AutoStatePage() {
       <p style={{ color: '#555', margin: '0 0 24px' }}>
         Open an overlay, press <kbd>C</kbd>, and drop a comment on something inside
         it. Close it — the pin hides instead of bleeding onto the page. Reopen the
-        thread from the sidebar (<kbd>M</kbd>) to see auto-restore reopen the overlay.
+        thread from the sidebar (<kbd>M</kbd>) to see the overlay come back on its
+        own. Note <kbd>C</kbd> does nothing while the caret is in the dialog’s text
+        field — click the dialog’s background first.
       </p>
 
       <div style={{ display: 'flex', gap: 12 }}>
@@ -204,6 +212,7 @@ function Harness(args: AutoStateArgs) {
   const projectId = 'auto';
   const [isVisible, setIsVisible] = useState(true);
   const [pinEl, setPinEl] = useState<HTMLElement | null>(null);
+  const [rootEl, setRootEl] = useState<HTMLElement | null>(null);
   const user: CurrentUser = { id: 'me', email: 'you@example.com', displayName: 'You', avatarUrl: null };
 
   const storeRef = useRef<CommentStore | null>(null);
@@ -228,6 +237,7 @@ function Harness(args: AutoStateArgs) {
     root.setAttribute('data-nodd-root', '');
     document.body.appendChild(root);
     setPinEl(pins);
+    setRootEl(root);
     return () => {
       document.body.removeChild(pins);
       document.body.removeChild(root);
@@ -268,10 +278,15 @@ function Harness(args: AutoStateArgs) {
     pinContainer: pinEl,
   };
 
+  // Portal the overlay into #nodd-root exactly as NoddProvider does
+  // (`NoddProvider.tsx:510`). This is not cosmetic: every overlay rule is scoped
+  // under `[data-nodd-root]`, so rendering the tree inline leaves the toolbar and
+  // the capture layer unstyled — no crosshair, no full-viewport click target —
+  // and the story misrepresents the library.
   return (
     <NoddContext.Provider value={ctx}>
       <AutoStatePage />
-      {isVisible && pinEl ? <OverlayRenderer /> : null}
+      {isVisible && pinEl && rootEl ? createPortal(<OverlayRenderer />, rootEl) : null}
     </NoddContext.Provider>
   );
 }
