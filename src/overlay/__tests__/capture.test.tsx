@@ -216,7 +216,7 @@ describe('commenting on empty page space', () => {
     expect(added[0]).toMatchObject({ stateKey: '' });
   });
 
-  it('still cancels when the hit-test finds nothing at all', async () => {
+  it('re-arms, rather than cancelling, when the hit-test finds nothing at all', async () => {
     mount('<div id="page"><h1>Title</h1></div>');
     pressC();
     const spy = vi.spyOn(document, 'elementFromPoint').mockReturnValue(null as never);
@@ -228,8 +228,11 @@ describe('commenting on empty page space', () => {
       await new Promise<void>(r => requestAnimationFrame(() => r()));
     });
     spy.mockRestore();
-    expect(captureLayer()).toBeNull();
+    // Comment mode is a mode, not a one-shot: an unusable click places no pin
+    // but leaves the viewer in it, ready for the next one.
+    expect(captureLayer()).not.toBeNull();
     expect(composer()).toBeNull();
+    expect(added).toHaveLength(0);
   });
 });
 
