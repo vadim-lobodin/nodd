@@ -12,6 +12,7 @@ import { VariantsPanel } from './components/VariantsPanel';
 import { NoddButton, NoddInput } from './components/FormControls';
 import { DOMAnchor, type Pin } from './anchoring/DOMAnchor';
 import { startReanchorLoop } from './anchoring/reanchorLoop';
+import { resolveApproximateAnchor, positionInContainer } from './anchoring/approximate';
 import { getStateStackForElement, isStateMatch, stackToKey, keyToStack, activateState, describeSegment, isFloatSegment } from '../provider/state';
 import { captureStateTriggers, makeTriggerResolver } from './stateTriggers';
 import { matchesKey } from '../provider/keys';
@@ -116,6 +117,14 @@ export function OverlayRenderer() {
     scopeDropped: boolean;
   } | null>(null);
   const [revealHint, setRevealHint] = useState<string | null>(null);
+  /**
+   * The one thread, if any, currently shown at a degraded anchor because its
+   * exact one is gone. Held in a ref so `resolveAllPins` can re-apply it after
+   * a DOM mutation wipes the position map, and singular because it only ever
+   * comes from an explicit reveal — degraded pins are never shown unprompted.
+   */
+  const approxRef = useRef<{ threadId: string; element: Element } | null>(null);
+  const [approxNotice, setApproxNotice] = useState<string | null>(null);
   // Page-absolute box drawn around the control that opens a state we couldn't
   // reopen ourselves, so a failed reveal still points somewhere.
   const [revealHighlight, setRevealHighlight] = useState<
@@ -317,6 +326,27 @@ export function OverlayRenderer() {
         matches.set(thread.id, isStateMatch(thread.stateKey, []));
       }
     }
+    // A thread revealed at a degraded anchor has no real resolution to find, so
+    // the loop above just dropped it. Put it back — otherwise the first DOM
+    // mutation after the reveal closes the popover the viewer is reading.
+    const approx = approxRef.current;
+    if (approx && !positions.has(approx.threadId)) {
+      const thread = allThreads.find(t => t.id === approx.threadId);
+      const el = approx.element.isConnected
+        ? approx.element
+        : thread
+          ? resolveApproximateAnchor(thread.pin)
+          : null;
+      if (el) {
+        approxRef.current = { threadId: approx.threadId, element: el };
+        cache.set(approx.threadId, el);
+        positions.set(approx.threadId, positionInContainer(el));
+        matches.set(approx.threadId, true);
+      } else {
+        approxRef.current = null;
+      }
+    }
+
     anchorCache.current = cache;
     pinPositionsRef.current = positions;
     setPinPositions(positions);
@@ -341,7 +371,10 @@ export function OverlayRenderer() {
     return startReanchorLoop({
       getPins: () =>
         allThreads
-          .filter(t => anchorCache.current.has(t.id))
+          // A degraded pin is placed *at* its container, not at a fraction
+          // across it, so repositioning it from the pin's offsets would jump it
+          // somewhere arbitrary inside. resolveAllPins keeps it current instead.
+          .filter(t => anchorCache.current.has(t.id) && t.id !== approxRef.current?.threadId)
           .map(t => ({ id: t.id, pin: t.pin })),
       getElement: (id) => anchorCache.current.get(id) ?? null,
       setPinPosition: (id, x, y) => {
@@ -439,6 +472,37 @@ export function OverlayRenderer() {
     });
   }, []);
 
+  /** Stop showing a thread at its degraded anchor, and let the pins re-resolve. */
+  const clearApprox = useCallback(() => {
+    if (!approxRef.current) return;
+    approxRef.current = null;
+    setApproxNotice(null);
+    setDomVersion(v => v + 1);
+  }, []);
+
+  /**
+   * Open a thread whose exact anchor is gone, at the nearest container that
+   * still exists. Returns whether it found one.
+   *
+   * The alternative — what this replaces — was a toast and nothing else, which
+   * left the viewer unable to even read a conversation that plainly exists. So
+   * this deliberately opens the thread on a weaker claim than normal
+   * resolution makes, and labels it, rather than being right or silent.
+   */
+  const revealApproximately = useCallback((thread: Thread, notice: string): boolean => {
+    const container = resolveApproximateAnchor(thread.pin);
+    if (!container) return false;
+    const position = positionInContainer(container);
+    approxRef.current = { threadId: thread.id, element: container };
+    setApproxNotice(notice);
+    anchorCache.current.set(thread.id, container);
+    pinPositionsRef.current.set(thread.id, position);
+    setPinPositions(current => new Map(current).set(thread.id, position));
+    setStateMatch(current => new Map(current).set(thread.id, true));
+    setOpenThreadId(thread.id); // the scroll effect brings it into view
+    return true;
+  }, []);
+
   // The one path to open a thread that may live in another screen or interactive
   // state. Cross-screen items route to their screen (the deep-link arrival
   // re-reveals); same-screen items restore the captured state, re-anchor, then
@@ -453,6 +517,7 @@ export function OverlayRenderer() {
     const thread = allThreads.find(t => t.id === threadId);
     if (!thread) return;
     setRevealHighlight(null);
+    clearApprox();
 
     // Restore the state the comment was captured in, preferring the trigger
     // recorded alongside the pin. activateState no-ops per segment that's
@@ -482,8 +547,15 @@ export function OverlayRenderer() {
     }
 
     if (!failedSegment) {
-      // The state came back but the anchor didn't — the element the pin hangs
-      // off has been removed or rewritten. Nothing to point at.
+      // No state blocked us — the anchor is simply not in the DOM. Usually the
+      // host is showing a different slice of the same UI: another page of the
+      // list, another filter, another scenario. That view state lives in the
+      // host's own React state, which Nodd has no universal way to restore, so
+      // fall back to the nearest surviving container and say so.
+      const named = thread.pin.label ? `“${thread.pin.label}”` : 'the element this was left on';
+      if (revealApproximately(thread, `Showing this nearby — ${named} isn’t on this screen right now.`)) {
+        return;
+      }
       setRevealHint(
         "This comment's anchor isn't on this screen right now — it may have moved or been removed.",
       );
@@ -491,16 +563,23 @@ export function OverlayRenderer() {
     }
 
     // We know which state blocked us. Name it, and if its opening control is on
-    // the page, take the viewer to it so the next click is theirs to make.
+    // the page, take the viewer to it so the next click is theirs to make. The
+    // thread still opens at a degraded anchor, so the conversation is readable
+    // whether or not they take that click.
     const label = describeSegment(failedSegment);
     const opener = recordedTrigger(failedSegment);
+    const notice = opener
+      ? `Showing this nearby — it was left inside “${label}”, and we’ve highlighted what opens it.`
+      : `Showing this nearby — it was left inside “${label}”.`;
+    if (opener) highlightElement(opener);
+    if (revealApproximately(thread, notice)) return;
+
     if (opener) {
-      highlightElement(opener);
       setRevealHint(`This comment is inside “${label}” — we've highlighted what opens it.`);
     } else {
       setRevealHint(`This comment is inside “${label}” — open it and the comment will appear.`);
     }
-  }, [allThreads, urlPath, navigate, highlightElement]);
+  }, [allThreads, urlPath, navigate, highlightElement, clearApprox, revealApproximately]);
 
   // Auto-dismiss the reveal hint and its highlight together.
   useEffect(() => {
@@ -1029,6 +1108,7 @@ export function OverlayRenderer() {
                 authorAvatarUrl={author?.avatarUrl ?? undefined}
                 snippet={thread.comments[0]?.body.slice(0, 120)}
                 resolved={thread.resolved}
+                approximate={approxRef.current?.threadId === thread.id}
                 tooltipContainer={portalRootRef.current}
                 onOpen={handlePinOpen}
               />
@@ -1083,8 +1163,9 @@ export function OverlayRenderer() {
           onSubmitReply={handleReply}
           onToggleResolved={handleResolve}
           onDeleteComment={handleDeleteComment}
-          onClose={() => setOpenThreadId(null)}
+          onClose={() => { setOpenThreadId(null); clearApprox(); }}
           readOnly={!canComment}
+          notice={approxRef.current?.threadId === openThread.id ? (approxNotice ?? undefined) : undefined}
         />,
         pinContainer,
       )}

@@ -33,6 +33,15 @@ export type Pin = {
    * See `src/overlay/anchoring/DOMAnchor.ts`.
    */
   page?: { x: number; y: number };
+  /**
+   * Selectors for the anchor's ancestors, nearest first. When the anchor itself
+   * is gone — the host paginated, filtered or swapped the view — reveal falls
+   * back to the nearest of these that still exists, so the thread can still be
+   * read. See `src/overlay/anchoring/approximate.ts`.
+   */
+  ancestors?: string[];
+  /** Short human text of what was anchored, to name it when it can't be shown. */
+  label?: string;
 };
 
 export type Comment = {

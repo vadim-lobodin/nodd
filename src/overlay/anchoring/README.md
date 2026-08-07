@@ -219,6 +219,25 @@ Returns `null`. The runtime catches this and:
 
 Orphan state is **not** sticky; on the next route change the resolver runs again, and a re-mounted element will be picked up.
 
+### 5.3.1 Degraded anchoring on reveal (`approximate.ts`)
+
+Orphaning is the right answer for *rendering* — a page of comments quietly sliding up to their containers would be worse than not drawing them. It is the wrong answer for *reveal*, where the viewer has clicked one specific thread and asking for it produced a toast and nothing else, not even the ability to read the conversation.
+
+The common cause isn't a deleted element at all: it's the host showing a different slice of the same UI — page 4 of a list, another filter, another demo scenario. That view state lives in the host's own React state, so there is **no universal way for Nodd to restore it**; a library can't mandate that consumers keep view state in the URL, or in a store it can reach.
+
+What is universal is that the anchor's *surroundings* usually outlive the anchor. `DOMAnchor.create` therefore records two extra fields on the pin, both optional and both absent on older pins:
+
+| Field | What it is | Why |
+|---|---|---|
+| `ancestors: string[]` | `buildSelector` of each ancestor, nearest first, ending at `body` | Selectors, **not** fingerprints — a fingerprint hashes `textContent`, so every container holding the changing content hashes differently once it changes. The list on page 1 and the list on page 4 are the same element with different hashes. |
+| `label: string` | ≤48 chars of the anchor's text (or its accessible name) | The fingerprint is a hash, so without this there is nothing to tell the viewer beyond "it's gone". |
+
+`resolveApproximateAnchor` walks `ancestors` nearest-first and takes the first selector matching **exactly one** rendered, connected element. Ambiguity is skipped rather than guessed — two identical lists means the level above is a better answer than a coin flip. `body` is the floor, so a pin that recorded a chain always lands somewhere.
+
+`OverlayRenderer.revealThread` uses this only after normal resolution has failed, opens the thread at that container, and labels it in the popover (`Showing this nearby — “…” isn’t on this screen right now.`). The pin renders with `.nodd-pin--approximate` (dashed outline), because a pin that looks exact but isn't would be worse than the dead end it replaces. One thread at a time, held in `approxRef`, re-applied by `resolveAllPins` so a DOM mutation doesn't close the popover mid-read, and excluded from the reanchor loop — its position comes from the container, not from the pin's offsets.
+
+Covered by `__tests__/approximate.test.ts`.
+
 ### 5.4 Levenshtein threshold tuning
 
 `THRESHOLD = 6` by default. The reasoning:
