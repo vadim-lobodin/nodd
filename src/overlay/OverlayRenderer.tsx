@@ -13,7 +13,7 @@ import { NoddButton, NoddInput } from './components/FormControls';
 import { DOMAnchor, type Pin } from './anchoring/DOMAnchor';
 import { startReanchorLoop } from './anchoring/reanchorLoop';
 import { resolveApproximateAnchor, positionInContainer } from './anchoring/approximate';
-import { getStateStackForElement, isStateMatch, stackToKey, keyToStack, activateState, describeSegment, isFloatSegment } from '../provider/state';
+import { getStateStackForElement, isStateMatch, stackToKey, keyToStack, activateState, describeSegment, isFloatSegment, isRendered, discloseAncestors, describeContainer } from '../provider/state';
 import { captureStateTriggers, makeTriggerResolver } from './stateTriggers';
 import { matchesKey } from '../provider/keys';
 import type { Thread, PageSnapshot } from '../store/types';
@@ -316,7 +316,11 @@ export function OverlayRenderer() {
     const matches = new Map<string, boolean>();
     for (const thread of allThreads) {
       const result = DOMAnchor.resolve(thread.pin);
-      if (result) {
+      // A hidden anchor — closed tab panel, collapsed accordion — still matches
+      // its selector and fingerprint, so resolution "succeeds" and then reports
+      // a zero rect, which put the pin in the page's top-left corner. Treat it
+      // as not on the page; reveal is what opens it (see `discloseAncestors`).
+      if (result && isRendered(result.element)) {
         cache.set(thread.id, result.element);
         const pos = DOMAnchor.reposition(thread.pin, result.element);
         positions.set(thread.id, pos);
@@ -532,17 +536,46 @@ export function OverlayRenderer() {
     // Give the anchor a few frames to settle — the state mounts before its
     // contents finish arriving. Threads with no state to restore are already
     // settled, so they get a single attempt.
-    const settled = await resolveWhenSettled(
+    let settled = await resolveWhenSettled(
       thread.pin,
       thread.stateKey,
       stack.length > 0 && !failedSegment ? ANCHOR_SETTLE_MS : 0,
     );
+
+    // The anchor can be present and simply not shown — a closed tab panel, a
+    // collapsed accordion, a <details>. Unlike the host view state below, that
+    // is reopenable with no host cooperation, because disclosure carries ARIA.
+    let blockedContainer: Element | null = null;
+    if (settled && !isRendered(settled.element)) {
+      const disclosed = await discloseAncestors(settled.element);
+      // Opening the container usually re-renders its contents, so re-resolve
+      // rather than trusting the element reference we started with.
+      settled = disclosed.revealed
+        ? await resolveWhenSettled(thread.pin, thread.stateKey, ANCHOR_SETTLE_MS)
+        : null;
+      if (settled && !isRendered(settled.element)) settled = null;
+      if (!settled) blockedContainer = disclosed.blocked;
+    }
+
     if (settled) {
       anchorCache.current.set(threadId, settled.element);
       pinPositionsRef.current.set(threadId, settled.position);
       setPinPositions(current => new Map(current).set(threadId, settled.position));
       setStateMatch(current => new Map(current).set(threadId, true));
       setOpenThreadId(threadId); // the scroll effect brings it into view
+      return;
+    }
+
+    // A section we could see was closed but couldn't open — no control we were
+    // willing to identify, or pressing it didn't take. Name it and point at it;
+    // that's a specific, actionable thing for the viewer to do.
+    if (blockedContainer) {
+      const name = describeContainer(blockedContainer);
+      highlightElement(blockedContainer);
+      if (revealApproximately(thread, `Showing this nearby — it was left inside “${name}”, which is closed.`)) {
+        return;
+      }
+      setRevealHint(`This comment is inside “${name}” — open it and the comment will appear.`);
       return;
     }
 
