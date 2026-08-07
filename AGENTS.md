@@ -11,8 +11,12 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 ```bash
 npm run build       # tsup: ESM + CJS + .d.ts into dist/, copies overlay.css → dist/style.css
 npm run dev         # tsup --watch
-npm run typecheck   # tsc --noEmit (no test runner configured)
+npm run typecheck   # tsc --noEmit
+npm test            # vitest run (jsdom) — src/**/*.test.ts(x)
+npm run test:watch  # vitest
 ```
+
+`engines.node` is the *consumer* contract (`>=18`); development and release need **Node 20+**, which `vite` already requires — keep dev dependencies within that floor (`jsdom` is pinned to `^26` for this reason). jsdom ships no `CSS` object, so never call `CSS.escape` unguarded.
 
 **CLI** (`bin/nodd.mjs`, exposed via `package.json#bin` as `nodd`): consumer-facing onboarding tool. `init` creates a Supabase project via the Management API, applies the migrations, configures auth redirects, writes `.env.local` + `.nodd/config.json`, and prints an `<NoddProvider>` snippet. `add-origin <url>` patches the redirect allowlist after deploy. Reads `SUPABASE_ACCESS_TOKEN` from env (never persisted). ESM, no extra deps — uses built-in `fetch`, `readline`, `crypto`. Don't add npm deps here without a strong reason; the CLI runs via `npx` and bloating it slows cold starts.
 
@@ -59,7 +63,18 @@ Each module has its own `README.md` with detailed design notes; consult them bef
 
 ### DOM anchoring (`src/overlay/anchoring/`)
 
-Pins are stored as `{ selector, offsetX, offsetY, fingerprint, viewportWidth }` JSON in `threads.pin`. Resolution is three-tier: exact selector → fingerprint match among candidates → "orphaned" (sidebar only, not rendered on page). Position re-renders on resize via a single `ResizeObserver`; selector resolution only re-runs on route change. Don't move re-anchoring out of the AnimationFrame batch — it's hot.
+Pins are stored as `{ selector, offsetX, offsetY, fingerprint, viewportWidth, stateTriggers?, page? }` JSON in `threads.pin`. Resolution is three-tier: exact selector → fingerprint match among candidates → "orphaned" (sidebar only, not rendered on page). Position re-renders on resize via a single `ResizeObserver`; selector resolution only re-runs on route change. Don't move re-anchoring out of the AnimationFrame batch — it's hot.
+
+`DOMAnchor.reposition` is the **only** place that decides where a pin goes; never inline that arithmetic again (the re-anchor loop used to, and silently ignored page anchors). A comment on empty space anchors to `<body>` and stores absolute document coordinates in `page` — deliberately absolute, since normalising against document height is self-referential: Nodd's own `position:absolute` pin container feeds that height.
+
+### Interactive states (`src/provider/state/`, see its README)
+
+A thread carries a `stateKey` scoping it to the modal/menu it was left in. Detection has three tiers, tried in order: explicit `<NoddState>` / bare `data-nodd-state` attribute → ARIA role (`autoState.ts`) → structural (`floatingState.ts`). The structural tier runs **only when the first two found nothing**, which is what makes it non-breaking; never widen it to run alongside them.
+
+- **Reopening is not `.click()`.** Radix menu/select/popover triggers toggle on `pointerdown` and ignore `click`. Always go through `pressTrigger` (`state/reopen.ts`).
+- The control that opens each state is recorded at capture time into `pin.stateTriggers`; it stores identity (nearest-ancestor fingerprints) as well as position, or it would press the wrong row after a sort.
+- `CaptureLayer` must swallow the whole press (`pointerdown` … `click`), not just the click — modal overlays dismiss on an outside `pointerdown`, which would close the dialog being commented on.
+- `OverlayRenderer` shields `focusin`/`focusout` at **`document`, bubble phase**, so host focus traps can't steal focus from Nodd's composer while React's delegated `onFocus`/`onBlur` still fire.
 
 ### Auth
 

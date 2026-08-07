@@ -51,7 +51,7 @@ Instrumenting every overlay with `<NoddState>` is friction, and skipping it is t
 
 - `detectAutoSegment(el)` returns `auto:<role>[:<name>]` for an ancestor that is an open overlay container: `role` in `dialog | alertdialog | menu | listbox`, and (when the widget exposes one) `data-state="open"`. The `<name>` is a **stable accessible name** — `aria-label` → `aria-labelledby` text → first heading — never a generated id, so the key survives reloads.
 - `getStateStackForElement` folds these segments in alongside explicit ones, so an un-instrumented modal still scopes its comments (and hides them when it closes).
-- `findAutoTrigger(segment)` locates the reopen trigger by the ARIA link a trigger advertises (`aria-haspopup` + `aria-expanded="false"`), matched to the role. It returns a trigger **only when exactly one closed candidate exists** — ambiguity fails closed. `activateState` clicks it to restore an auto-state.
+- `findAutoTrigger(segment)` locates a reopen trigger by the ARIA link a trigger advertises (`aria-haspopup` / `aria-controls` + `aria-expanded="false"`), matched to the role and narrowed by the state's name. Ambiguity fails closed. This is the **fallback**: `activateState` prefers the trigger recorded at capture time (§4a) and only hunts when there isn't one. Either way it activates via `pressTrigger`, never `.click()` — see §3.
 - `describeAutoSegment(segment)` renders a human label for the sidebar breadcrumb (`auto:dialog:settings` → "Settings").
 
 Philosophy mirrors the anchoring resolver: rely on web standards (not framework internals), key on something stable, and never guess when uncertain. Radix primitives (and anything ARIA-correct) satisfy this out of the box — see `src/stories/AutoState.stories.tsx` for a live harness.

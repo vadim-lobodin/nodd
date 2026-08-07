@@ -227,10 +227,12 @@ Implements the three-tier anchoring strategy from [DESIGN_DOC §5](../../DESIGN_
 ```ts
 export type Pin = {
   selector: string;
-  offsetX: number;       // 0..1
+  offsetX: number;       // 0..1, within the anchor element's bbox
   offsetY: number;       // 0..1
   fingerprint: string;
   viewportWidth: number;
+  stateTriggers?: Record<string, ElementRef>;  // how to reopen each state — anchoring README §2a
+  page?: { x: number; y: number };             // empty-space comment — anchoring README §2b
 };
 
 export const DOMAnchor: {

@@ -99,6 +99,10 @@ type Pin = {
   offsetY: number;
   fingerprint: string;
   viewportWidth: number;
+  // Both optional and written by the overlay; the store only round-trips them.
+  // See src/overlay/anchoring/README.md §2a/§2b.
+  stateTriggers?: Record<string, ElementRef>;  // how to reopen the state it was left in
+  page?: { x: number; y: number };             // absolute doc coords, for empty-space comments
 };
 
 type Comment = {

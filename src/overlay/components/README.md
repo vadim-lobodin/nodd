@@ -433,7 +433,7 @@ Why `visibility:hidden` and not `display:none`: `display:none` triggers reflow o
 ```ts
 type CaptureLayerProps = {
   onCreate: (pin: Pin) => void;
-  onCancel: () => void;            // also called on Esc and on click of empty area
+  onCancel: () => void;            // Esc, or a hit-test that finds nothing at all
   portalRootRef: React.RefObject<HTMLElement>;
 };
 ```
@@ -441,7 +441,10 @@ type CaptureLayerProps = {
 ### 9.4 Cancel paths
 
 - `Esc` keypress.
-- Click hits `document.body` or null (per algorithm above).
+- The hit-test returns `null` — nothing at all under the cursor.
+
+A click landing on `<body>`/`<html>` is **not** a cancel: it anchors to the page,
+for a comment on empty space. See [anchoring README §2b](../anchoring/README.md).
 - The "Cancel" affordance in the toolbar (sets `isCapturing = false` upstream → unmounts the layer).
 
 ### 9.5 Visual
