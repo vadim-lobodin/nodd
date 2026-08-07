@@ -42,6 +42,13 @@ export type Pin = {
   ancestors?: string[];
   /** Short human text of what was anchored, to name it when it can't be shown. */
   label?: string;
+  /**
+   * Opaque snapshot of the host's own view state — which page of a list, which
+   * filter, which scenario — from whatever it registered via `useNoddViewState`.
+   * Replayed before reveal re-anchors. Nodd never interprets it.
+   * See `src/provider/viewState/`.
+   */
+  viewState?: Record<string, unknown>;
 };
 
 export type Comment = {

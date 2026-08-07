@@ -55,6 +55,13 @@ export type Pin = {
   ancestors?: string[];
   /** Short human text of what was anchored, to name it when it can't be shown. */
   label?: string;
+  /**
+   * Opaque snapshot of the host's own view state (`useNoddViewState`) — the one
+   * thing the DOM cannot tell us, because "a `setPage` exists and 4 brings this
+   * row back" is nowhere in it. Stamped by `OverlayRenderer` at capture rather
+   * than here: this module knows about elements, not about the host.
+   */
+  viewState?: Record<string, unknown>;
 };
 
 function clamp(v: number, min: number, max: number): number {

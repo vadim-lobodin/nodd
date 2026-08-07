@@ -15,6 +15,7 @@ import { startReanchorLoop } from './anchoring/reanchorLoop';
 import { resolveApproximateAnchor, positionInContainer } from './anchoring/approximate';
 import { getStateStackForElement, isStateMatch, stackToKey, keyToStack, activateState, describeSegment, isFloatSegment, isRendered, discloseAncestors, describeContainer } from '../provider/state';
 import { captureStateTriggers, makeTriggerResolver } from './stateTriggers';
+import { captureViewState, applyViewState } from '../provider/viewState';
 import { matchesKey } from '../provider/keys';
 import type { Thread, PageSnapshot } from '../store/types';
 
@@ -523,6 +524,17 @@ export function OverlayRenderer() {
     setRevealHighlight(null);
     clearApprox();
 
+    // Put the host back into the slice of its own UI the comment was written in
+    // — page 4 of the list, the "connected" scenario — before anything else.
+    // Overlays are reopened *on top of* that, so ordering matters: a dialog
+    // opened from a row on page 4 needs page 4 to exist first. No-ops when the
+    // host registered nothing, and when the values already match.
+    const anchorPresent = DOMAnchor.resolve(thread.pin);
+    let restoredView = false;
+    if (!anchorPresent || !isRendered(anchorPresent.element)) {
+      restoredView = (await applyViewState(thread.pin.viewState)).restored.length > 0;
+    }
+
     // Restore the state the comment was captured in, preferring the trigger
     // recorded alongside the pin. activateState no-ops per segment that's
     // already mounted, so this is cheap when already in-state.
@@ -536,10 +548,13 @@ export function OverlayRenderer() {
     // Give the anchor a few frames to settle — the state mounts before its
     // contents finish arriving. Threads with no state to restore are already
     // settled, so they get a single attempt.
+    // Anything we just changed needs frames to render — a restored view state
+    // as much as a reopened overlay. Threads with nothing to restore are
+    // already settled, so they still get a single attempt.
     let settled = await resolveWhenSettled(
       thread.pin,
       thread.stateKey,
-      stack.length > 0 && !failedSegment ? ANCHOR_SETTLE_MS : 0,
+      restoredView || (stack.length > 0 && !failedSegment) ? ANCHOR_SETTLE_MS : 0,
     );
 
     // The anchor can be present and simply not shown — a closed tab panel, a
@@ -714,8 +729,15 @@ export function OverlayRenderer() {
       // still advertise the link to them. Days later, when someone opens this
       // comment from the feed, that link is gone.
       const { triggers, unreopenable } = captureStateTriggers(stack);
-      const pinWithTriggers: Pin =
-        Object.keys(triggers).length > 0 ? { ...pin, stateTriggers: triggers } : pin;
+      // Same reasoning for the host's own view state — which page of the list,
+      // which filter, which scenario. Nothing in the DOM records it, and by the
+      // time someone opens this comment the screen has long since reset.
+      const viewState = captureViewState();
+      const pinWithTriggers: Pin = {
+        ...pin,
+        ...(Object.keys(triggers).length > 0 ? { stateTriggers: triggers } : {}),
+        ...(viewState ? { viewState } : {}),
+      };
 
       // Tell the author now, while they can still move the comment somewhere
       // reachable, rather than letting it fail silently for the next reader.

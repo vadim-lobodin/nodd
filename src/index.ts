@@ -4,6 +4,7 @@ export { useNodd } from './provider';
 export type { NoddTheme } from './provider';
 export { NoddState, useNoddState, useNoddActivator, useCanActivate } from './provider';
 export type { NoddStateProps, Activator } from './provider';
+export { useNoddViewState } from './provider';
 export { useVariant, Variant } from './provider';
 export type { UseVariantOptions, VariantProps, VariantScope } from './provider';
 export { NoddPrototype, useNoddPrototype } from './provider';

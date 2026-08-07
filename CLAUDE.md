@@ -36,13 +36,16 @@ Five modules, one-way dependency graph: `provider → {auth, store, overlay} →
 ```ts
 <NoddProvider projectId supabaseUrl supabaseAnonKey theme? gateToPrototypes? onNavigate?> ...
 const { user, signIn, signOut, toggleOverlay, isVisible, ... } = useNodd();
+
+// Optional, per screen: let a comment be reopened in the view state it was left in.
+useNoddViewState('page', page, setPage);
 ```
 
 `onNavigate?: (path: string) => void` lets the host route in-app (e.g. `router.push`) instead of a full reload — used by the sidebar inbox to jump between screens of a prototype. When omitted, cross-screen jumps fall back to `window.location.assign`. `gateToPrototypes` restricts where comments can be created (see `src/provider/variants/` and the consumer's `<NoddPrototype>` scope).
 
 | Module | Role |
 |---|---|
-| `src/provider/` | `NoddProvider` boots singletons, owns runtime state (user, urlPath, visibility, theme), creates two body-attached portals, exposes `NoddContext`. Contains `state/` (`<NoddState>` + activator registry) and `variants/` (`useVariant`/`<Variant>` + per-viewer variant registry). |
+| `src/provider/` | `NoddProvider` boots singletons, owns runtime state (user, urlPath, visibility, theme), creates two body-attached portals, exposes `NoddContext`. Contains `state/` (`<NoddState>` + activator registry), `variants/` (`useVariant`/`<Variant>` + per-viewer variant registry) and `viewState/` (`useNoddViewState` — host view-state snapshot/restore). |
 | `src/auth/` | `AuthClient` wraps Supabase magic-link sign-in + session restore. |
 | `src/store/` | `CommentStore` — page-scoped fetch, IndexedDB cache, optimistic CRUD with temp IDs, Realtime subscription. Files are split by concern (`query`, `mutations`, `realtime`, `cache`, `state`, `members`). |
 | `src/overlay/` | React UI rendered via portal: `OverlayRenderer`, `Sidebar`, `VariantsPanel`, `ThreadPopover`, `PinMarker`, `CaptureLayer`, `MentionPicker`, plus `anchoring/` (selector + fingerprint + resolver + ResizeObserver re-anchor loop). |
@@ -70,6 +73,8 @@ Each module has its own `README.md` with detailed design notes; consult them bef
 ### DOM anchoring (`src/overlay/anchoring/`)
 
 Pins are stored as `{ selector, offsetX, offsetY, fingerprint, viewportWidth }` JSON in `threads.pin`. Resolution is three-tier: exact selector → fingerprint match among candidates → "orphaned" (sidebar only, not rendered on page). Position re-renders on resize via a single `ResizeObserver`; selector resolution only re-runs on route change. Don't move re-anchoring out of the AnimationFrame batch — it's hot.
+
+**Host view state (`src/provider/viewState/`, see its README).** The one thing the DOM cannot record: a comment on row 3 of *page 4*, or on a screen in the "problems" demo scenario, has an anchor that doesn't exist rather than one that's hidden — nothing in the document says a `setPage` exists. Hosts opt in one line at a time, at the site of the state (`useNoddViewState('page', page, setPage)`); the value is snapshotted onto `pin.viewState` and replayed by `revealThread` **before** `activateState`, because a dialog opened from a row on page 4 needs page 4 to exist first. Nodd never interprets the blob — that's what lets a URL-based, Redux and `useState` app all satisfy one contract. Deliberately not a provider-level capture/restore pair: a `useState` in a leaf component isn't reachable from `<NoddProvider>`, so that shape would mean lifting state app-wide. Only plain JSON is recorded (a `Map`/`Date` survives `JSON.stringify` but comes back as something else); missing keys and throwing restores degrade per key and never break reveal.
 
 **Degraded anchoring (`anchoring/approximate.ts`).** An anchor usually goes missing not because it was deleted but because the host is showing a different slice of the same UI — page 4 of a list, another filter, another demo scenario. That view state lives in the host's own React state and a library cannot mandate where consumers keep it, so Nodd can't restore it. What it can do is not dead-end. The pin additionally records `ancestors` (a `buildSelector` chain, nearest-first, ending at `body`) and a short `label`; when reveal finds no anchor, `resolveApproximateAnchor` returns the nearest ancestor that matches **exactly one** rendered element and the thread opens *there*, dashed (`.nodd-pin--approximate`) and labelled, so the conversation is at least readable. Ambiguous levels are skipped, never guessed. This is deliberately **reveal-only** — `resolvePin` stays strict, because a page of pins silently sliding up to their containers is worse than pins that don't render. Both fields are optional; pre-existing pins simply get the old toast.
 
