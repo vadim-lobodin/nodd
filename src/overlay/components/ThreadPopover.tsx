@@ -374,10 +374,14 @@ export function ThreadPopover({
       </ScrollArea.Root>
       )}
 
-      {!readOnly && notice && (
+      {/* A notice explains where this thread is being shown and why, which a
+          logged-out reader needs exactly as much as an author does — the dashed
+          pin on its own doesn't say "this placement is approximate". Only the
+          action is a permission question. */}
+      {notice && (
         <div className="nodd-popover-notice" role="status">
           <span>{notice}</span>
-          {noticeAction && (
+          {!readOnly && noticeAction && (
             <button
               type="button"
               className="nodd-popover-notice-action"

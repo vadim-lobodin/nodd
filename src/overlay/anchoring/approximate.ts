@@ -44,11 +44,22 @@ const LABEL_MAX = 48;
 export function captureAncestorChain(target: Element): string[] {
   const chain: string[] = [];
   let cur = target.parentElement;
+  let reachedRoot = false;
   while (cur && chain.length < CHAIN_DEPTH) {
     chain.push(buildSelector(cur));
-    if (cur === document.body) break;
+    if (cur === document.body || cur === document.documentElement) {
+      reachedRoot = true;
+      break;
+    }
     cur = cur.parentElement;
   }
+  // React trees go deeper than eight levels routinely, and the levels the walk
+  // does record are the nearest ones — the ones most likely to be swapped out
+  // along with the anchor. Without a floor, a screen that re-renders wholesale
+  // leaves nothing to match and the click dead-ends again. The page always
+  // survives, so it is recorded as the last resort; `isPageLevelContainer` is
+  // how reveal avoids describing it as if it were nearby.
+  if (!reachedRoot && chain.length > 0 && document.body) chain.push(buildSelector(document.body));
   return chain;
 }
 
@@ -76,8 +87,9 @@ function isUsableContainer(el: Element): boolean {
  *
  * Requires an unambiguous match at each level: two candidates means we would be
  * guessing which copy of the container the comment belonged to, and the next
- * level up is a better answer than a coin flip. `body` is the floor, so a pin
- * that recorded a chain always lands somewhere.
+ * level up is a better answer than a coin flip. Chains recorded by
+ * `captureAncestorChain` end at `body`, so those always land somewhere; pins
+ * written before that floor existed can still come back empty.
  */
 export function resolveApproximateAnchor(pin: { ancestors?: string[] }): Element | null {
   for (const selector of pin.ancestors ?? []) {
@@ -90,6 +102,18 @@ export function resolveApproximateAnchor(pin: { ancestors?: string[] }): Element
     if (matches.length === 1 && isUsableContainer(matches[0])) return matches[0];
   }
   return null;
+}
+
+/**
+ * Whether the only thing that survived is the page itself.
+ *
+ * Worth opening a thread there — being able to read a conversation beats a toast
+ * that says it exists, which is the whole point of degrading — but not worth
+ * calling "nearby". At this level the pin is in the page's top-left corner and
+ * has no relationship to where the comment was left, so reveal says so.
+ */
+export function isPageLevelContainer(el: Element): boolean {
+  return el === el.ownerDocument.body || el === el.ownerDocument.documentElement;
 }
 
 /** Top-left of a container, in page coordinates, inset so the pin sits inside it. */

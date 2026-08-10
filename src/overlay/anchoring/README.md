@@ -229,14 +229,18 @@ What is universal is that the anchor's *surroundings* usually outlive the anchor
 
 | Field | What it is | Why |
 |---|---|---|
-| `ancestors: string[]` | `buildSelector` of each ancestor, nearest first, ending at `body` | Selectors, **not** fingerprints — a fingerprint hashes `textContent`, so every container holding the changing content hashes differently once it changes. The list on page 1 and the list on page 4 are the same element with different hashes. |
+| `ancestors: string[]` | `buildSelector` of the nearest 8 ancestors, nearest first, always ending at `body` | Selectors, **not** fingerprints — a fingerprint hashes `textContent`, so every container holding the changing content hashes differently once it changes. The list on page 1 and the list on page 4 are the same element with different hashes. |
 | `label: string` | ≤48 chars of the anchor's text (or its accessible name) | The fingerprint is a hash, so without this there is nothing to tell the viewer beyond "it's gone". |
 
-`resolveApproximateAnchor` walks `ancestors` nearest-first and takes the first selector matching **exactly one** rendered, connected element. Ambiguity is skipped rather than guessed — two identical lists means the level above is a better answer than a coin flip. `body` is the floor, so a pin that recorded a chain always lands somewhere.
+`resolveApproximateAnchor` walks `ancestors` nearest-first and takes the first selector matching **exactly one** rendered, connected element. Ambiguity is skipped rather than guessed — two identical lists means the level above is a better answer than a coin flip.
 
-`OverlayRenderer.revealThread` uses this only after normal resolution has failed, opens the thread at that container, and labels it in the popover (`Showing this nearby — “…” isn’t on this screen right now.`). The pin renders with `.nodd-pin--approximate` (dashed outline), because a pin that looks exact but isn't would be worse than the dead end it replaces. One thread at a time, held in `approxRef`, re-applied by `resolveAllPins` so a DOM mutation doesn't close the popover mid-read, and excluded from the reanchor loop — its position comes from the container, not from the pin's offsets.
+The chain is capped at `CHAIN_DEPTH = 8`, and the levels it records are the *nearest* ones — the ones most likely to be swapped out along with the anchor. So `captureAncestorChain` appends `body` when the walk didn't reach it: React trees are routinely deeper than eight, and without a floor a screen that re-renders wholesale leaves nothing to match and dead-ends exactly as before. `isPageLevelContainer` marks that floor, because a pin sitting in the page's top-left corner is worth opening — being able to read the conversation is the whole point — but must not be described as *nearby*. Reveal says "Showing this at the top of the page" instead. Pins written before the floor existed can still resolve to nothing, and get the old toast.
 
-Covered by `__tests__/approximate.test.ts`.
+`OverlayRenderer.revealThread` uses this only after normal resolution has failed, opens the thread at that container, and labels it in the popover (`Showing this nearby — “…” isn’t on this screen right now.`). The notice is shown to read-only viewers too — the dashed pin alone doesn't say the placement is a guess, so it's information, not a permission; only `noticeAction` is gated on write access. The pin renders with `.nodd-pin--approximate` (dashed outline), because a pin that looks exact but isn't would be worse than the dead end it replaces.
+
+One thread at a time, held in `approxRef`. `resolveAllPins` re-applies it so a DOM mutation doesn't close the popover mid-read, and excludes it from the reanchor loop — its position comes from the container, not from the pin's offsets. It also **upgrades**: when the exact anchor resolves and matches state again (the viewer followed the highlighted opener, changed a filter back, a slow host restore landed), `approxRef` and the notice clear, and the thread rejoins the reanchor loop. A degraded pin exists only for the reveal that asked for it — closing the popover, hiding comments, or a fresh reveal all drop it.
+
+Covered by `__tests__/approximate.test.ts` and, end to end, by `overlay/__tests__/reveal.test.tsx`.
 
 ### 5.4 Levenshtein threshold tuning
 

@@ -12,7 +12,7 @@ import { VariantsPanel } from './components/VariantsPanel';
 import { NoddButton, NoddInput } from './components/FormControls';
 import { DOMAnchor, type Pin } from './anchoring/DOMAnchor';
 import { startReanchorLoop } from './anchoring/reanchorLoop';
-import { resolveApproximateAnchor, positionInContainer } from './anchoring/approximate';
+import { resolveApproximateAnchor, positionInContainer, isPageLevelContainer } from './anchoring/approximate';
 import { getStateStackForElement, isStateMatch, stackToKey, keyToStack, activateState, describeSegment, isFloatSegment, isRendered, discloseAncestors, describeContainer } from '../provider/state';
 import { captureStateTriggers, makeTriggerResolver } from './stateTriggers';
 import { captureViewState, applyViewState } from '../provider/viewState';
@@ -331,24 +331,35 @@ export function OverlayRenderer() {
         matches.set(thread.id, isStateMatch(thread.stateKey, []));
       }
     }
-    // A thread revealed at a degraded anchor has no real resolution to find, so
-    // the loop above just dropped it. Put it back — otherwise the first DOM
-    // mutation after the reveal closes the popover the viewer is reading.
     const approx = approxRef.current;
-    if (approx && !positions.has(approx.threadId)) {
-      const thread = allThreads.find(t => t.id === approx.threadId);
-      const el = approx.element.isConnected
-        ? approx.element
-        : thread
-          ? resolveApproximateAnchor(thread.pin)
-          : null;
-      if (el) {
-        approxRef.current = { threadId: approx.threadId, element: el };
-        cache.set(approx.threadId, el);
-        positions.set(approx.threadId, positionInContainer(el));
-        matches.set(approx.threadId, true);
-      } else {
+    if (approx) {
+      // The exact anchor came back while the viewer was reading at a degraded
+      // one — they followed the highlighted opener, changed a filter back, or a
+      // slow host restore finally landed. Upgrade in place: the exact position
+      // is already in `positions`, so all that's left is to stop claiming the
+      // placement is approximate and hand the thread back to the reanchor loop.
+      if (positions.has(approx.threadId) && matches.get(approx.threadId) === true) {
         approxRef.current = null;
+        setApproxNotice(null);
+      } else {
+        // Otherwise it still has no real resolution to render at, and the loop
+        // above just dropped it. Put it back — otherwise the first DOM mutation
+        // after the reveal closes the popover the viewer is reading.
+        const thread = allThreads.find(t => t.id === approx.threadId);
+        const el = approx.element.isConnected
+          ? approx.element
+          : thread
+            ? resolveApproximateAnchor(thread.pin)
+            : null;
+        if (el) {
+          approxRef.current = { threadId: approx.threadId, element: el };
+          cache.set(approx.threadId, el);
+          positions.set(approx.threadId, positionInContainer(el));
+          matches.set(approx.threadId, true);
+        } else {
+          approxRef.current = null;
+          setApproxNotice(null);
+        }
       }
     }
 
@@ -361,6 +372,10 @@ export function OverlayRenderer() {
   // Resolve pins on route change, snapshot change, or DOM mutation
   useLayoutEffect(() => {
     if (!commentsVisible) {
+      // A degraded pin only ever exists for one explicit reveal; hiding comments
+      // ends that reveal like closing the popover does.
+      approxRef.current = null;
+      setApproxNotice(null);
       anchorCache.current = new Map();
       pinPositionsRef.current = new Map();
       setPinPositions(new Map());
@@ -494,12 +509,26 @@ export function OverlayRenderer() {
    * this deliberately opens the thread on a weaker claim than normal
    * resolution makes, and labels it, rather than being right or silent.
    */
-  const revealApproximately = useCallback((thread: Thread, notice: string): boolean => {
+  const revealApproximately = useCallback((
+    thread: Thread,
+    /**
+     * Builds the notice from a lead-in describing how good the placement is —
+     * only the caller knows *why* the anchor is missing, only this knows *what
+     * survived*, and the viewer needs both in one sentence.
+     */
+    notice: (where: string) => string,
+  ): boolean => {
     const container = resolveApproximateAnchor(thread.pin);
     if (!container) return false;
     const position = positionInContainer(container);
     approxRef.current = { threadId: thread.id, element: container };
-    setApproxNotice(notice);
+    setApproxNotice(
+      notice(
+        isPageLevelContainer(container)
+          ? 'Showing this at the top of the page'
+          : 'Showing this nearby',
+      ),
+    );
     anchorCache.current.set(thread.id, container);
     pinPositionsRef.current.set(thread.id, position);
     setPinPositions(current => new Map(current).set(thread.id, position));
@@ -560,17 +589,24 @@ export function OverlayRenderer() {
     // The anchor can be present and simply not shown — a closed tab panel, a
     // collapsed accordion, a <details>. Unlike the host view state below, that
     // is reopenable with no host cooperation, because disclosure carries ARIA.
+    // Two rounds, because the second is what a replacement needs: opening a tab
+    // can mount a fresh subtree whose own accordion is still collapsed, and the
+    // anchor we re-resolved to is a different element than the one we just tried
+    // to disclose. Bounded rather than looped, since each round costs a settle.
     let blockedContainer: Element | null = null;
-    if (settled && !isRendered(settled.element)) {
+    for (let round = 0; round < 2 && settled && !isRendered(settled.element); round++) {
       const disclosed = await discloseAncestors(settled.element);
-      // Opening the container usually re-renders its contents, so re-resolve
-      // rather than trusting the element reference we started with.
-      settled = disclosed.revealed
+      // Re-resolve rather than trusting the element we started with. `changed`
+      // matters as much as `revealed` here: the usual React answer to "open
+      // this" replaces the closed subtree wholesale, which destroys our element
+      // while succeeding — treating that as failure sent every controlled tab
+      // and accordion to a degraded anchor it didn't need.
+      settled = disclosed.revealed || disclosed.changed
         ? await resolveWhenSettled(thread.pin, thread.stateKey, ANCHOR_SETTLE_MS)
         : null;
-      if (settled && !isRendered(settled.element)) settled = null;
-      if (!settled) blockedContainer = disclosed.blocked;
+      blockedContainer = settled && isRendered(settled.element) ? null : disclosed.blocked;
     }
+    if (settled && !isRendered(settled.element)) settled = null;
 
     if (settled) {
       anchorCache.current.set(threadId, settled.element);
@@ -587,7 +623,7 @@ export function OverlayRenderer() {
     if (blockedContainer) {
       const name = describeContainer(blockedContainer);
       highlightElement(blockedContainer);
-      if (revealApproximately(thread, `Showing this nearby — it was left inside “${name}”, which is closed.`)) {
+      if (revealApproximately(thread, where => `${where} — it was left inside “${name}”, which is closed.`)) {
         return;
       }
       setRevealHint(`This comment is inside “${name}” — open it and the comment will appear.`);
@@ -601,7 +637,7 @@ export function OverlayRenderer() {
       // host's own React state, which Nodd has no universal way to restore, so
       // fall back to the nearest surviving container and say so.
       const named = thread.pin.label ? `“${thread.pin.label}”` : 'the element this was left on';
-      if (revealApproximately(thread, `Showing this nearby — ${named} isn’t on this screen right now.`)) {
+      if (revealApproximately(thread, where => `${where} — ${named} isn’t on this screen right now.`)) {
         return;
       }
       setRevealHint(
@@ -617,8 +653,8 @@ export function OverlayRenderer() {
     const label = describeSegment(failedSegment);
     const opener = recordedTrigger(failedSegment);
     const notice = opener
-      ? `Showing this nearby — it was left inside “${label}”, and we’ve highlighted what opens it.`
-      : `Showing this nearby — it was left inside “${label}”.`;
+      ? (where: string) => `${where} — it was left inside “${label}”, and we’ve highlighted what opens it.`
+      : (where: string) => `${where} — it was left inside “${label}”.`;
     if (opener) highlightElement(opener);
     if (revealApproximately(thread, notice)) return;
 

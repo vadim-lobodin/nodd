@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { DOMAnchor } from '../DOMAnchor';
-import { resolveApproximateAnchor, captureAnchorLabel } from '../approximate';
+import { resolveApproximateAnchor, captureAnchorLabel, isPageLevelContainer } from '../approximate';
 
 // jsdom lays nothing out, so every rect is 0×0 and the "is it rendered" check
 // would reject every container. Give elements a size unless a test says otherwise.
@@ -53,6 +53,23 @@ describe('resolveApproximateAnchor', () => {
     expect(resolveApproximateAnchor(pin)).toBe(document.body);
   });
 
+  it('still lands on the body when the anchor was deeper than the chain records', () => {
+    // Eight levels is where the recorded chain stops, and the levels it does
+    // record are the nearest ones — the ones most likely to be swapped out with
+    // the anchor. A twelve-deep tree (ordinary for React) would otherwise leave
+    // nothing to match and dead-end exactly like it did before this existed.
+    const deep = Array.from({ length: 12 }, (_, i) => `<div class="w${i}">`).join('');
+    document.body.innerHTML = `${deep}<span class="name">Person 4</span>${'</div>'.repeat(12)}`;
+    const pin = DOMAnchor.create(document.querySelector('.name') as Element, 5, 5);
+
+    expect(pin.ancestors?.length).toBeGreaterThan(8);
+    const floor = pin.ancestors![pin.ancestors!.length - 1];
+    expect(document.querySelectorAll(floor)[0]).toBe(document.body);
+
+    document.body.innerHTML = '<article>A completely different screen</article>';
+    expect(resolveApproximateAnchor(pin)).toBe(document.body);
+  });
+
   it('declines rather than guessing between two copies of a container', () => {
     document.body.innerHTML = '<div><ul class="list"><li class="item">a</li></ul></div>';
     const pin = DOMAnchor.create(document.querySelector('.item') as Element, 1, 1);
@@ -78,6 +95,15 @@ describe('resolveApproximateAnchor', () => {
     const pin = DOMAnchor.create(page(4), 10, 10);
     delete (pin as { ancestors?: string[] }).ancestors;
     expect(resolveApproximateAnchor(pin)).toBeNull();
+  });
+});
+
+describe('isPageLevelContainer', () => {
+  it('marks the page itself, so reveal stops calling it nearby', () => {
+    document.body.innerHTML = '<div id="d"></div>';
+    expect(isPageLevelContainer(document.body)).toBe(true);
+    expect(isPageLevelContainer(document.documentElement)).toBe(true);
+    expect(isPageLevelContainer(document.getElementById('d')!)).toBe(false);
   });
 });
 

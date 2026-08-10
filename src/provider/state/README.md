@@ -126,7 +126,9 @@ This is not a state in the §2 sense. The comment belongs to the base screen and
 2. the single `[aria-controls="<id>"]` control outside the container that isn't already expanded;
 3. for `role="tabpanel"`, the `aria-labelledby` target when it is a `role="tab"`.
 
-Ambiguity declines, as everywhere else, and reveal then names the closed container (`describeContainer`) and rings it instead. A container that leaves the document counts as *progress*, not failure — hosts routinely unmount the closed panel and mount an open one.
+Ambiguity declines, as everywhere else, and reveal then names the closed container (`describeContainer`) and rings it instead.
+
+`DiscloseResult` reports `revealed`, `blocked` **and `changed`**, and the third is load-bearing. The usual React answer to "open this panel" is to unmount the closed one and mount an open one — which succeeds while destroying the element being tracked, so the outcome cannot be observed on it. `revealed` is necessarily false there and `blocked` is null, and reading that pair as failure sent every controlled tab and accordion to a degraded anchor whose exact one was sitting in the new DOM. `changed` says a control was pressed and the DOM moved; a caller **must** re-resolve the pin whenever it is set. Reveal runs the disclose-and-re-resolve step up to twice, because a freshly mounted subtree can have its own collapsed section inside it.
 
 ## 5. Reopening a thread — `revealThread`
 
@@ -141,6 +143,8 @@ The single entry point for opening a thread that may live in another screen or s
    - *the state came back but the anchor didn't* — the host is showing a different slice of the same UI, which no library can restore on its own; fall back to the nearest surviving container so the thread is at least readable (see `anchoring/README.md` §5.3.1).
 
 Every entry point — a sidebar item, the prototype inbox, a deep link — goes through this one path, so state restoration is uniform.
+
+Covered end to end by `overlay/__tests__/reveal.test.tsx`, which drives this sequence through the deep-link entry. The helpers each had unit coverage while the sequencing between them was wrong, so assertions here are about the *outcome the viewer gets* — exact placement and no notice, or a degraded pin with the right words in it.
 
 ## 6. Files
 

@@ -119,8 +119,18 @@ export type DiscloseResult = {
   /** Whether the anchor ended up rendered. */
   revealed: boolean;
   /**
+   * Whether a control was pressed and the DOM actually moved. Distinct from
+   * `revealed` because the usual React answer to "open this panel" is to unmount
+   * the closed one and mount an open one — which succeeds while destroying the
+   * very element we were tracking, so we can't see the result on it. The caller
+   * must re-resolve the pin whenever this is set, or a disclosure that worked
+   * gets reported as one that failed.
+   */
+  changed: boolean;
+  /**
    * The container that stopped us — hidden, with no control we could identify
-   * or one that didn't take effect. Null when nothing blocked us.
+   * or one that didn't take effect. Null when nothing blocked us, which also
+   * covers "the anchor left the document", so it can't be read as success.
    */
   blocked: Element | null;
 };
@@ -137,14 +147,18 @@ export async function discloseAncestors(
   el: Element,
   timeoutMs: number = DISCLOSE_TIMEOUT_MS,
 ): Promise<DiscloseResult> {
+  let changed = false;
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
-    if (!el.isConnected) return { revealed: false, blocked: null };
+    // The anchor itself was replaced along with the container. Nothing more to
+    // open from here — but `changed` is what tells the caller this was a working
+    // disclosure whose result has to be looked for elsewhere in the new DOM.
+    if (!el.isConnected) return { revealed: false, changed, blocked: null };
     const hidden = findHiddenAncestors(el);
-    if (hidden.length === 0) return { revealed: true, blocked: null };
+    if (hidden.length === 0) return { revealed: true, changed, blocked: null };
 
     const container = hidden[0];
     const control = findDiscloseControl(container);
-    if (!control) return { revealed: false, blocked: container };
+    if (!control) return { revealed: false, changed, blocked: container };
 
     pressTrigger(control);
 
@@ -155,10 +169,16 @@ export async function discloseAncestors(
     // `container` leaving the document counts as progress, not failure: hosts
     // routinely unmount the closed panel and render an open one in its place.
     if (container.isConnected && isHiddenElement(container)) {
-      return { revealed: false, blocked: container };
+      return { revealed: false, changed, blocked: container };
     }
+    changed = true;
   }
-  return { revealed: isRendered(el), blocked: isRendered(el) ? null : findHiddenAncestors(el)[0] ?? null };
+  const rendered = isRendered(el);
+  return {
+    revealed: rendered,
+    changed,
+    blocked: rendered ? null : findHiddenAncestors(el)[0] ?? null,
+  };
 }
 
 /** A short human name for a container, for telling the viewer what's closed. */

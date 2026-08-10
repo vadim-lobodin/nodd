@@ -132,7 +132,7 @@ describe('discloseAncestors', () => {
 
     const result = await discloseAncestors(anchor);
 
-    expect(result).toEqual({ revealed: true, blocked: null });
+    expect(result).toEqual({ revealed: true, changed: true, blocked: null });
     expect(isRendered(anchor)).toBe(true);
     expect(document.getElementById('tab-billing')!.getAttribute('aria-selected')).toBe('true');
   });
@@ -192,9 +192,27 @@ describe('discloseAncestors', () => {
       old.replaceWith(fresh);
     });
     const result = await discloseAncestors(document.getElementById('t')!, 50);
-    // The original anchor is detached; the caller re-resolves. What matters is
-    // that we don't report the container as blocking when it plainly opened.
-    expect(result.blocked).toBeNull();
+    // The original anchor is detached, so `revealed` cannot be true — there is
+    // nothing left to observe. `changed` is the load-bearing part: it's what
+    // tells the caller to go and re-resolve. Asserting only `blocked: null`
+    // missed that, because a detached anchor also reports nothing blocking, and
+    // the caller then degraded a disclosure that had plainly worked.
+    expect(result).toEqual({ revealed: false, changed: true, blocked: null });
+  });
+
+  it('reports no progress when it never pressed anything', async () => {
+    document.body.innerHTML = '<section class="panel" hidden><i id="t"></i></section>';
+    const result = await discloseAncestors(document.getElementById('t')!);
+    expect(result.changed).toBe(false);
+  });
+
+  it('reports no progress when the anchor was never hidden', async () => {
+    document.body.innerHTML = '<i id="t"></i>';
+    expect(await discloseAncestors(document.getElementById('t')!)).toEqual({
+      revealed: true,
+      changed: false,
+      blocked: null,
+    });
   });
 });
 
