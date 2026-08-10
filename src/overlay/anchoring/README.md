@@ -230,7 +230,7 @@ What is universal is that the anchor's *surroundings* usually outlive the anchor
 | Field | What it is | Why |
 |---|---|---|
 | `ancestors: string[]` | `buildSelector` of the nearest 8 ancestors, nearest first, always ending at `body` | Selectors, **not** fingerprints — a fingerprint hashes `textContent`, so every container holding the changing content hashes differently once it changes. The list on page 1 and the list on page 4 are the same element with different hashes. |
-| `label: string` | ≤48 chars of the anchor's text (or its accessible name) | The fingerprint is a hash, so without this there is nothing to tell the viewer beyond "it's gone". |
+| `label: string` | ≤48 chars naming the anchor — its accessible name, or its **own** words | The fingerprint is a hash, so without this there is nothing to tell the viewer beyond "it's gone". Only set when the element genuinely has a name: a button, a link, a heading. A container that merely *holds* named things is left unlabelled, because quoting a row's three columns at the viewer (`Ralph Edwardsralph.edwards@example.comOrg viewer`) is noise, not information — reveal says "the element this was left on" instead. |
 
 `resolveApproximateAnchor` walks `ancestors` nearest-first and takes the first selector matching **exactly one** rendered, connected element. Ambiguity is skipped rather than guessed — two identical lists means the level above is a better answer than a coin flip.
 

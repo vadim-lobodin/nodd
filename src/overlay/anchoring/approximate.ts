@@ -63,16 +63,73 @@ export function captureAncestorChain(target: Element): string[] {
   return chain;
 }
 
+const collapse = (s: string) => s.replace(/\s+/g, ' ').trim();
+
 /**
- * A short human name for what the comment was left on, for the viewer to read
- * when we can't show them the thing itself. The fingerprint is a hash, so
- * without this there is nothing to say beyond "it's gone".
+ * Whether an element has words of its own, as opposed to only containing other
+ * elements that have words.
+ *
+ * This is the line between something that *has* a name and something that
+ * merely *contains* names. A button, a link, a heading, a cell: its own text is
+ * what it's called. A list row is three columns — it isn't called anything, and
+ * quoting all of it to the viewer produced
+ * `Ralph Edwardsralph.edwards@example.comOrg viewer`.
+ */
+function hasOwnWords(el: Element): boolean {
+  for (const node of Array.from(el.childNodes)) {
+    if (node.nodeType === 3 /* TEXT_NODE */ && collapse(node.nodeValue ?? '')) return true;
+  }
+  return false;
+}
+
+/**
+ * All the words under an element, with a space between separate runs.
+ *
+ * `textContent` concatenates raw, so even where the whole text is wanted —
+ * `<p>The <em>quick</em> brown fox</p>` — the runs need separating.
+ */
+function readableText(el: Element): string {
+  const parts: string[] = [];
+  const visit = (node: Node) => {
+    if (node.nodeType === 3 /* TEXT_NODE */) {
+      const text = collapse(node.nodeValue ?? '');
+      if (text) parts.push(text);
+      return;
+    }
+    node.childNodes.forEach(visit);
+  };
+  visit(el);
+  return parts.join(' ');
+}
+
+/**
+ * Truncate on a word boundary. The label is quoted mid-sentence to the viewer,
+ * so a cut through the middle of an address reads as corruption rather than as
+ * shortening.
+ */
+function truncate(text: string): string {
+  if (text.length <= LABEL_MAX) return text;
+  const cut = text.slice(0, LABEL_MAX - 1);
+  const lastSpace = cut.lastIndexOf(' ');
+  return `${(lastSpace > LABEL_MAX / 2 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
+}
+
+/**
+ * A short human name for what the comment was left on — "Send invite", "Billing"
+ * — so reveal can say *what* is missing rather than only that something is.
+ *
+ * Absent unless the element genuinely has a name: an explicit accessible one, or
+ * words of its own. A container is left unnamed on purpose; reveal then falls
+ * back to "the element this was left on", which is vaguer but true, where a
+ * quoted dump of a row's three columns is just noise the viewer has to decode.
  */
 export function captureAnchorLabel(target: Element): string | undefined {
-  const text = (target.textContent ?? '').replace(/\s+/g, ' ').trim();
-  const source = text || target.getAttribute('aria-label') || target.getAttribute('alt') || '';
-  if (!source) return undefined;
-  return source.length > LABEL_MAX ? `${source.slice(0, LABEL_MAX - 1)}…` : source;
+  const source =
+    target.getAttribute('aria-label') ||
+    target.getAttribute('alt') ||
+    target.getAttribute('title') ||
+    (hasOwnWords(target) ? readableText(target) : '');
+  return source ? truncate(collapse(source)) : undefined;
 }
 
 function isUsableContainer(el: Element): boolean {

@@ -112,6 +112,38 @@ describe('captureAnchorLabel', () => {
     expect(captureAnchorLabel(page(4))).toBe('Person 4');
   });
 
+  it('says nothing for a container that only holds other things', () => {
+    // A row of name + email + role isn't *called* anything. Quoting all of it
+    // read back as "Ralph Edwardsralph.edwards@example.comOrg viewer", and even
+    // punctuated properly it's a dump the viewer has to decode. Reveal says "the
+    // element this was left on" instead.
+    document.body.innerHTML = `
+      <div class="row">
+        <div><p>Ralph Edwards</p><p>ralph.edwards@example.com</p></div>
+        <span>Org viewer</span>
+      </div>`;
+    expect(captureAnchorLabel(document.querySelector('.row') as Element)).toBeUndefined();
+  });
+
+  it('names an element that has words of its own', () => {
+    document.body.innerHTML = '<button class="b">Send invite</button>';
+    expect(captureAnchorLabel(document.querySelector('.b') as Element)).toBe('Send invite');
+  });
+
+  it('keeps inline markup together', () => {
+    // The element has its own words, so the whole sentence is the name — but the
+    // runs still need separating, or `textContent` yields "Thequickbrown fox".
+    document.body.innerHTML = '<p>The <em>quick</em> brown fox</p>';
+    expect(captureAnchorLabel(document.querySelector('p') as Element)).toBe('The quick brown fox');
+  });
+
+  it('truncates on a word boundary rather than mid-word', () => {
+    document.body.innerHTML = '<p>Connect a GitHub Enterprise instance to this workspace</p>';
+    const label = captureAnchorLabel(document.querySelector('p') as Element)!;
+    expect(label.length).toBeLessThanOrEqual(48);
+    expect(label).toBe('Connect a GitHub Enterprise instance to this…');
+  });
+
   it('collapses whitespace and truncates, since it is shown inline', () => {
     document.body.innerHTML = `<p>${'word '.repeat(40)}</p>`;
     const label = captureAnchorLabel(document.querySelector('p') as Element)!;
