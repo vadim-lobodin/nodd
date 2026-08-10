@@ -636,7 +636,9 @@ export function OverlayRenderer() {
       // list, another filter, another scenario. That view state lives in the
       // host's own React state, which Nodd has no universal way to restore, so
       // fall back to the nearest surviving container and say so.
-      const named = thread.pin.label ? `“${thread.pin.label}”` : 'the element this was left on';
+      // A kind, never the element's own text — the notice is chrome, and page
+      // content in it reads as gibberish rather than as an explanation.
+      const named = `the ${thread.pin.kind ?? 'element'} this was left on`;
       if (revealApproximately(thread, where => `${where} — ${named} isn’t on this screen right now.`)) {
         return;
       }

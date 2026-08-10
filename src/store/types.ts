@@ -40,8 +40,12 @@ export type Pin = {
    * read. See `src/overlay/anchoring/approximate.ts`.
    */
   ancestors?: string[];
-  /** Short human text of what was anchored, to name it when it can't be shown. */
-  label?: string;
+  /**
+   * What kind of thing was anchored — "button", "row" — to name it when it can't
+   * be shown. A kind rather than the element's text, which would put page
+   * content in the notice.
+   */
+  kind?: string;
   /**
    * Opaque snapshot of the host's own view state — which page of a list, which
    * filter, which scenario — from whatever it registered via `useNoddViewState`.

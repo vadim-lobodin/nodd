@@ -200,12 +200,16 @@ describe('reveal — host view state', () => {
     expect(notice()).toBeNull();
   });
 
-  it('degrades, with a label, when the host registered nothing', async () => {
-    document.body.innerHTML =
-      '<main id="screen"><section id="team-list"><div class="row"><span class="name">Person 4</span></div></section></main>';
-    const t = thread(DOMAnchor.create(document.querySelector('.name')!, 5, 5));
-    document.body.innerHTML =
-      '<main id="screen"><section id="team-list"><div class="row"><span class="name">Person 1</span></div></section></main>';
+  it('degrades when the host registered nothing, naming the kind and never the content', async () => {
+    // The notice is chrome. Quoting the anchor's text put page data in it — a
+    // comment on an invitee row read back as
+    // "Ralph Edwardsralph.edwards@example.comOrg viewer".
+    const row = (n: number) =>
+      `<main id="screen"><section id="team-list"><div role="row" class="row">` +
+      `<span class="name">Person ${n}</span><span>person${n}@example.com</span></div></section></main>`;
+    document.body.innerHTML = row(4);
+    const t = thread(DOMAnchor.create(document.querySelector('[role="row"]')!, 5, 5));
+    document.body.innerHTML = row(1);
 
     deepLinkTo('t1');
     mount([t]);
@@ -213,8 +217,23 @@ describe('reveal — host view state', () => {
 
     expect(popover()).not.toBeNull();
     expect(isApproximate()).toBe(true);
-    expect(notice()).toContain('Showing this nearby');
-    expect(notice()).toContain('Person 4');
+    expect(notice()).toBe(
+      'Showing this nearby \u2014 the row this was left on isn\u2019t on this screen right now.',
+    );
+  });
+
+  it('says "element" for an anchor whose tag means nothing', async () => {
+    document.body.innerHTML =
+      '<main id="screen"><section id="team-list"><span class="name">Person 4</span></section></main>';
+    const t = thread(DOMAnchor.create(document.querySelector('.name')!, 5, 5));
+    document.body.innerHTML = '<main id="screen"><section id="team-list"></section></main>';
+
+    deepLinkTo('t1');
+    mount([t]);
+    await settle();
+
+    expect(notice()).toContain('the element this was left on');
+    expect(notice()).not.toContain('Person 4');
   });
 });
 
@@ -401,7 +420,8 @@ describe('reveal — degraded placement', () => {
 
     expect(popover()).not.toBeNull();
     expect(document.querySelector('.nodd-popover-reply')).toBeNull(); // read-only
-    expect(notice()).toContain('Person 4');
+    expect(notice()).toContain('isn\u2019t on this screen right now');
+    expect(notice()).not.toContain('Person 4');
     expect(document.querySelector('.nodd-popover-notice-action')).toBeNull();
   });
 });

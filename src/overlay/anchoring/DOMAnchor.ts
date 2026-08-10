@@ -1,7 +1,7 @@
 import { buildSelector } from './selectorBuilder';
 import { computeFingerprintSync, computeContextFingerprintSync, isRootElement } from './fingerprint';
 import { resolvePin, type ResolveResult } from './resolver';
-import { captureAncestorChain, captureAnchorLabel } from './approximate';
+import { captureAncestorChain, captureAnchorKind } from './approximate';
 
 /**
  * A re-resolvable handle on an element. Stricter than a pin's anchor, because
@@ -53,8 +53,12 @@ export type Pin = {
    * written before this shipped, which simply get no degraded anchor.
    */
   ancestors?: string[];
-  /** Short human text of what was anchored, to name it when it can't be shown. */
-  label?: string;
+  /**
+   * What kind of thing was anchored — "button", "row", "image" — so reveal can
+   * say what is missing. Deliberately a kind and not the element's text: naming
+   * it by content put page data in the notice. Absent for a plain `div`.
+   */
+  kind?: string;
   /**
    * Opaque snapshot of the host's own view state (`useNoddViewState`) — the one
    * thing the DOM cannot tell us, because "a `setPage` exists and 4 brings this
@@ -95,7 +99,7 @@ export const DOMAnchor = {
       fingerprint,
       viewportWidth: window.innerWidth,
       ancestors: captureAncestorChain(target),
-      label: captureAnchorLabel(target),
+      kind: captureAnchorKind(target),
     };
   },
 

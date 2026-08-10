@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { DOMAnchor } from '../DOMAnchor';
-import { resolveApproximateAnchor, captureAnchorLabel, isPageLevelContainer } from '../approximate';
+import { resolveApproximateAnchor, captureAnchorKind, isPageLevelContainer } from '../approximate';
 
 // jsdom lays nothing out, so every rect is 0×0 and the "is it rendered" check
 // would reject every container. Give elements a size unless a test says otherwise.
@@ -107,58 +107,40 @@ describe('isPageLevelContainer', () => {
   });
 });
 
-describe('captureAnchorLabel', () => {
-  it('names the element so a viewer can be told what is missing', () => {
-    expect(captureAnchorLabel(page(4))).toBe('Person 4');
+describe('captureAnchorKind', () => {
+  // The notice is chrome. Naming the anchor by its text put page content in it —
+  // a comment on an invitee row was described to the viewer as
+  // "Ralph Edwardsralph.edwards@example.comOrg viewer". A kind says enough.
+  const kind = (html: string, selector: string) => {
+    document.body.innerHTML = html;
+    return captureAnchorKind(document.querySelector(selector) as Element);
+  };
+
+  it('reads the host-declared role first', () => {
+    expect(kind('<div role="row" id="t">Ralph Edwards</div>', '#t')).toBe('row');
+    expect(kind('<div role="menuitem" id="t">Remove</div>', '#t')).toBe('menu item');
   });
 
-  it('says nothing for a container that only holds other things', () => {
-    // A row of name + email + role isn't *called* anything. Quoting all of it
-    // read back as "Ralph Edwardsralph.edwards@example.comOrg viewer", and even
-    // punctuated properly it's a dump the viewer has to decode. Reveal says "the
-    // element this was left on" instead.
-    document.body.innerHTML = `
-      <div class="row">
-        <div><p>Ralph Edwards</p><p>ralph.edwards@example.com</p></div>
-        <span>Org viewer</span>
-      </div>`;
-    expect(captureAnchorLabel(document.querySelector('.row') as Element)).toBeUndefined();
+  it('falls back to the tag where the tag means something', () => {
+    expect(kind('<button id="t">Send invite</button>', '#t')).toBe('button');
+    expect(kind('<a id="t" href="#">Docs</a>', '#t')).toBe('link');
+    expect(kind('<li id="t">Ralph Edwards</li>', '#t')).toBe('list item');
+    expect(kind('<h2 id="t">Team members</h2>', '#t')).toBe('heading');
+    expect(kind('<input id="t" />', '#t')).toBe('field');
   });
 
-  it('names an element that has words of its own', () => {
-    document.body.innerHTML = '<button class="b">Send invite</button>';
-    expect(captureAnchorLabel(document.querySelector('.b') as Element)).toBe('Send invite');
+  it('says nothing for a tag that means nothing', () => {
+    // Reveal then says "the element this was left on" — vaguer, and true.
+    expect(kind('<div id="t"><p>Ralph Edwards</p><span>Org viewer</span></div>', '#t')).toBeUndefined();
+    expect(kind('<span id="t">x</span>', '#t')).toBeUndefined();
   });
 
-  it('keeps inline markup together', () => {
-    // The element has its own words, so the whole sentence is the name — but the
-    // runs still need separating, or `textContent` yields "Thequickbrown fox".
-    document.body.innerHTML = '<p>The <em>quick</em> brown fox</p>';
-    expect(captureAnchorLabel(document.querySelector('p') as Element)).toBe('The quick brown fox');
-  });
-
-  it('truncates on a word boundary rather than mid-word', () => {
-    document.body.innerHTML = '<p>Connect a GitHub Enterprise instance to this workspace</p>';
-    const label = captureAnchorLabel(document.querySelector('p') as Element)!;
-    expect(label.length).toBeLessThanOrEqual(48);
-    expect(label).toBe('Connect a GitHub Enterprise instance to this…');
-  });
-
-  it('collapses whitespace and truncates, since it is shown inline', () => {
-    document.body.innerHTML = `<p>${'word '.repeat(40)}</p>`;
-    const label = captureAnchorLabel(document.querySelector('p') as Element)!;
-    expect(label.length).toBeLessThanOrEqual(48);
-    expect(label).not.toMatch(/\s\s/);
-    expect(label.endsWith('…')).toBe(true);
-  });
-
-  it('falls back to the accessible name when there is no text', () => {
-    document.body.innerHTML = '<button aria-label="Close dialog"></button>';
-    expect(captureAnchorLabel(document.querySelector('button') as Element)).toBe('Close dialog');
-  });
-
-  it('is absent rather than empty when there is nothing to say', () => {
-    document.body.innerHTML = '<div class="spacer"></div>';
-    expect(captureAnchorLabel(document.querySelector('.spacer') as Element)).toBeUndefined();
+  it('never contains the element\'s content', () => {
+    const k = kind(
+      '<div role="row" id="t"><p>Ralph Edwards</p><p>ralph.edwards@example.com</p></div>',
+      '#t',
+    );
+    expect(k).toBe('row');
+    expect(k).not.toMatch(/Ralph|example\.com/);
   });
 });

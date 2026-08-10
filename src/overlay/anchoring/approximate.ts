@@ -29,8 +29,6 @@ import { buildSelector } from './selectorBuilder';
  */
 const CHAIN_DEPTH = 8;
 
-const LABEL_MAX = 48;
-
 /**
  * Selectors for the anchor's ancestors, nearest first, ending at `body`.
  *
@@ -63,73 +61,72 @@ export function captureAncestorChain(target: Element): string[] {
   return chain;
 }
 
-const collapse = (s: string) => s.replace(/\s+/g, ' ').trim();
-
 /**
- * Whether an element has words of its own, as opposed to only containing other
- * elements that have words.
+ * What *kind* of thing the comment was left on — "button", "row", "image".
  *
- * This is the line between something that *has* a name and something that
- * merely *contains* names. A button, a link, a heading, a cell: its own text is
- * what it's called. A list row is three columns — it isn't called anything, and
- * quoting all of it to the viewer produced
- * `Ralph Edwardsralph.edwards@example.comOrg viewer`.
+ * Deliberately not its text. Naming the element by its content put page data in
+ * the notice: a comment on an invitee row was described to the viewer as
+ * `Ralph Edwardsralph.edwards@example.comOrg viewer`, three columns concatenated
+ * and quoted back as if that were the thing's name. Even punctuated properly, a
+ * row's contents is data the viewer has to decode, not a name.
+ *
+ * A kind is short, generic, and enough for the sentence to be useful: "the row
+ * this was left on isn't on this screen right now". Read from the ARIA role
+ * first, since a host that set one has said what the element is; otherwise from
+ * the tag, for the handful where the tag genuinely means something. Anything
+ * else — a `div`, a `span` — gets nothing, and reveal says "the element".
  */
-function hasOwnWords(el: Element): boolean {
-  for (const node of Array.from(el.childNodes)) {
-    if (node.nodeType === 3 /* TEXT_NODE */ && collapse(node.nodeValue ?? '')) return true;
+const TAG_KINDS: Record<string, string> = {
+  BUTTON: 'button',
+  A: 'link',
+  INPUT: 'field',
+  TEXTAREA: 'field',
+  SELECT: 'field',
+  IMG: 'image',
+  SVG: 'icon',
+  TR: 'row',
+  TD: 'cell',
+  TH: 'cell',
+  LI: 'list item',
+  H1: 'heading',
+  H2: 'heading',
+  H3: 'heading',
+  H4: 'heading',
+  H5: 'heading',
+  H6: 'heading',
+  P: 'paragraph',
+  LABEL: 'label',
+  SUMMARY: 'section header',
+};
+
+const ROLE_KINDS: Record<string, string> = {
+  button: 'button',
+  link: 'link',
+  checkbox: 'checkbox',
+  radio: 'radio button',
+  switch: 'toggle',
+  textbox: 'field',
+  combobox: 'field',
+  searchbox: 'field',
+  slider: 'slider',
+  tab: 'tab',
+  menuitem: 'menu item',
+  option: 'option',
+  row: 'row',
+  gridcell: 'cell',
+  cell: 'cell',
+  listitem: 'list item',
+  heading: 'heading',
+  img: 'image',
+};
+
+export function captureAnchorKind(target: Element): string | undefined {
+  const role = target.getAttribute('role');
+  if (role) {
+    const byRole = ROLE_KINDS[role.trim().toLowerCase()];
+    if (byRole) return byRole;
   }
-  return false;
-}
-
-/**
- * All the words under an element, with a space between separate runs.
- *
- * `textContent` concatenates raw, so even where the whole text is wanted —
- * `<p>The <em>quick</em> brown fox</p>` — the runs need separating.
- */
-function readableText(el: Element): string {
-  const parts: string[] = [];
-  const visit = (node: Node) => {
-    if (node.nodeType === 3 /* TEXT_NODE */) {
-      const text = collapse(node.nodeValue ?? '');
-      if (text) parts.push(text);
-      return;
-    }
-    node.childNodes.forEach(visit);
-  };
-  visit(el);
-  return parts.join(' ');
-}
-
-/**
- * Truncate on a word boundary. The label is quoted mid-sentence to the viewer,
- * so a cut through the middle of an address reads as corruption rather than as
- * shortening.
- */
-function truncate(text: string): string {
-  if (text.length <= LABEL_MAX) return text;
-  const cut = text.slice(0, LABEL_MAX - 1);
-  const lastSpace = cut.lastIndexOf(' ');
-  return `${(lastSpace > LABEL_MAX / 2 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
-}
-
-/**
- * A short human name for what the comment was left on — "Send invite", "Billing"
- * — so reveal can say *what* is missing rather than only that something is.
- *
- * Absent unless the element genuinely has a name: an explicit accessible one, or
- * words of its own. A container is left unnamed on purpose; reveal then falls
- * back to "the element this was left on", which is vaguer but true, where a
- * quoted dump of a row's three columns is just noise the viewer has to decode.
- */
-export function captureAnchorLabel(target: Element): string | undefined {
-  const source =
-    target.getAttribute('aria-label') ||
-    target.getAttribute('alt') ||
-    target.getAttribute('title') ||
-    (hasOwnWords(target) ? readableText(target) : '');
-  return source ? truncate(collapse(source)) : undefined;
+  return TAG_KINDS[target.tagName.toUpperCase()];
 }
 
 function isUsableContainer(el: Element): boolean {
