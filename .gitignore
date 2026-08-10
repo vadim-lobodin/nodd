@@ -13,6 +13,9 @@ dist/
 .bonsai/
 *.log
 
+# Local code-review handoffs
+/reviews/
+
 # Supabase CLI temp state (machine-local, should not be tracked)
 supabase/.temp/
 
