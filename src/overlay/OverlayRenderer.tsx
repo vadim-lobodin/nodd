@@ -35,6 +35,11 @@ const SHORTCUTS: ReadonlyArray<{ keys: string; label: string }> = [
   { keys: 'V', label: 'Variants' },
 ];
 
+/** With no comment backend, only the variants key does anything. */
+const VARIANTS_ONLY_SHORTCUTS: ReadonlyArray<{ keys: string; label: string }> = [
+  { keys: 'V', label: 'Variants' },
+];
+
 /**
  * How long reveal keeps re-trying the anchor after its state has mounted.
  * A state element appears as soon as it mounts, but its contents can lag by a
@@ -67,10 +72,12 @@ async function resolveWhenSettled(
 
 export function OverlayRenderer() {
   const ctx = useNoddContext();
-  const { user, urlPath, store, variants, signIn, signOut, hideForDuration, theme, pinContainer, activePrototype, navigate } = ctx;
+  const { user, urlPath, store, variants, signIn, signOut, hideForDuration, theme, pinContainer, activePrototype, navigate, commentsEnabled } = ctx;
   // A viewer who can create/edit comments: signed in with a display name set.
   // Everyone else (logged out, or mid-onboarding) gets read-only comments.
-  const canComment = !!user && !ctx.auth.needsDisplayName && ctx.writeStatus === 'ready';
+  // With no backend nobody can comment and nobody can read — the chrome for it
+  // is left out of the toolbar entirely rather than shown as dead buttons.
+  const canComment = !!user && !ctx.auth?.needsDisplayName && ctx.writeStatus === 'ready';
   const [snapshot, setSnapshot] = useState<PageSnapshot | null>(null);
   // Resolved threads are excluded from the live snapshot (the store drops them
   // on resolve). When the viewer opts in via the settings menu we fetch them
@@ -84,7 +91,11 @@ export function OverlayRenderer() {
   // Independent from NoddProvider's global `isVisible`: this only controls
   // comment UI (pins, popovers, sidebar, capture) while leaving the toolbar
   // and variants available.
-  const [commentsVisible, setCommentsVisible] = useState(true);
+  const [commentsShown, setCommentsVisible] = useState(true);
+  // Every pin, popover, capture layer and panel is already gated on this, so
+  // folding the no-backend case in here is what keeps the variants-only overlay
+  // from growing a second set of conditions.
+  const commentsVisible = commentsEnabled && commentsShown;
   const [isCapturing, setIsCapturing] = useState(false);
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -441,6 +452,7 @@ export function OverlayRenderer() {
       // "C" is the explicit add-comment action. Read-only viewers are asked
       // to sign in here, rather than when they merely open the comments list.
       if (matchesKey(ev, 'c')) {
+        if (!commentsEnabled) return;
         ev.preventDefault();
         if (isCapturing) disarmCapture();
         else requestAddComment();
@@ -462,6 +474,7 @@ export function OverlayRenderer() {
       // The comments list is available to everyone. RLS determines whether a
       // logged-out viewer receives public threads or an empty read-only list.
       if (matchesKey(ev, 'm')) {
+        if (!commentsEnabled) return;
         ev.preventDefault();
         toggleCommentsPanel();
       }
@@ -958,7 +971,7 @@ export function OverlayRenderer() {
   const handleSetName = useCallback(async () => {
     const name = authName.trim();
     if (!name) return;
-    await ctx.auth.setDisplayName(name);
+    await ctx.auth?.setDisplayName(name);
   }, [authName, ctx.auth]);
 
   // Variants chrome (toolbar button + panel) is independent of auth and comment
@@ -1066,7 +1079,7 @@ export function OverlayRenderer() {
             </NoddButton>
           </>
         )
-      ) : ctx.auth.needsDisplayName ? (
+      ) : ctx.auth?.needsDisplayName ? (
         <div className="nodd-auth-form">
           <div className="nodd-auth-title">Welcome! What should we call you?</div>
           <NoddInput
@@ -1109,14 +1122,16 @@ export function OverlayRenderer() {
           the read-only-capable list; adding a comment is a separate action. */}
       <div className={`nodd-toolbar${panelOpen ? ' nodd-toolbar--shifted' : ''}`}>
         {variantsButton}
-        <button
-          className={`nodd-btn nodd-btn--sidebar${sidebarOpen ? ' nodd-btn--active' : ''}`}
-          onClick={toggleCommentsPanel}
-          aria-label={sidebarOpen ? 'Close comments' : 'Open comments'}
-          title={sidebarOpen ? 'Close comments' : 'Open comments'}
-        >
-          <Chat size={20} />
-        </button>
+        {commentsEnabled ? (
+          <button
+            className={`nodd-btn nodd-btn--sidebar${sidebarOpen ? ' nodd-btn--active' : ''}`}
+            onClick={toggleCommentsPanel}
+            aria-label={sidebarOpen ? 'Close comments' : 'Open comments'}
+            title={sidebarOpen ? 'Close comments' : 'Open comments'}
+          >
+            <Chat size={20} />
+          </button>
+        ) : null}
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button
@@ -1135,14 +1150,18 @@ export function OverlayRenderer() {
               sideOffset={6}
               onCloseAutoFocus={e => e.preventDefault()}
             >
-              <DropdownMenu.Item
-                className="nodd-menu-item"
-                onSelect={() => setCommentsVisible(visible => !visible)}
-              >
-                {commentsVisible ? <ViewOff size={16} /> : <View size={16} />}
-                <span>{commentsVisible ? 'Hide comments' : 'Show comments'}</span>
-              </DropdownMenu.Item>
-              <DropdownMenu.Separator className="nodd-menu-separator" />
+              {commentsEnabled ? (
+                <>
+                  <DropdownMenu.Item
+                    className="nodd-menu-item"
+                    onSelect={() => setCommentsVisible(visible => !visible)}
+                  >
+                    {commentsVisible ? <ViewOff size={16} /> : <View size={16} />}
+                    <span>{commentsVisible ? 'Hide comments' : 'Show comments'}</span>
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Separator className="nodd-menu-separator" />
+                </>
+              ) : null}
               <DropdownMenu.Item
                 className="nodd-menu-item nodd-menu-item--stacked"
                 onSelect={() => hideForDuration(60 * 60 * 1000)}
@@ -1158,7 +1177,7 @@ export function OverlayRenderer() {
                   out of the menu's keyboard navigation. */}
               <DropdownMenu.Label className="nodd-menu-label">Shortcuts</DropdownMenu.Label>
               <div className="nodd-menu-shortcuts">
-                {SHORTCUTS.map(({ keys, label }) => (
+                {(commentsEnabled ? SHORTCUTS : VARIANTS_ONLY_SHORTCUTS).map(({ keys, label }) => (
                   <div className="nodd-menu-shortcut" key={keys}>
                     <span>{label}</span>
                     <kbd className="nodd-kbd">{keys}</kbd>
@@ -1302,7 +1321,9 @@ export function OverlayRenderer() {
         pinContainer,
       )}
 
-      {/* Sidebar — read-only when the viewer can't comment (no delete/sign-out) */}
+      {/* Sidebar — read-only when the viewer can't comment (no delete/sign-out),
+          and absent entirely when there is no comment backend. */}
+      {commentsEnabled ? (
       <Sidebar
         open={sidebarOpen}
         onClose={() => {
@@ -1342,6 +1363,7 @@ export function OverlayRenderer() {
         onItemHover={() => {}}
         container={portalRootRef.current}
       />
+      ) : null}
 
       {/* Variants panel — shares the right-side region with the sidebar */}
       {variantsPanel}

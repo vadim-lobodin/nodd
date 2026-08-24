@@ -107,6 +107,7 @@ function mount(threads: Thread[], page?: React.ReactNode, opts: { user?: Current
     isVisible: true, toggleOverlay: () => {}, setVisible: () => {}, hideForDuration: () => {},
     theme: 'light', setTheme: () => {}, urlPath: '/',
     auth: { needsDisplayName: false, currentUser: user, setDisplayName: async () => {} } as unknown as AuthClient,
+    commentsEnabled: true,
     writeStatus: 'ready', retryOnboarding: () => {},
     store,
     variants: createVariantRegistry({ projectId: 'p' }),

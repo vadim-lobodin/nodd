@@ -325,6 +325,7 @@ function Harness(args: PlaygroundArgs) {
     setTheme: () => {},
     urlPath: '/',
     auth,
+    commentsEnabled: true,
     writeStatus: 'ready',
     retryOnboarding: () => {},
     store,

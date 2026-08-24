@@ -32,7 +32,7 @@ supabase db reset       # nuke + replay migrations + seed.sql
 Five modules, one-way dependency graph: `provider → {auth, store, overlay} → supabase-js`. The public surface is intentionally tiny — one component + one hook from `src/index.ts`:
 
 ```ts
-<NoddProvider projectId supabaseUrl supabaseAnonKey theme?> ...
+<NoddProvider projectId supabaseUrl? supabaseAnonKey? theme?> ...
 const { user, signIn, signOut, toggleOverlay, isVisible, ... } = useNodd();
 ```
 
@@ -40,7 +40,7 @@ const { user, signIn, signOut, toggleOverlay, isVisible, ... } = useNodd();
 |---|---|
 | `src/provider/` | `NoddProvider` boots singletons, owns runtime state (user, urlPath, visibility, theme), creates two body-attached portals, exposes `NoddContext`. Contains `state/` (`<NoddState>` + activator registry) and `variants/` (`useVariant`/`<Variant>` + per-viewer variant registry). |
 | `src/auth/` | `AuthClient` wraps Supabase magic-link sign-in + session restore. |
-| `src/store/` | `CommentStore` — page-scoped fetch, IndexedDB cache, optimistic CRUD with temp IDs, Realtime subscription. Files are split by concern (`query`, `mutations`, `realtime`, `cache`, `state`, `members`). |
+| `src/store/` | `CommentStore` (plus `createNullStore` for comments-off mode) — page-scoped fetch, IndexedDB cache, optimistic CRUD with temp IDs, Realtime subscription. Files are split by concern (`query`, `mutations`, `realtime`, `cache`, `state`, `members`). |
 | `src/overlay/` | React UI rendered via portal: `OverlayRenderer`, `Sidebar`, `VariantsPanel`, `ThreadPopover`, `PinMarker`, `CaptureLayer`, `MentionPicker`, plus `anchoring/` (selector + fingerprint + resolver + ResizeObserver re-anchor loop). |
 | `supabase/` | SQL migrations, RLS policies, indexes. Bundled in the npm package via `package.json` `files` so consumers can apply them after `npm i`. |
 
@@ -48,6 +48,7 @@ Each module has its own `README.md` with detailed design notes; consult them bef
 
 ### Hard invariants — do not break
 
+- **Variants never depend on the backend.** `supabaseUrl`/`supabaseAnonKey` are optional, and an unreachable backend degrades to the same comments-off mode (`provider/backend.ts` guards every request: one log line, then a short circuit — no unbounded `Failed to fetch` stream). In that mode `commentsEnabled` is false, `auth` is null and `store` is the null store, so the overlay still renders the variants switcher. Don't make a client-side feature (`<Variant>`, `<NoddState>`, `useNoddViewState`) reach for `store` or `auth`.
 - **Zero host impact when overlay is off.** When `isVisible` is false the entire portal is unmounted (`NoddProvider.tsx:159`). All overlay CSS is scoped under `[data-nodd-root]` / `[data-nodd-pin-container]`; never add unscoped global selectors to `src/overlay/styles/overlay.css`.
 - **Two portals, not one.** `nodd-pins` is `position: absolute` so pins scroll with the document; `nodd-root` is `position: fixed` for toolbar/sidebar/popover/capture. Both are appended directly to `document.body` and carry a `data-nodd-theme` attribute.
 - **Strict Mode-safe singletons.** `supabase`, `AuthClient`, and `CommentStore` are stored in refs and lazily constructed once (see `NoddProvider.tsx:33-63`). The store is created in `useEffect` (not during render) to avoid double Realtime subscriptions; it is `dispose()`-ed on unmount.

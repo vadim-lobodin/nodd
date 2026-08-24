@@ -411,3 +411,13 @@ No file imports from `src/overlay/`, `src/provider/`, or `src/auth/`. Auth depen
 - **Parent:** [Architecture — DESIGN_DOC.md](../../DESIGN_DOC.md) — see §8 *Sub-200ms Comment Load Strategy* for the latency budget this module implements.
 - **Sibling modules:** `src/provider/README.md`, `src/overlay/README.md`, `src/auth/README.md`, `supabase/README.md` (to be created).
 - **Schema source of truth:** `supabase/migrations/` (table & view definitions referenced in §3, §8).
+
+## `createNullStore`
+
+A `CommentStore` with no backend behind it: every page reports empty and settled,
+every mutation rejects. `NoddProvider` installs it when comments are off — no
+credentials, or a backend that turned out to be unreachable. It exists so
+`OverlayRenderer` keeps a single code path: the alternative is a null check at
+every `store.*` call site, and the one that gets missed throws inside a
+prototype. Mutations reject rather than resolving quietly, because a silent
+success is a comment the author believes was saved.
