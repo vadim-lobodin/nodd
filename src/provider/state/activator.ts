@@ -3,6 +3,7 @@
 // outside their conditional render so the activator is always available.
 
 import { isAutoSegment, findAutoTrigger } from './autoState';
+import { isCtlSegment, findControlledTrigger } from './controlledState';
 import { findStateElement, findExplicitTrigger, isDerivedSegment, pressTrigger } from './reopen';
 
 export type Activator = () => void | Promise<void>;
@@ -44,6 +45,7 @@ export function getActivator(name: string): Activator | undefined {
 
 export function hasActivatorOrTrigger(name: string): boolean {
   if (isAutoSegment(name)) return findAutoTrigger(name) !== null;
+  if (isCtlSegment(name)) return findControlledTrigger(name) !== null;
   if (isDerivedSegment(name)) return false; // structural: only a recording helps
   if (activators.has(name)) return true;
   return findExplicitTrigger(name) !== null;
@@ -64,6 +66,10 @@ export function hasReopenPath(
   hasRecordedTrigger?: (segment: string) => boolean,
 ): boolean {
   if (hasRecordedTrigger?.(segment)) return true;
+  // A control-derived segment is named after the very control that opens it, so
+  // unlike the other derived kinds there is a reopen path by construction — the
+  // closed-trigger hunt is a lookup by key, not a guess among candidates.
+  if (isCtlSegment(segment)) return true;
   if (isDerivedSegment(segment)) return false;
   return activators.has(segment) || findExplicitTrigger(segment) !== null;
 }
@@ -131,7 +137,10 @@ export async function activateState(
       // to hunt with, so for those the recording is the only route.
       const trigger =
         opts.recordedTrigger?.(segment) ??
-        (isAutoSegment(segment) ? findAutoTrigger(segment, { within: parent }) : null);
+        (isAutoSegment(segment) ? findAutoTrigger(segment, { within: parent }) : null) ??
+        // A control-derived segment is keyed on its control's own name, so this
+        // is a lookup rather than the inference the auto hunt has to make.
+        (isCtlSegment(segment) ? findControlledTrigger(segment) : null);
       if (!trigger) return failed;
       pressTrigger(trigger);
     } else {

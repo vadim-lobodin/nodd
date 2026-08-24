@@ -268,6 +268,7 @@ function Harness(args: AutoStateArgs) {
     setTheme: () => {},
     urlPath: '/',
     auth,
+    commentsEnabled: true,
     writeStatus: 'ready',
     retryOnboarding: () => {},
     store: storeRef.current,

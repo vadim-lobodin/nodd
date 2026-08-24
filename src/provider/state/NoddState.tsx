@@ -2,6 +2,7 @@ import React, { useContext, useMemo, type ReactNode } from 'react';
 import { NoddStateContext } from './NoddStateContext';
 import { detectAutoSegment } from './autoState';
 import { detectFloatingSegment, findFloatingAncestor } from './floatingState';
+import { detectControlledSegment, findControlledAncestor } from './controlledState';
 
 export type NoddStateProps = {
   name: string;
@@ -34,12 +35,17 @@ export function NoddState({ name, children }: NoddStateProps) {
 // otherwise an open ARIA overlay ancestor contributes an auto-detected segment
 // so comments inside modals/menus are scoped without host instrumentation.
 //
-// Only if that finds nothing do we fall back to the structural signal in
-// `floatingState.ts`, which catches overlays carrying no ARIA. Confining it to
-// the empty case is what makes it safe to add: a thread that already resolved
-// to some stack keeps resolving to exactly that stack, and a thread whose key
-// is empty matches every state anyway — so no existing comment changes
-// behaviour, only new ones gain a scope they previously went without.
+// Only if that finds nothing do we fall back — first to the structural signal
+// in `floatingState.ts` (overlays carrying no ARIA), then to the disclosure
+// signal in `controlledState.ts` (content named by an `aria-expanded` control).
+// Confining both to the empty case is what makes them safe to add: a thread
+// that already resolved to some stack keeps resolving to exactly that stack,
+// and a thread whose key is empty matches every state anyway — so no existing
+// comment changes behaviour, only new ones gain a scope they went without.
+//
+// Floating is tried before controlled for the same reason, and only that
+// reason: it shipped first, so every `float:` thread already in the wild must
+// keep resolving to `float:`. On a portalled popover both signals fire.
 export function getStateStackForElement(el: Element | null): string[] {
   const stack: string[] = [];
   let cur: Element | null = el;
@@ -56,6 +62,10 @@ export function getStateStackForElement(el: Element | null): string[] {
   if (stack.length > 0) return stack;
 
   const floating = findFloatingAncestor(el);
-  const segment = floating ? detectFloatingSegment(floating) : null;
-  return segment ? [segment] : [];
+  const floatSegment = floating ? detectFloatingSegment(floating) : null;
+  if (floatSegment) return [floatSegment];
+
+  const controlled = findControlledAncestor(el);
+  const ctlSegment = controlled ? detectControlledSegment(controlled) : null;
+  return ctlSegment ? [ctlSegment] : [];
 }

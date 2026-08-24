@@ -20,7 +20,18 @@ export type NoddContextValue = {
   theme: NoddTheme;
   setTheme: (theme: NoddTheme) => void;
   urlPath: string;
-  auth: AuthClient;
+  /**
+   * Null when the provider runs with comments off — no Supabase credentials, or
+   * a backend that turned out to be unreachable. There is no session to speak
+   * of in that mode, so the comment chrome that reads this is unmounted.
+   */
+  auth: AuthClient | null;
+  /**
+   * False when there is no comment backend: `store` is a null store, `auth` is
+   * null, and the overlay shows variants only. Variants, `<NoddState>` and view
+   * state are client-side and unaffected.
+   */
+  commentsEnabled: boolean;
   /** Auto-membership must settle before the overlay enables mutations. */
   writeStatus: NoddWriteStatus;
   retryOnboarding: () => void;

@@ -1,6 +1,7 @@
 import { buildSelector } from './selectorBuilder';
 import { computeFingerprintSync, computeContextFingerprintSync, isRootElement } from './fingerprint';
 import { resolvePin, type ResolveResult } from './resolver';
+import { captureAncestorChain, captureAnchorKind } from './approximate';
 
 /**
  * A re-resolvable handle on an element. Stricter than a pin's anchor, because
@@ -45,6 +46,26 @@ export type Pin = {
    * measured. Fixed coordinates simply stay where the viewer put them.
    */
   page?: { x: number; y: number };
+  /**
+   * Selectors for the anchor's ancestors, nearest first — the fallback for when
+   * the anchor itself is gone because the host swapped the view (paginated,
+   * filtered, changed scenario). See `anchoring/approximate.ts`. Absent on pins
+   * written before this shipped, which simply get no degraded anchor.
+   */
+  ancestors?: string[];
+  /**
+   * What kind of thing was anchored — "button", "row", "image" — so reveal can
+   * say what is missing. Deliberately a kind and not the element's text: naming
+   * it by content put page data in the notice. Absent for a plain `div`.
+   */
+  kind?: string;
+  /**
+   * Opaque snapshot of the host's own view state (`useNoddViewState`) — the one
+   * thing the DOM cannot tell us, because "a `setPage` exists and 4 brings this
+   * row back" is nowhere in it. Stamped by `OverlayRenderer` at capture rather
+   * than here: this module knows about elements, not about the host.
+   */
+  viewState?: Record<string, unknown>;
 };
 
 function clamp(v: number, min: number, max: number): number {
@@ -77,6 +98,8 @@ export const DOMAnchor = {
       offsetY,
       fingerprint,
       viewportWidth: window.innerWidth,
+      ancestors: captureAncestorChain(target),
+      kind: captureAnchorKind(target),
     };
   },
 

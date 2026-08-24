@@ -1,4 +1,5 @@
 export { createCommentStore } from './createCommentStore';
+export { createNullStore } from './createNullStore';
 export type { CommentStore } from './createCommentStore';
 export type {
   Pin,

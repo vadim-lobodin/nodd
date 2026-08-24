@@ -13,4 +13,6 @@ export type { Activator, ActivateResult, TriggerResolver } from './activator';
 export { describeAutoSegment } from './autoState';
 export { findOpeningTrigger, isDerivedSegment } from './reopen';
 export { isFloatSegment, describeFloatSegment } from './floatingState';
+export { isCtlSegment, describeCtlSegment } from './controlledState';
 export { describeSegment } from './describe';
+export { isRendered, discloseAncestors, describeContainer } from './disclose';

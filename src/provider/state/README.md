@@ -93,6 +93,43 @@ Naming follows the same stability rule as §4: accessible name → the name of t
 
 A float segment has no ARIA, so §4a can rarely record a trigger for it and `findAutoTrigger` has no role to hunt with. Comments in one are therefore usually scoped but not reopenable — which is an honest improvement over bleeding, and says so in the composer.
 
+## 4c. Content named by its control — `controlledState.ts`
+
+§4b reads layout, so it only fires for surfaces that *look* like layers. Two very common shapes look like nothing at all:
+
+- **Popover content** in Radix and Headless UI — no `role`, and (unless the host portals or positions it) no floating structure either.
+- **Disclosure / accordion regions** whose collapsed content is *unmounted*, which puts them out of reach of `disclose.ts` too — there is no hidden element left to reveal.
+
+Both carry the disclosure half of ARIA: a control with `aria-expanded="true"` and `aria-controls="<content id>"`. That is a host-authored relationship rather than a layout guess, and it is bidirectional — the same link that identifies the state is the thing to press to get it back. Unlike a portalled dialog there is never a question of *what opened this*.
+
+`detectControlledSegment` keys the segment on the **control's** accessible name (`ctl:more-options`), not the content's. This kind of content usually has no name, and its id is generated (`radix-:r5:`, React `useId`) and so differs between reloads; a button labelled "Advanced" keys `ctl:advanced` for as long as it says "Advanced".
+
+Gating, in the same spirit as §4b:
+
+- **Runs only when explicit, ARIA-role *and* structural all found nothing**, and specifically *after* §4b — not because structure is the better signal, but because `float:` shipped first and every `float:` thread in the wild must keep deriving `float:`. On a portalled popover both fire; the older one wins.
+- **Exactly one expanded control** may claim the content, and it must have a name. Two controls, or an unnamed one, declines.
+- **`role="tabpanel"` is excluded.** A tab panel is a persistent region, not a transient surface; scoping comments to it would hide each tab's comments behind the others. `disclose.ts` reopens those instead, and correct tab markup uses `aria-selected` anyway.
+
+Reopening is a lookup rather than a hunt: `findControlledTrigger` searches `[aria-expanded="false"][aria-controls]` for the control whose name slug *is* the segment key. That's why `hasReopenPath` returns true for a `ctl:` segment without needing a recorded trigger — the segment is named after its own opener. Ambiguity (two buttons labelled "More") still declines.
+
+## 4d. Anchors that are present but not shown — `disclose.ts`
+
+A closed tab panel, a collapsed accordion, a `<details>`: the commented element is still in the document and still matches its selector and fingerprint. Resolution therefore reported *success*, and then `getBoundingClientRect()` returned zeros and the pin rendered in the page's top-left corner — silently wrong, which is worse than orphaned.
+
+This is not a state in the §2 sense. The comment belongs to the base screen and its key matches; nothing in the state stack refers to the closed section, so there is no captured segment to key off. All we have is the anchor and the DOM above it.
+
+`isRendered` therefore reads **declared** hiding — `hidden`, `aria-hidden="true"`, `display: none`, `visibility: hidden`, a closed `<details>` — rather than measuring layout. A zero-size rect is also what an element reports before first paint, inside a `display: contents` wrapper, and mid-animation; treating those as hidden would suppress pins that are about to be fine. Resolution now requires the anchor to be rendered, which is what stops the corner pins.
+
+`discloseAncestors` then opens what's hiding it, outermost first, recomputing the chain after each press (opening a tab re-renders its contents, so the inner accordion may be a different element by then). It finds the control three ways:
+
+1. a `<details>`'s own `<summary>`;
+2. the single `[aria-controls="<id>"]` control outside the container that isn't already expanded;
+3. for `role="tabpanel"`, the `aria-labelledby` target when it is a `role="tab"`.
+
+Ambiguity declines, as everywhere else, and reveal then names the closed container (`describeContainer`) and rings it instead.
+
+`DiscloseResult` reports `revealed`, `blocked` **and `changed`**, and the third is load-bearing. The usual React answer to "open this panel" is to unmount the closed one and mount an open one — which succeeds while destroying the element being tracked, so the outcome cannot be observed on it. `revealed` is necessarily false there and `blocked` is null, and reading that pair as failure sent every controlled tab and accordion to a degraded anchor whose exact one was sitting in the new DOM. `changed` says a control was pressed and the DOM moved; a caller **must** re-resolve the pin whenever it is set. Reveal runs the disclose-and-re-resolve step up to twice, because a freshly mounted subtree can have its own collapsed section inside it.
+
 ## 5. Reopening a thread — `revealThread`
 
 The single entry point for opening a thread that may live in another screen or state is `OverlayRenderer.revealThread(threadId, urlPath?)`. It:
@@ -102,9 +139,12 @@ The single entry point for opening a thread that may live in another screen or s
 3. re-resolves the pin, and if it now matches the state, positions + opens + scrolls it into view; otherwise
 4. **degrades instead of dead-ending.** Which of the two failures happened is now distinguished, because that's what the viewer needs to know:
    - *the state wouldn't reopen* — name it from the breadcrumb ("This comment is inside “Assign to policy”"), and if its recorded opening control is on the page, scroll to it and ring it (`.nodd-reveal-highlight`) so the next click is the viewer's to make;
-   - *the state came back but the anchor didn't* — say the anchor is gone, and point at nothing, because there's nothing to point at.
+   - *the anchor is present but shut inside a tab or section* — open it (§4d), and if that can't be done unambiguously, name and ring the closed container;
+   - *the state came back but the anchor didn't* — the host is showing a different slice of the same UI, which no library can restore on its own; fall back to the nearest surviving container so the thread is at least readable (see `anchoring/README.md` §5.3.1).
 
 Every entry point — a sidebar item, the prototype inbox, a deep link — goes through this one path, so state restoration is uniform.
+
+Covered end to end by `overlay/__tests__/reveal.test.tsx`, which drives this sequence through the deep-link entry. The helpers each had unit coverage while the sequencing between them was wrong, so assertions here are about the *outcome the viewer gets* — exact placement and no notice, or a degraded pin with the right words in it.
 
 ## 6. Files
 
@@ -119,6 +159,8 @@ src/provider/state/
 ├── activator.ts         ← activator registry + activateState (explicit + auto)
 ├── reopen.ts            ← segment→element lookup + capture-time trigger discovery
 ├── floatingState.ts     ← structural fallback for overlays with no ARIA
+├── controlledState.ts   ← disclosure fallback: content named by an expanded control
+├── disclose.ts          ← opening the tab/section an anchor is hidden inside
 ├── describe.ts          ← one human label for any kind of segment
 ├── autoState.ts         ← ARIA overlay auto-detection
 └── __tests__/           ← unit coverage + the library compatibility matrix
@@ -127,9 +169,10 @@ src/provider/state/
 ## 7. Known limitations
 
 - **Auto-restore is still heuristic** where no trigger was recorded — narrowing by name helps, but genuinely identical candidates (twenty `aria-label="More"` buttons) still fail closed → hint.
-- **A hand-rolled overlay that is neither portalled nor scrimmed is invisible.** §4b needs one of those two structures; an inline `position: absolute` panel with no backdrop matches neither, so a comment inside it is captured unscoped and bleeds. Nothing downstream can warn about a state nobody detected. Fix it in the host with two attributes: `data-nodd-state` on the panel and `data-nodd-open-state` on its trigger — no import or wrapper needed, and it also makes the state reopenable.
+- **A hand-rolled overlay that is neither portalled, scrimmed, nor `aria-expanded`-linked is invisible.** §4b needs one of its two structures and §4c needs the disclosure link; an inline `position: absolute` panel with no backdrop and no ARIA matches none of them, so a comment inside it is captured unscoped and bleeds. Nothing downstream can warn about a state nobody detected. Fix it in the host with two attributes: `data-nodd-state` on the panel and `data-nodd-open-state` on its trigger — no import or wrapper needed, and it also makes the state reopenable.
 - **Float segment names can be unstable.** When a layer has no accessible name, no `data-testid` and no usable id, the name falls back to its first control's text; if that text changes, existing comments in that layer stop matching and disappear. Giving the panel an `aria-label` (or a heading) fixes it permanently.
 - **No faithful reopen exists for some interactions**, recorded trigger or not: hover-opened menus (a click on the anchor does nothing), right-click context menus (the trigger is a transient element at the cursor), and keyboard-only palettes. These get the named hint.
+- **`ctl:` segment names inherit their control's label.** Rename the button and existing comments in that surface stop matching — the same trade-off as float names (§4b), and fixed the same way, by giving the control a stable `aria-label`.
 - **2 s restore budget**, per segment. A state that takes longer than 2000 ms to mount after its trigger fires is treated as unrestorable.
 - **400 ms anchor settle budget.** After activation succeeds, reveal retries the anchor each frame for `ANCHOR_SETTLE_MS`; content that lazy-mounts past that still misses.
 

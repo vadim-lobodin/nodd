@@ -12,8 +12,10 @@ import { VariantsPanel } from './components/VariantsPanel';
 import { NoddButton, NoddInput } from './components/FormControls';
 import { DOMAnchor, type Pin } from './anchoring/DOMAnchor';
 import { startReanchorLoop } from './anchoring/reanchorLoop';
-import { getStateStackForElement, isStateMatch, stackToKey, keyToStack, activateState, describeSegment, isFloatSegment } from '../provider/state';
+import { resolveApproximateAnchor, positionInContainer, isPageLevelContainer } from './anchoring/approximate';
+import { getStateStackForElement, isStateMatch, stackToKey, keyToStack, activateState, describeSegment, isFloatSegment, isRendered, discloseAncestors, describeContainer } from '../provider/state';
 import { captureStateTriggers, makeTriggerResolver } from './stateTriggers';
+import { captureViewState, applyViewState } from '../provider/viewState';
 import { matchesKey } from '../provider/keys';
 import type { Thread, PageSnapshot } from '../store/types';
 
@@ -30,6 +32,11 @@ const SHORTCUTS: ReadonlyArray<{ keys: string; label: string }> = [
   { keys: 'C', label: 'Comment mode' },
   { keys: 'Esc', label: 'Exit comment mode' },
   { keys: 'M', label: 'Comments panel' },
+  { keys: 'V', label: 'Variants' },
+];
+
+/** With no comment backend, only the variants key does anything. */
+const VARIANTS_ONLY_SHORTCUTS: ReadonlyArray<{ keys: string; label: string }> = [
   { keys: 'V', label: 'Variants' },
 ];
 
@@ -65,10 +72,12 @@ async function resolveWhenSettled(
 
 export function OverlayRenderer() {
   const ctx = useNoddContext();
-  const { user, urlPath, store, variants, signIn, signOut, hideForDuration, theme, pinContainer, activePrototype, navigate } = ctx;
+  const { user, urlPath, store, variants, signIn, signOut, hideForDuration, theme, pinContainer, activePrototype, navigate, commentsEnabled } = ctx;
   // A viewer who can create/edit comments: signed in with a display name set.
   // Everyone else (logged out, or mid-onboarding) gets read-only comments.
-  const canComment = !!user && !ctx.auth.needsDisplayName && ctx.writeStatus === 'ready';
+  // With no backend nobody can comment and nobody can read — the chrome for it
+  // is left out of the toolbar entirely rather than shown as dead buttons.
+  const canComment = !!user && !ctx.auth?.needsDisplayName && ctx.writeStatus === 'ready';
   const [snapshot, setSnapshot] = useState<PageSnapshot | null>(null);
   // Resolved threads are excluded from the live snapshot (the store drops them
   // on resolve). When the viewer opts in via the settings menu we fetch them
@@ -82,7 +91,11 @@ export function OverlayRenderer() {
   // Independent from NoddProvider's global `isVisible`: this only controls
   // comment UI (pins, popovers, sidebar, capture) while leaving the toolbar
   // and variants available.
-  const [commentsVisible, setCommentsVisible] = useState(true);
+  const [commentsShown, setCommentsVisible] = useState(true);
+  // Every pin, popover, capture layer and panel is already gated on this, so
+  // folding the no-backend case in here is what keeps the variants-only overlay
+  // from growing a second set of conditions.
+  const commentsVisible = commentsEnabled && commentsShown;
   const [isCapturing, setIsCapturing] = useState(false);
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -116,6 +129,14 @@ export function OverlayRenderer() {
     scopeDropped: boolean;
   } | null>(null);
   const [revealHint, setRevealHint] = useState<string | null>(null);
+  /**
+   * The one thread, if any, currently shown at a degraded anchor because its
+   * exact one is gone. Held in a ref so `resolveAllPins` can re-apply it after
+   * a DOM mutation wipes the position map, and singular because it only ever
+   * comes from an explicit reveal — degraded pins are never shown unprompted.
+   */
+  const approxRef = useRef<{ threadId: string; element: Element } | null>(null);
+  const [approxNotice, setApproxNotice] = useState<string | null>(null);
   // Page-absolute box drawn around the control that opens a state we couldn't
   // reopen ourselves, so a failed reveal still points somewhere.
   const [revealHighlight, setRevealHighlight] = useState<
@@ -307,7 +328,11 @@ export function OverlayRenderer() {
     const matches = new Map<string, boolean>();
     for (const thread of allThreads) {
       const result = DOMAnchor.resolve(thread.pin);
-      if (result) {
+      // A hidden anchor — closed tab panel, collapsed accordion — still matches
+      // its selector and fingerprint, so resolution "succeeds" and then reports
+      // a zero rect, which put the pin in the page's top-left corner. Treat it
+      // as not on the page; reveal is what opens it (see `discloseAncestors`).
+      if (result && isRendered(result.element)) {
         cache.set(thread.id, result.element);
         const pos = DOMAnchor.reposition(thread.pin, result.element);
         positions.set(thread.id, pos);
@@ -317,6 +342,38 @@ export function OverlayRenderer() {
         matches.set(thread.id, isStateMatch(thread.stateKey, []));
       }
     }
+    const approx = approxRef.current;
+    if (approx) {
+      // The exact anchor came back while the viewer was reading at a degraded
+      // one — they followed the highlighted opener, changed a filter back, or a
+      // slow host restore finally landed. Upgrade in place: the exact position
+      // is already in `positions`, so all that's left is to stop claiming the
+      // placement is approximate and hand the thread back to the reanchor loop.
+      if (positions.has(approx.threadId) && matches.get(approx.threadId) === true) {
+        approxRef.current = null;
+        setApproxNotice(null);
+      } else {
+        // Otherwise it still has no real resolution to render at, and the loop
+        // above just dropped it. Put it back — otherwise the first DOM mutation
+        // after the reveal closes the popover the viewer is reading.
+        const thread = allThreads.find(t => t.id === approx.threadId);
+        const el = approx.element.isConnected
+          ? approx.element
+          : thread
+            ? resolveApproximateAnchor(thread.pin)
+            : null;
+        if (el) {
+          approxRef.current = { threadId: approx.threadId, element: el };
+          cache.set(approx.threadId, el);
+          positions.set(approx.threadId, positionInContainer(el));
+          matches.set(approx.threadId, true);
+        } else {
+          approxRef.current = null;
+          setApproxNotice(null);
+        }
+      }
+    }
+
     anchorCache.current = cache;
     pinPositionsRef.current = positions;
     setPinPositions(positions);
@@ -326,6 +383,10 @@ export function OverlayRenderer() {
   // Resolve pins on route change, snapshot change, or DOM mutation
   useLayoutEffect(() => {
     if (!commentsVisible) {
+      // A degraded pin only ever exists for one explicit reveal; hiding comments
+      // ends that reveal like closing the popover does.
+      approxRef.current = null;
+      setApproxNotice(null);
       anchorCache.current = new Map();
       pinPositionsRef.current = new Map();
       setPinPositions(new Map());
@@ -341,7 +402,10 @@ export function OverlayRenderer() {
     return startReanchorLoop({
       getPins: () =>
         allThreads
-          .filter(t => anchorCache.current.has(t.id))
+          // A degraded pin is placed *at* its container, not at a fraction
+          // across it, so repositioning it from the pin's offsets would jump it
+          // somewhere arbitrary inside. resolveAllPins keeps it current instead.
+          .filter(t => anchorCache.current.has(t.id) && t.id !== approxRef.current?.threadId)
           .map(t => ({ id: t.id, pin: t.pin })),
       getElement: (id) => anchorCache.current.get(id) ?? null,
       setPinPosition: (id, x, y) => {
@@ -388,6 +452,7 @@ export function OverlayRenderer() {
       // "C" is the explicit add-comment action. Read-only viewers are asked
       // to sign in here, rather than when they merely open the comments list.
       if (matchesKey(ev, 'c')) {
+        if (!commentsEnabled) return;
         ev.preventDefault();
         if (isCapturing) disarmCapture();
         else requestAddComment();
@@ -409,6 +474,7 @@ export function OverlayRenderer() {
       // The comments list is available to everyone. RLS determines whether a
       // logged-out viewer receives public threads or an empty read-only list.
       if (matchesKey(ev, 'm')) {
+        if (!commentsEnabled) return;
         ev.preventDefault();
         toggleCommentsPanel();
       }
@@ -439,6 +505,51 @@ export function OverlayRenderer() {
     });
   }, []);
 
+  /** Stop showing a thread at its degraded anchor, and let the pins re-resolve. */
+  const clearApprox = useCallback(() => {
+    if (!approxRef.current) return;
+    approxRef.current = null;
+    setApproxNotice(null);
+    setDomVersion(v => v + 1);
+  }, []);
+
+  /**
+   * Open a thread whose exact anchor is gone, at the nearest container that
+   * still exists. Returns whether it found one.
+   *
+   * The alternative — what this replaces — was a toast and nothing else, which
+   * left the viewer unable to even read a conversation that plainly exists. So
+   * this deliberately opens the thread on a weaker claim than normal
+   * resolution makes, and labels it, rather than being right or silent.
+   */
+  const revealApproximately = useCallback((
+    thread: Thread,
+    /**
+     * Builds the notice from a lead-in describing how good the placement is —
+     * only the caller knows *why* the anchor is missing, only this knows *what
+     * survived*, and the viewer needs both in one sentence.
+     */
+    notice: (where: string) => string,
+  ): boolean => {
+    const container = resolveApproximateAnchor(thread.pin);
+    if (!container) return false;
+    const position = positionInContainer(container);
+    approxRef.current = { threadId: thread.id, element: container };
+    setApproxNotice(
+      notice(
+        isPageLevelContainer(container)
+          ? 'Showing this at the top of the page'
+          : 'Showing this nearby',
+      ),
+    );
+    anchorCache.current.set(thread.id, container);
+    pinPositionsRef.current.set(thread.id, position);
+    setPinPositions(current => new Map(current).set(thread.id, position));
+    setStateMatch(current => new Map(current).set(thread.id, true));
+    setOpenThreadId(thread.id); // the scroll effect brings it into view
+    return true;
+  }, []);
+
   // The one path to open a thread that may live in another screen or interactive
   // state. Cross-screen items route to their screen (the deep-link arrival
   // re-reveals); same-screen items restore the captured state, re-anchor, then
@@ -453,6 +564,18 @@ export function OverlayRenderer() {
     const thread = allThreads.find(t => t.id === threadId);
     if (!thread) return;
     setRevealHighlight(null);
+    clearApprox();
+
+    // Put the host back into the slice of its own UI the comment was written in
+    // — page 4 of the list, the "connected" scenario — before anything else.
+    // Overlays are reopened *on top of* that, so ordering matters: a dialog
+    // opened from a row on page 4 needs page 4 to exist first. No-ops when the
+    // host registered nothing, and when the values already match.
+    const anchorPresent = DOMAnchor.resolve(thread.pin);
+    let restoredView = false;
+    if (!anchorPresent || !isRendered(anchorPresent.element)) {
+      restoredView = (await applyViewState(thread.pin.viewState)).restored.length > 0;
+    }
 
     // Restore the state the comment was captured in, preferring the trigger
     // recorded alongside the pin. activateState no-ops per segment that's
@@ -467,11 +590,37 @@ export function OverlayRenderer() {
     // Give the anchor a few frames to settle — the state mounts before its
     // contents finish arriving. Threads with no state to restore are already
     // settled, so they get a single attempt.
-    const settled = await resolveWhenSettled(
+    // Anything we just changed needs frames to render — a restored view state
+    // as much as a reopened overlay. Threads with nothing to restore are
+    // already settled, so they still get a single attempt.
+    let settled = await resolveWhenSettled(
       thread.pin,
       thread.stateKey,
-      stack.length > 0 && !failedSegment ? ANCHOR_SETTLE_MS : 0,
+      restoredView || (stack.length > 0 && !failedSegment) ? ANCHOR_SETTLE_MS : 0,
     );
+
+    // The anchor can be present and simply not shown — a closed tab panel, a
+    // collapsed accordion, a <details>. Unlike the host view state below, that
+    // is reopenable with no host cooperation, because disclosure carries ARIA.
+    // Two rounds, because the second is what a replacement needs: opening a tab
+    // can mount a fresh subtree whose own accordion is still collapsed, and the
+    // anchor we re-resolved to is a different element than the one we just tried
+    // to disclose. Bounded rather than looped, since each round costs a settle.
+    let blockedContainer: Element | null = null;
+    for (let round = 0; round < 2 && settled && !isRendered(settled.element); round++) {
+      const disclosed = await discloseAncestors(settled.element);
+      // Re-resolve rather than trusting the element we started with. `changed`
+      // matters as much as `revealed` here: the usual React answer to "open
+      // this" replaces the closed subtree wholesale, which destroys our element
+      // while succeeding — treating that as failure sent every controlled tab
+      // and accordion to a degraded anchor it didn't need.
+      settled = disclosed.revealed || disclosed.changed
+        ? await resolveWhenSettled(thread.pin, thread.stateKey, ANCHOR_SETTLE_MS)
+        : null;
+      blockedContainer = settled && isRendered(settled.element) ? null : disclosed.blocked;
+    }
+    if (settled && !isRendered(settled.element)) settled = null;
+
     if (settled) {
       anchorCache.current.set(threadId, settled.element);
       pinPositionsRef.current.set(threadId, settled.position);
@@ -481,9 +630,31 @@ export function OverlayRenderer() {
       return;
     }
 
+    // A section we could see was closed but couldn't open — no control we were
+    // willing to identify, or pressing it didn't take. Name it and point at it;
+    // that's a specific, actionable thing for the viewer to do.
+    if (blockedContainer) {
+      const name = describeContainer(blockedContainer);
+      highlightElement(blockedContainer);
+      if (revealApproximately(thread, where => `${where} — it was left inside “${name}”, which is closed.`)) {
+        return;
+      }
+      setRevealHint(`This comment is inside “${name}” — open it and the comment will appear.`);
+      return;
+    }
+
     if (!failedSegment) {
-      // The state came back but the anchor didn't — the element the pin hangs
-      // off has been removed or rewritten. Nothing to point at.
+      // No state blocked us — the anchor is simply not in the DOM. Usually the
+      // host is showing a different slice of the same UI: another page of the
+      // list, another filter, another scenario. That view state lives in the
+      // host's own React state, which Nodd has no universal way to restore, so
+      // fall back to the nearest surviving container and say so.
+      // A kind, never the element's own text — the notice is chrome, and page
+      // content in it reads as gibberish rather than as an explanation.
+      const named = `the ${thread.pin.kind ?? 'element'} this was left on`;
+      if (revealApproximately(thread, where => `${where} — ${named} isn’t on this screen right now.`)) {
+        return;
+      }
       setRevealHint(
         "This comment's anchor isn't on this screen right now — it may have moved or been removed.",
       );
@@ -491,16 +662,23 @@ export function OverlayRenderer() {
     }
 
     // We know which state blocked us. Name it, and if its opening control is on
-    // the page, take the viewer to it so the next click is theirs to make.
+    // the page, take the viewer to it so the next click is theirs to make. The
+    // thread still opens at a degraded anchor, so the conversation is readable
+    // whether or not they take that click.
     const label = describeSegment(failedSegment);
     const opener = recordedTrigger(failedSegment);
+    const notice = opener
+      ? (where: string) => `${where} — it was left inside “${label}”, and we’ve highlighted what opens it.`
+      : (where: string) => `${where} — it was left inside “${label}”.`;
+    if (opener) highlightElement(opener);
+    if (revealApproximately(thread, notice)) return;
+
     if (opener) {
-      highlightElement(opener);
       setRevealHint(`This comment is inside “${label}” — we've highlighted what opens it.`);
     } else {
       setRevealHint(`This comment is inside “${label}” — open it and the comment will appear.`);
     }
-  }, [allThreads, urlPath, navigate, highlightElement]);
+  }, [allThreads, urlPath, navigate, highlightElement, clearApprox, revealApproximately]);
 
   // Auto-dismiss the reveal hint and its highlight together.
   useEffect(() => {
@@ -602,8 +780,15 @@ export function OverlayRenderer() {
       // still advertise the link to them. Days later, when someone opens this
       // comment from the feed, that link is gone.
       const { triggers, unreopenable } = captureStateTriggers(stack);
-      const pinWithTriggers: Pin =
-        Object.keys(triggers).length > 0 ? { ...pin, stateTriggers: triggers } : pin;
+      // Same reasoning for the host's own view state — which page of the list,
+      // which filter, which scenario. Nothing in the DOM records it, and by the
+      // time someone opens this comment the screen has long since reset.
+      const viewState = captureViewState();
+      const pinWithTriggers: Pin = {
+        ...pin,
+        ...(Object.keys(triggers).length > 0 ? { stateTriggers: triggers } : {}),
+        ...(viewState ? { viewState } : {}),
+      };
 
       // Tell the author now, while they can still move the comment somewhere
       // reachable, rather than letting it fail silently for the next reader.
@@ -786,7 +971,7 @@ export function OverlayRenderer() {
   const handleSetName = useCallback(async () => {
     const name = authName.trim();
     if (!name) return;
-    await ctx.auth.setDisplayName(name);
+    await ctx.auth?.setDisplayName(name);
   }, [authName, ctx.auth]);
 
   // Variants chrome (toolbar button + panel) is independent of auth and comment
@@ -894,7 +1079,7 @@ export function OverlayRenderer() {
             </NoddButton>
           </>
         )
-      ) : ctx.auth.needsDisplayName ? (
+      ) : ctx.auth?.needsDisplayName ? (
         <div className="nodd-auth-form">
           <div className="nodd-auth-title">Welcome! What should we call you?</div>
           <NoddInput
@@ -937,14 +1122,16 @@ export function OverlayRenderer() {
           the read-only-capable list; adding a comment is a separate action. */}
       <div className={`nodd-toolbar${panelOpen ? ' nodd-toolbar--shifted' : ''}`}>
         {variantsButton}
-        <button
-          className={`nodd-btn nodd-btn--sidebar${sidebarOpen ? ' nodd-btn--active' : ''}`}
-          onClick={toggleCommentsPanel}
-          aria-label={sidebarOpen ? 'Close comments' : 'Open comments'}
-          title={sidebarOpen ? 'Close comments' : 'Open comments'}
-        >
-          <Chat size={20} />
-        </button>
+        {commentsEnabled ? (
+          <button
+            className={`nodd-btn nodd-btn--sidebar${sidebarOpen ? ' nodd-btn--active' : ''}`}
+            onClick={toggleCommentsPanel}
+            aria-label={sidebarOpen ? 'Close comments' : 'Open comments'}
+            title={sidebarOpen ? 'Close comments' : 'Open comments'}
+          >
+            <Chat size={20} />
+          </button>
+        ) : null}
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button
@@ -963,14 +1150,18 @@ export function OverlayRenderer() {
               sideOffset={6}
               onCloseAutoFocus={e => e.preventDefault()}
             >
-              <DropdownMenu.Item
-                className="nodd-menu-item"
-                onSelect={() => setCommentsVisible(visible => !visible)}
-              >
-                {commentsVisible ? <ViewOff size={16} /> : <View size={16} />}
-                <span>{commentsVisible ? 'Hide comments' : 'Show comments'}</span>
-              </DropdownMenu.Item>
-              <DropdownMenu.Separator className="nodd-menu-separator" />
+              {commentsEnabled ? (
+                <>
+                  <DropdownMenu.Item
+                    className="nodd-menu-item"
+                    onSelect={() => setCommentsVisible(visible => !visible)}
+                  >
+                    {commentsVisible ? <ViewOff size={16} /> : <View size={16} />}
+                    <span>{commentsVisible ? 'Hide comments' : 'Show comments'}</span>
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Separator className="nodd-menu-separator" />
+                </>
+              ) : null}
               <DropdownMenu.Item
                 className="nodd-menu-item nodd-menu-item--stacked"
                 onSelect={() => hideForDuration(60 * 60 * 1000)}
@@ -986,7 +1177,7 @@ export function OverlayRenderer() {
                   out of the menu's keyboard navigation. */}
               <DropdownMenu.Label className="nodd-menu-label">Shortcuts</DropdownMenu.Label>
               <div className="nodd-menu-shortcuts">
-                {SHORTCUTS.map(({ keys, label }) => (
+                {(commentsEnabled ? SHORTCUTS : VARIANTS_ONLY_SHORTCUTS).map(({ keys, label }) => (
                   <div className="nodd-menu-shortcut" key={keys}>
                     <span>{label}</span>
                     <kbd className="nodd-kbd">{keys}</kbd>
@@ -1029,6 +1220,7 @@ export function OverlayRenderer() {
                 authorAvatarUrl={author?.avatarUrl ?? undefined}
                 snippet={thread.comments[0]?.body.slice(0, 120)}
                 resolved={thread.resolved}
+                approximate={approxRef.current?.threadId === thread.id}
                 tooltipContainer={portalRootRef.current}
                 onOpen={handlePinOpen}
               />
@@ -1083,8 +1275,9 @@ export function OverlayRenderer() {
           onSubmitReply={handleReply}
           onToggleResolved={handleResolve}
           onDeleteComment={handleDeleteComment}
-          onClose={() => setOpenThreadId(null)}
+          onClose={() => { setOpenThreadId(null); clearApprox(); }}
           readOnly={!canComment}
+          notice={approxRef.current?.threadId === openThread.id ? (approxNotice ?? undefined) : undefined}
         />,
         pinContainer,
       )}
@@ -1128,7 +1321,9 @@ export function OverlayRenderer() {
         pinContainer,
       )}
 
-      {/* Sidebar — read-only when the viewer can't comment (no delete/sign-out) */}
+      {/* Sidebar — read-only when the viewer can't comment (no delete/sign-out),
+          and absent entirely when there is no comment backend. */}
+      {commentsEnabled ? (
       <Sidebar
         open={sidebarOpen}
         onClose={() => {
@@ -1168,6 +1363,7 @@ export function OverlayRenderer() {
         onItemHover={() => {}}
         container={portalRootRef.current}
       />
+      ) : null}
 
       {/* Variants panel — shares the right-side region with the sidebar */}
       {variantsPanel}

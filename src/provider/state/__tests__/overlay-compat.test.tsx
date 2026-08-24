@@ -155,7 +155,7 @@ describe('Headless UI', () => {
     expect(trigger?.textContent).toBe('Region');
   });
 
-  it('Popover — NOT scoped (panel carries no role)', () => {
+  it('Popover — scoped by its button, which is also how it reopens', () => {
     render(
       <HuiPopover>
         <PopoverButton>More</PopoverButton>
@@ -165,10 +165,13 @@ describe('Headless UI', () => {
       </HuiPopover>,
     );
     click(document.querySelector('button'));
-    const { segment } = probe('Headless UI', 'Popover');
-    // The systematic hole: no role means no segment, so a comment here bleeds
-    // onto the base screen and #2 cannot warn about it.
-    expect(segment).toBeNull();
+    const { segment, trigger } = probe('Headless UI', 'Popover');
+    // A popover panel carries no role, so the ARIA-role tier can't see it and
+    // (rendered inline rather than portalled) neither can the structural one.
+    // What it does carry is the disclosure link from its button — which names
+    // the state and doubles as the way back into it.
+    expect(segment).toBe('ctl:more');
+    expect(trigger?.textContent).toBe('More');
   });
 });
 
@@ -193,6 +196,19 @@ describe('hand-rolled overlays (no ARIA at all)', () => {
       <div id="root"><div style="position:absolute"><a id="probe" href="#">Slide 3</a></div></div>`;
     const { segment } = probe('hand-rolled', 'positioned div, no scrim');
     expect(segment).toBeNull();
+  });
+
+  it('accordion section behind an aria-expanded button — scoped and reopenable', () => {
+    // The other shape the disclosure link buys us. Hosts commonly *unmount*
+    // collapsed content, which puts it out of reach of `disclose.ts` — there is
+    // no hidden element left to reveal. Scoping it means the pin hides with the
+    // section and reveal presses the button to bring it back.
+    document.body.innerHTML = `
+      <button aria-expanded="true" aria-controls="adv">Advanced</button>
+      <div id="adv"><label id="probe">Retry limit</label></div>`;
+    const { segment, trigger } = probe('hand-rolled', 'accordion + aria-expanded');
+    expect(segment).toBe('ctl:advanced');
+    expect(trigger?.textContent).toBe('Advanced');
   });
 
   it('same menu with two data attributes — fully scoped and reopenable', () => {

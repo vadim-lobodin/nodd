@@ -34,6 +34,9 @@ export type Pin = {
   viewportWidth: number;   // window.innerWidth at creation time
   stateTriggers?: Record<string, ElementRef>;  // see §2a
   page?: { x: number; y: number };             // absolute doc coords, see §2b
+  ancestors?: string[];    // degraded-anchor fallback chain, see §5.3.1
+  kind?: string;           // "button" | "row" | … — what it was, see §5.3.1
+  viewState?: Record<string, unknown>;         // host's own view state, see provider/viewState
 };
 
 export const DOMAnchor: {
@@ -218,6 +221,29 @@ Returns `null`. The runtime catches this and:
 - Lists the thread under "Orphaned" in the sidebar with a snippet of the captured text (the 64-char text component of the fingerprint is *not* recoverable — the snippet is stored separately on the thread record by `CommentStore`).
 
 Orphan state is **not** sticky; on the next route change the resolver runs again, and a re-mounted element will be picked up.
+
+### 5.3.1 Degraded anchoring on reveal (`approximate.ts`)
+
+Orphaning is the right answer for *rendering* — a page of comments quietly sliding up to their containers would be worse than not drawing them. It is the wrong answer for *reveal*, where the viewer has clicked one specific thread and asking for it produced a toast and nothing else, not even the ability to read the conversation.
+
+The common cause isn't a deleted element at all: it's the host showing a different slice of the same UI — page 4 of a list, another filter, another demo scenario. That view state lives in the host's own React state, so there is **no universal way for Nodd to restore it**; a library can't mandate that consumers keep view state in the URL, or in a store it can reach.
+
+What is universal is that the anchor's *surroundings* usually outlive the anchor. `DOMAnchor.create` therefore records two extra fields on the pin, both optional and both absent on older pins:
+
+| Field | What it is | Why |
+|---|---|---|
+| `ancestors: string[]` | `buildSelector` of the nearest 8 ancestors, nearest first, always ending at `body` | Selectors, **not** fingerprints — a fingerprint hashes `textContent`, so every container holding the changing content hashes differently once it changes. The list on page 1 and the list on page 4 are the same element with different hashes. |
+| `kind: string` | What kind of thing it is — `button`, `row`, `heading` — from its ARIA role, else its tag | So reveal can say *what* is missing: "the row this was left on isn't on this screen right now". Deliberately **not** the element's text: naming it by content put page data in the notice, where a comment on an invitee row was described as `Ralph Edwardsralph.edwards@example.comOrg viewer`. A tag that means nothing (`div`, `span`) yields nothing, and reveal says "the element". |
+
+`resolveApproximateAnchor` walks `ancestors` nearest-first and takes the first selector matching **exactly one** rendered, connected element. Ambiguity is skipped rather than guessed — two identical lists means the level above is a better answer than a coin flip.
+
+The chain is capped at `CHAIN_DEPTH = 8`, and the levels it records are the *nearest* ones — the ones most likely to be swapped out along with the anchor. So `captureAncestorChain` appends `body` when the walk didn't reach it: React trees are routinely deeper than eight, and without a floor a screen that re-renders wholesale leaves nothing to match and dead-ends exactly as before. `isPageLevelContainer` marks that floor, because a pin sitting in the page's top-left corner is worth opening — being able to read the conversation is the whole point — but must not be described as *nearby*. Reveal says "Showing this at the top of the page" instead. Pins written before the floor existed can still resolve to nothing, and get the old toast.
+
+`OverlayRenderer.revealThread` uses this only after normal resolution has failed, opens the thread at that container, and labels it in the popover (`Showing this nearby — the row this was left on isn’t on this screen right now.`). The notice is shown to read-only viewers too — the dashed pin alone doesn't say the placement is a guess, so it's information, not a permission; only `noticeAction` is gated on write access. The pin renders with `.nodd-pin--approximate` (dashed outline), because a pin that looks exact but isn't would be worse than the dead end it replaces.
+
+One thread at a time, held in `approxRef`. `resolveAllPins` re-applies it so a DOM mutation doesn't close the popover mid-read, and excludes it from the reanchor loop — its position comes from the container, not from the pin's offsets. It also **upgrades**: when the exact anchor resolves and matches state again (the viewer followed the highlighted opener, changed a filter back, a slow host restore landed), `approxRef` and the notice clear, and the thread rejoins the reanchor loop. A degraded pin exists only for the reveal that asked for it — closing the popover, hiding comments, or a fresh reveal all drop it.
+
+Covered by `__tests__/approximate.test.ts` and, end to end, by `overlay/__tests__/reveal.test.tsx`.
 
 ### 5.4 Levenshtein threshold tuning
 

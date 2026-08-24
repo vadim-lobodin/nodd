@@ -33,6 +33,26 @@ export type Pin = {
    * See `src/overlay/anchoring/DOMAnchor.ts`.
    */
   page?: { x: number; y: number };
+  /**
+   * Selectors for the anchor's ancestors, nearest first. When the anchor itself
+   * is gone — the host paginated, filtered or swapped the view — reveal falls
+   * back to the nearest of these that still exists, so the thread can still be
+   * read. See `src/overlay/anchoring/approximate.ts`.
+   */
+  ancestors?: string[];
+  /**
+   * What kind of thing was anchored — "button", "row" — to name it when it can't
+   * be shown. A kind rather than the element's text, which would put page
+   * content in the notice.
+   */
+  kind?: string;
+  /**
+   * Opaque snapshot of the host's own view state — which page of a list, which
+   * filter, which scenario — from whatever it registered via `useNoddViewState`.
+   * Replayed before reveal re-anchors. Nodd never interprets it.
+   * See `src/provider/viewState/`.
+   */
+  viewState?: Record<string, unknown>;
 };
 
 export type Comment = {

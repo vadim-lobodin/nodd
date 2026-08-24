@@ -8,13 +8,14 @@ import {
   type NoddWriteStatus,
 } from './NoddContext';
 import { AuthClient, type CurrentUser } from '../auth';
-import { createCommentStore, type CommentStore } from '../store';
+import { createCommentStore, createNullStore, type CommentStore } from '../store';
 import { createVariantRegistry, type VariantRegistry } from './variants';
 import { createPrototypeRegistry, type PrototypeRegistry, type PrototypeScope } from './scope';
 import { OverlayRenderer } from '../overlay';
 import { subscribeToRouteChanges } from './useRouteChange';
-import { isBrowser } from './ssr';
+import { isBrowser, isDevBuild } from './ssr';
 import { matchesKey } from './keys';
+import { createGuardedFetch, isBackendOffline, subscribeBackend } from './backend';
 
 // Strip stale Supabase auth error fragments from the URL hash before the client
 // parses them. Keeps the last valid access_token block if present.
@@ -57,6 +58,10 @@ function getOrCreateClients(supabaseUrl: string, supabaseAnonKey: string): Clien
   let entry = cache.get(key);
   if (!entry) {
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      // Every request goes through the reachability guard: one clear log line
+      // instead of an unbounded stream of "Failed to fetch", and a short
+      // circuit once the backend is known to be down. See ./backend.ts.
+      global: { fetch: createGuardedFetch(supabaseUrl) },
       auth: {
         storageKey: authStorageKey(supabaseUrl),
         detectSessionInUrl: true,
@@ -78,8 +83,19 @@ function getOrCreateClients(supabaseUrl: string, supabaseAnonKey: string): Clien
 
 export type NoddProviderProps = {
   projectId: string;
-  supabaseUrl: string;
-  supabaseAnonKey: string;
+  /**
+   * The consumer's Supabase project. Omit both this and `supabaseAnonKey` to run
+   * with **comments off**: no client is created, no request is sent, and the
+   * overlay carries variants only. That's the mode for local development with no
+   * backend in reach — `<Variant>`, `<NoddState>` and `useNoddViewState` are
+   * client-side features and keep working, so a prototype's variant switcher
+   * doesn't depend on a running database.
+   *
+   * The same mode is entered by itself when credentials *are* given but the
+   * backend turns out to be unreachable (see `provider/backend.ts`).
+   */
+  supabaseUrl?: string;
+  supabaseAnonKey?: string;
   theme?: NoddTheme;
   /**
    * If set, when a user signs in whose email matches this value, the project
@@ -180,49 +196,116 @@ export function NoddProvider({
   const [theme, setTheme] = useState<NoddTheme>(initialTheme);
   const [activePrototype, setActivePrototype] = useState<PrototypeScope | null>(null);
 
-  // Module-level singleton — safe across Strict Mode double-render
-  const { supabase, auth } = getOrCreateClients(supabaseUrl, supabaseAnonKey);
+  // Comments need both halves of the credential pair. Half of one is a
+  // mistake worth naming — a typo'd env var otherwise reads as "comments just
+  // disappeared".
+  const configured = !!(supabaseUrl && supabaseAnonKey);
+  useEffect(() => {
+    if (configured || !isDevBuild()) return;
+    if (supabaseUrl || supabaseAnonKey) {
+      console.warn(
+        '[nodd] Ignoring a half-configured backend: pass both supabaseUrl and ' +
+          'supabaseAnonKey, or neither. Running with comments off — variants ' +
+          'still work.',
+      );
+    } else {
+      console.info(
+        '[nodd] No Supabase credentials — comments are off. Variants, prototype ' +
+          'scopes and view state still work.',
+      );
+    }
+  }, [configured, supabaseUrl, supabaseAnonKey]);
 
-  // Store is created in useEffect to avoid realtime subscription during render.
-  // The variant registry rides the same lifecycle so both are Strict-Mode-safe
-  // (recreated on remount, disposed on unmount) and gated by the same
-  // `storeReady` flag in ctxValue.
-  const storeRef = useRef<CommentStore | null>(null);
+  // Module-level singleton — safe across Strict Mode double-render
+  const clients = configured ? getOrCreateClients(supabaseUrl!, supabaseAnonKey!) : null;
+  const supabase = clients?.supabase ?? null;
+  const auth = clients?.auth ?? null;
+
+  // A backend that stopped answering degrades to the same comments-off mode,
+  // rather than retrying behind a console full of network errors.
+  const [backendOffline, setBackendOffline] = useState(
+    () => (configured ? isBackendOffline(supabaseUrl!) : false),
+  );
+  useEffect(() => {
+    if (!configured) return;
+    const url = supabaseUrl!;
+    const read = () => setBackendOffline(isBackendOffline(url));
+    read();
+    return subscribeBackend(url, read);
+  }, [configured, supabaseUrl]);
+
+  const commentsEnabled = configured && !backendOffline;
+
+  // Two lifecycles, deliberately separate.
+  //
+  // The registries belong to the *project*: they hold which variant option this
+  // viewer picked and which prototype scope is on screen, and nothing about
+  // them depends on a backend. The store belongs to the *backend*, and gets
+  // swapped when comments go off (unreachable) or come back.
+  //
+  // They used to share one effect, which broke variants the moment a backend
+  // turned out to be down: the swap disposed and recreated the registries, and
+  // since the two `setStoreReady` calls collapse within a single effect pass,
+  // no re-render followed — the overlay and the host's `<Variant>`s kept a
+  // registry that had been thrown away, so a page with variants on it reported
+  // "no variants on this page". Registry churn also drops every prototype
+  // registration and every remembered selection, so keep it out of the store's
+  // lifecycle even if that ever looks like a tidy-up.
   const variantsRef = useRef<VariantRegistry | null>(null);
   const prototypesRef = useRef<PrototypeRegistry | null>(null);
-  const [storeReady, setStoreReady] = useState(false);
+  const [registriesReady, setRegistriesReady] = useState(false);
+  // State, not a ref: swapping the store has to reach the context, and only a
+  // render does that.
+  const [store, setStore] = useState<CommentStore | null>(null);
 
   useEffect(() => {
-    if (!storeRef.current) {
-      storeRef.current = createCommentStore({
-        supabase,
-        projectId,
-        getCurrentUserId: () => auth.currentUser?.id ?? null,
-      });
-    }
-    if (!variantsRef.current) {
-      variantsRef.current = createVariantRegistry({ projectId });
-    }
-    if (!prototypesRef.current) {
-      prototypesRef.current = createPrototypeRegistry();
-    }
+    variantsRef.current = createVariantRegistry({ projectId });
+    prototypesRef.current = createPrototypeRegistry();
     // Load persisted selections from localStorage in an effect (SSR-safe).
     variantsRef.current.hydrate();
-    setStoreReady(true);
+    setRegistriesReady(true);
     return () => {
-      storeRef.current?.dispose();
-      storeRef.current = null;
       variantsRef.current?.dispose();
       variantsRef.current = null;
       prototypesRef.current?.dispose();
       prototypesRef.current = null;
-      setStoreReady(false);
+      setRegistriesReady(false);
     };
-  }, [supabase, projectId, auth]);
+  }, [projectId]);
+
+  // Created in an effect, never during render — a Realtime subscription must
+  // not start from a render pass.
+  useEffect(() => {
+    // With comments off the null store keeps the overlay on one code path:
+    // empty, settled pages and mutations that refuse.
+    const next = commentsEnabled && supabase && auth
+      ? createCommentStore({
+          supabase,
+          projectId,
+          getCurrentUserId: () => auth.currentUser?.id ?? null,
+        })
+      : createNullStore();
+    setStore(next);
+    return () => next.dispose();
+  }, [supabase, projectId, auth, commentsEnabled]);
+
+  // Disposing the store unsubscribes its channel but leaves the shared
+  // RealtimeClient reconnecting on its own backoff — a WebSocket never passes
+  // through the guarded `fetch`, so nothing else stops it. Close the socket
+  // when there is no backend to talk to.
+  useEffect(() => {
+    if (commentsEnabled || !supabase) return;
+    try {
+      supabase.realtime.disconnect();
+    } catch {
+      // A client that never connected has nothing to close.
+    }
+  }, [commentsEnabled, supabase]);
 
   // Auth listener — Supabase emits INITIAL_SESSION on subscription, no need
   // to also call restoreSession() (would race the auth lock under Strict Mode).
   useEffect(() => {
+    if (!auth) return;
     const unsub = auth.onAuthChange(user => {
       setUser(user);
       // Clean up Supabase magic-link hash fragments after the session is
@@ -245,21 +328,19 @@ export function NoddProvider({
   // cleanup and the new subtree's registration together, so the batched update
   // lands on the new scope.
   useEffect(() => {
-    if (!storeReady) return;
+    if (!registriesReady) return;
     const registry = prototypesRef.current;
     if (!registry) return;
     setActivePrototype(registry.getActive());
     return registry.subscribe(() => setActivePrototype(registry.getActive()));
-  }, [storeReady]);
+  }, [registriesReady]);
 
   // Dev nudge: gating is on but nothing ever registered a scope — the most
   // likely cause of a "the overlay vanished" report is a missing
   // `<NoddPrototype>` wrapper. Warn once, well after mount.
   useEffect(() => {
     if (!gateToPrototypes || !isBrowser()) return;
-    const isDev =
-      typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
-    if (!isDev) return;
+    if (!isDevBuild()) return;
     const t = setTimeout(() => {
       if (!prototypesRef.current?.getActive()) {
         console.warn(
@@ -293,6 +374,7 @@ export function NoddProvider({
 
   useEffect(() => {
     if (!user || !requiresAutoOnboarding || !onboardingKey) return;
+    if (!supabase || !commentsEnabled) return;
     if (onboarding.key === onboardingKey && onboarding.status === 'ready') return;
     if (onboardingAttemptRef.current === onboardingKey) return;
 
@@ -341,6 +423,7 @@ export function NoddProvider({
     projectId,
     projectName,
     supabase,
+    commentsEnabled,
   ]);
 
   const writeStatus: NoddWriteStatus = !requiresAutoOnboarding
@@ -450,11 +533,17 @@ export function NoddProvider({
   }, [isVisible, projectId, setVisible]);
 
   const signIn = useCallback(
-    (email: string, displayName?: string) => auth.signIn(email, displayName),
+    async (email: string, displayName?: string) => {
+      if (!auth) return;
+      await auth.signIn(email, displayName);
+    },
     [auth],
   );
 
-  const signOut = useCallback(() => auth.signOut(), [auth]);
+  const signOut = useCallback(async () => {
+    if (!auth) return;
+    await auth.signOut();
+  }, [auth]);
 
   // Router-agnostic navigation for cross-screen inbox jumps. Prefer the host's
   // router (no reload, overlay state preserved); otherwise a full-page load,
@@ -464,7 +553,6 @@ export function NoddProvider({
     else if (isBrowser()) window.location.assign(path);
   }, [onNavigate]);
 
-  const store = storeRef.current;
   const variants = variantsRef.current;
   const prototypes = prototypesRef.current;
 
@@ -483,6 +571,7 @@ export function NoddProvider({
       setTheme,
       urlPath,
       auth,
+      commentsEnabled,
       writeStatus,
       retryOnboarding,
       store,
@@ -492,7 +581,7 @@ export function NoddProvider({
       navigate,
       pinContainer: pinContainerEl,
     };
-  }, [projectId, user, signIn, signOut, isVisible, toggleOverlay, setVisible, hideForDuration, theme, urlPath, auth, writeStatus, retryOnboarding, store, variants, prototypes, activePrototype, navigate, storeReady, pinContainerEl]);
+  }, [projectId, user, signIn, signOut, isVisible, toggleOverlay, setVisible, hideForDuration, theme, urlPath, auth, commentsEnabled, writeStatus, retryOnboarding, store, variants, prototypes, activePrototype, navigate, registriesReady, pinContainerEl]);
 
   if (!ctxValue) {
     return <>{children}</>;

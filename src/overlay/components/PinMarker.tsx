@@ -12,6 +12,12 @@ export type PinMarkerProps = {
   snippet?: string;
   /** Resolved threads render faded (only shown when "Show resolved" is on). */
   resolved?: boolean;
+  /**
+   * The pin is at a fallback position — its real anchor is gone, so it sits on
+   * the nearest surviving container. Rendered dashed, because a pin that looks
+   * exact but isn't would be worse than the dead end it replaces.
+   */
+  approximate?: boolean;
   tooltipContainer?: HTMLElement | null;
   onOpen: (threadId: string) => void;
 };
@@ -29,6 +35,7 @@ export function PinMarker({
   authorAvatarUrl,
   snippet,
   resolved,
+  approximate,
   tooltipContainer,
   onOpen,
 }: PinMarkerProps) {
@@ -106,7 +113,7 @@ export function PinMarker({
     <>
       <button
         ref={buttonRef}
-        className={`nodd-pin nodd-pin--${pinState}${hovered ? ' nodd-pin--hovered' : ''}${resolved ? ' nodd-pin--resolved' : ''}`}
+        className={`nodd-pin nodd-pin--${pinState}${hovered ? ' nodd-pin--hovered' : ''}${resolved ? ' nodd-pin--resolved' : ''}${approximate ? ' nodd-pin--approximate' : ''}`}
         data-nodd-pin-id={threadId}
         style={{ translate: `${x}px ${y}px` }}
         onClick={handleClick}

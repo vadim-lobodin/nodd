@@ -23,6 +23,7 @@
 
 import { isAutoSegment, findAutoStateElement, autoSegmentRole } from './autoState';
 import { isFloatSegment, findFloatingStateElement } from './floatingState';
+import { isCtlSegment, findControlledStateElement } from './controlledState';
 
 /**
  * A segment Nodd derived from the DOM (ARIA role or structure) rather than one
@@ -30,7 +31,7 @@ import { isFloatSegment, findFloatingStateElement } from './floatingState';
  * depends on finding a control to click.
  */
 export function isDerivedSegment(segment: string): boolean {
-  return isAutoSegment(segment) || isFloatSegment(segment);
+  return isAutoSegment(segment) || isFloatSegment(segment) || isCtlSegment(segment);
 }
 
 /** Controls that a click can plausibly activate. */
@@ -85,6 +86,7 @@ export function findExplicitTrigger(name: string): HTMLElement | null {
 export function findStateElement(segment: string): Element | null {
   if (isAutoSegment(segment)) return findAutoStateElement(segment);
   if (isFloatSegment(segment)) return findFloatingStateElement(segment);
+  if (isCtlSegment(segment)) return findControlledStateElement(segment);
   return findExplicitStateElement(segment);
 }
 

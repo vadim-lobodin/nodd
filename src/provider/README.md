@@ -15,8 +15,8 @@ Parent: [Architecture Design](../../DESIGN_DOC.md) · Sibling modules: [`src/aut
 ```tsx
 <NoddProvider
   projectId={string}            // required — uuid of the Nodd project
-  supabaseUrl={string}          // required — host project's Supabase URL
-  supabaseAnonKey={string}      // required — anon key with RLS enforced
+  supabaseUrl={string}          // optional — omit both to run with comments off
+  supabaseAnonKey={string}      // optional — anon key with RLS enforced
 >
   {children}                    // host app tree
 </NoddProvider>
@@ -25,11 +25,42 @@ Parent: [Architecture Design](../../DESIGN_DOC.md) · Sibling modules: [`src/aut
 | Prop | Type | Required | Description |
 |------|------|----------|-------------|
 | `projectId` | `string` | yes | Project UUID. Used to scope all queries and Realtime subscriptions. |
-| `supabaseUrl` | `string` | yes | Host project's Supabase URL. Passed to the bundled `@supabase/supabase-js` client. |
-| `supabaseAnonKey` | `string` | yes | Anon key. Permissions are enforced server-side via RLS. |
+| `supabaseUrl` | `string` | no | Host project's Supabase URL. Passed to the bundled `@supabase/supabase-js` client. Omit together with `supabaseAnonKey` for comments-off mode. |
+| `supabaseAnonKey` | `string` | no | Anon key. Permissions are enforced server-side via RLS. |
 | `gateToPrototypes` | `boolean` | no | When `true`, the overlay only mounts while a `<NoddPrototype>` boundary is on screen. Off by default (overlay on every route). See §"Prototype scopes". |
 | `onNavigate` | `(path: string) => void` | no | Router hook for cross-screen navigation from the prototype inbox. Pass `path => router.push(path)` for SPA navigation (no reload); omitted → full page load. The path may carry a `#nodd-thread=<id>` fragment the overlay consumes on arrival. See §"Prototype scopes". |
 | `children` | `ReactNode` | yes | The host application tree. Rendered untouched. |
+
+### Comments off, variants on
+
+Both credentials are optional. Omit them and no client is created, no request is
+sent, and the overlay carries the variants switcher alone — `<Variant>`,
+`<NoddState>` and `useNoddViewState` are client-side features that owe nothing to
+the network. That is the mode for local development with no backend in reach, and
+it exists so a prototype's variant switcher never depends on a running database:
+
+```tsx
+<NoddProvider projectId="…">      {/* no supabaseUrl / supabaseAnonKey */}
+```
+
+The same mode is entered by itself when credentials *are* given but the backend
+turns out to be unreachable — see `backend.ts`. Every Supabase request goes
+through a guarded `fetch`: the first network failure logs one line naming the URL
+and what still works, then further requests short-circuit to a synthetic 503
+instead of hitting the network, and the provider drops `commentsEnabled` to
+false (which disposes the store, and with it the Realtime socket — its retries
+never pass through `fetch` at all). Offline is sticky for the session; recovering
+means starting the backend and reloading, which is what the log says.
+
+Passing exactly one of the two credentials is a mistake, not a mode: it warns and
+runs with comments off, because a typo'd env var otherwise reads as "comments
+just disappeared".
+
+`NoddContextValue.commentsEnabled` carries this to the overlay, which then leaves
+the comment chrome out of the toolbar rather than showing dead buttons, and
+`auth` is `null`. `store` is a null store (`store/createNullStore.ts`) — empty,
+settled pages and mutations that refuse — so `OverlayRenderer` keeps one code
+path instead of a null check per call site.
 
 ### Hook
 
