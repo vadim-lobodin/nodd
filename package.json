@@ -1,6 +1,6 @@
 {
   "name": "@vadim_lobodin/nodd",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "description": "Figma-like spatial comments and state variants for live React prototypes",
   "keywords": [
     "react",
