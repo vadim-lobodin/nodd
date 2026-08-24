@@ -3,7 +3,7 @@
 // reason the provider stays mounted at all instead of being switched off by the
 // host, which is what used to happen and silently took `<Variant>` with it.
 
-import React from 'react';
+import React, { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, click } from '../state/__tests__/harness';
 import { NoddProvider } from '../NoddProvider';
@@ -90,6 +90,49 @@ describe('NoddProvider with no credentials', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(byLabel('Open comments')).toBeNull();
     expect(String(warn.mock.calls[0]?.[0] ?? '')).toContain('half-configured');
+    warn.mockRestore();
+  });
+});
+
+describe('NoddProvider when a configured backend turns out to be down', () => {
+  // The regression this pins down: the flip to comments-off used to dispose and
+  // recreate the variant registry, leaving the overlay and the host's
+  // `<Variant>`s holding a registry that had been thrown away. A page with
+  // variants on it then reported "no variants on this page" — the switcher gone
+  // for exactly the local-development case the mode exists to serve.
+  it('keeps the variant registry, and the switcher, across the flip', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    globalThis.fetch = (async () => {
+      throw new TypeError('Failed to fetch');
+    }) as unknown as typeof fetch;
+
+    render(
+      <NoddProvider
+        projectId="p1"
+        supabaseUrl="http://127.0.0.1:54399"
+        supabaseAnonKey="anon-key"
+      >
+        <Variant name="surface" options={{ Modal: <span>modal picker</span>, Page: <span>full page</span> }} />
+      </NoddProvider>,
+    );
+
+    // The store's first query fails, which marks the backend offline; let the
+    // resulting state updates settle.
+    for (let i = 0; i < 5; i++) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    expect(String(warn.mock.calls.map(c => c[0]).join(' '))).toContain('unreachable');
+    // Comments are off…
+    expect(byLabel('Open comments')).toBeNull();
+    // …and the variants button is live, not the "No variants on this page" stub.
+    const variants = byLabel('Variants');
+    expect(variants).not.toBeNull();
+    expect((variants as HTMLButtonElement).disabled).toBe(false);
+    // The state segment is still what comments anchor to.
+    expect(document.querySelector('[data-nodd-state="surface:Modal"]')).not.toBeNull();
     warn.mockRestore();
   });
 });
